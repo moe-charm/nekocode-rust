@@ -158,19 +158,56 @@ Rust PEST:       60.733s
 # Functions detected: 1,000+ (Tree-sitter) vs 200+ (PEGTL)
 ```
 
-## 🤖 Claude Code Integration
+## 🤖 Claude Code Integration (MCP Server)
 
-NekoCode Rust Edition is optimized for AI-assisted development:
+### 🚀 One-Command Setup!
+
+NekoCode Rust Edition includes seamless MCP (Model Context Protocol) integration:
 
 ```bash
-# MCP Server integration
-./bin/nekocode_ai session-create large-project/
-# Use with Claude Code for intelligent code analysis
+# 1. Clone the repository
+git clone https://github.com/moe-charm/nekocode-rust.git
+cd nekocode-rust
 
-# Direct editing operations  
-./bin/nekocode_ai replace-preview src/main.js "oldPattern" "newPattern"
-./bin/nekocode_ai moveclass-preview session123 UserClass src/models/user.js
+# 2. Run setup script to get the command (in nekocode-rust directory)
+python3 bin/setup.py
+# Displays the command with absolute paths - copy it!
+
+# 3. IMPORTANT: Navigate to YOUR project directory
+cd /path/to/your/project  # ← Your project, not nekocode!
+# Example: cd ~/my-awesome-project
+
+# 4. Paste the command from step 2
+# claude mcp add nekocode \
+#   -e NEKOCODE_BINARY_PATH=/absolute/path/bin/nekocode_ai \
+#   -- python3 /absolute/path/mcp-nekocode-server/mcp_server_real.py
+
+# 5. Restart Claude Code - Done! 🎉
 ```
+
+**⚠️ Where you run commands matters!**
+- Run `setup.py` in nekocode-rust directory (to get absolute paths)
+- Run `claude mcp add` in YOUR project directory (where you want to use NekoCode)
+- MCP server will only be available in that project directory
+
+### MCP Tools Available in Claude Code
+
+```python
+# These MCP tools become directly available!
+await mcp__nekocode__analyze("/path/to/project", stats_only=True)
+await mcp__nekocode__session_create("/path/to/project")  # Ultra-fast sessions!
+await mcp__nekocode__session_stats(session_id)          # 3ms response!
+await mcp__nekocode__include_cycles(session_id)         # C++ dependency analysis
+await mcp__nekocode__list_languages()                   # Check supported languages
+```
+
+**That's it!** MCP server provides:
+- ✅ Native Claude Code integration
+- ✅ Session management (3ms operations after initial analysis)
+- ✅ Advanced C++ dependency analysis tools
+- ✅ All NekoCode features as MCP tools
+
+📚 **Full MCP Documentation**: [mcp-nekocode-server/README.md](mcp-nekocode-server/README.md)
 
 ## 📚 Commands Reference
 

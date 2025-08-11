@@ -158,19 +158,56 @@ Rust PEST:       60.733秒
 # 検出された関数: 1,000+（Tree-sitter） vs 200+（PEGTL）
 ```
 
-## 🤖 Claude Code統合
+## 🤖 Claude Code統合（MCPサーバー）
 
-NekoCode Rust EditionはAI支援開発に最適化されています：
+### 🚀 ワンコマンドセットアップ！
+
+NekoCode Rust EditionはシームレスなMCP（Model Context Protocol）統合を含んでいます：
 
 ```bash
-# MCPサーバー統合
-./bin/nekocode_ai session-create large-project/
-# Claude Codeと使用してインテリジェントなコード解析
+# 1. リポジトリをクローン
+git clone https://github.com/moe-charm/nekocode-rust.git
+cd nekocode-rust
 
-# 直接編集操作  
-./bin/nekocode_ai replace-preview src/main.js "oldPattern" "newPattern"
-./bin/nekocode_ai moveclass-preview session123 UserClass src/models/user.js
+# 2. セットアップスクリプトを実行してコマンドを取得（nekocode-rustディレクトリ内で）
+python3 bin/setup.py
+# 絶対パスを含むコマンドが表示されます - コピーしてください！
+
+# 3. 重要：あなたのプロジェクトディレクトリに移動
+cd /path/to/your/project  # ← あなたのプロジェクト、nekocodeではない！
+# 例: cd ~/my-awesome-project
+
+# 4. ステップ2でコピーしたコマンドを貼り付け
+claude mcp add nekocode \
+  -e NEKOCODE_BINARY_PATH=/absolute/path/bin/nekocode_ai \
+  -- python3 /absolute/path/mcp-nekocode-server/mcp_server_real.py
+
+# 5. Claude Codeを再起動 - 完了！ 🎉
 ```
+
+**⚠️ コマンドを実行する場所が重要です！**
+- `setup.py`はnekocode-rustディレクトリで実行（絶対パスを取得するため）
+- `claude mcp add`はあなたのプロジェクトディレクトリで実行（NekoCodeを使いたい場所）
+- MCPサーバーはそのプロジェクトディレクトリでのみ利用可能になります
+
+### Claude CodeでMCPサーバーを使用
+
+```python
+# これらのMCPツールが直接使えるようになります！
+await mcp__nekocode__analyze("/path/to/project", stats_only=True)
+await mcp__nekocode__session_create("/path/to/project")  # 超高速セッション！
+await mcp__nekocode__session_stats(session_id)          # 3ms応答！
+await mcp__nekocode__include_cycles(session_id)         # C++依存関係解析
+await mcp__nekocode__list_languages()                   # サポート言語確認
+```
+
+**それだけ！** MCPサーバーが提供するもの：
+- ✅ ネイティブClaude Code統合
+- ✅ セッション管理（初回解析後は3ms操作）
+- ✅ 高度なC++依存関係解析ツール
+- ✅ すべてのNekoCode機能がMCPツールとして
+
+📚 **完全なMCPドキュメント**: [mcp-nekocode-server/README.md](mcp-nekocode-server/README.md)
 
 ## 📚 コマンドリファレンス
 
