@@ -61,4 +61,5 @@ __pycache__/
 *.pyc
 
 # IMPORTANT: Maximum file size check
-# Any file > 10MB should trigger a warning!.nekocode_sessions/
+# Any file > 10MB should trigger a warning!
+.nekocode_sessions/
