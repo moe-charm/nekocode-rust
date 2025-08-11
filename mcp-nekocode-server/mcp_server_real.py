@@ -532,8 +532,22 @@ class NekoCodeMCPServer:
         path = args["path"]
         result = await self._run_nekocode(["session-create", path])
         
+        # セッションID抽出（JSON形式またはRust版のテキスト出力）
+        session_id = None
         if "session_id" in result:
-            self.sessions[result["session_id"]] = {"path": path}
+            session_id = result["session_id"]
+        elif "output" in result and isinstance(result["output"], str):
+            # Rust版の出力: "Session created: XXXXX"
+            import re
+            match = re.search(r"Session created: ([a-f0-9]+)", result["output"])
+            if match:
+                session_id = match.group(1)
+        
+        if session_id:
+            self.sessions[session_id] = {"path": path}
+            logger.info(f"✅ セッション登録完了: {session_id} -> {path}")
+        else:
+            logger.warning(f"⚠️ セッションID抽出失敗: {result}")
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
