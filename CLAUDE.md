@@ -61,26 +61,42 @@ mcp-nekocode-server/mcp_server_real.py
 
 ## 🧪 **テスト環境**
 
-### **test-workspace/ (861MB, Git無視)**
+### ⚠️ **【絶対厳守】テスト場所の統一ルール**
+
 ```
-test-workspace/
-├── test-real-projects/  # 実プロジェクトテストデータ
-│   ├── express/      # JavaScript - Express.js
-│   ├── typescript/   # TypeScript - MS TypeScript Compiler  
-│   ├── react/        # JavaScript/TypeScript - Facebook React
-│   ├── flask/        # Python - Flask Web Framework
-│   ├── django/       # Python - Django Framework
-│   ├── json/         # C++ - nlohmann/json
-│   ├── grpc/         # C++ - Google gRPC
-│   ├── nlog/         # C# - NLog Logging
-│   ├── gin/          # Go - Gin Web Framework
-│   ├── mux/          # Go - Gorilla Mux Router
-│   ├── serde/        # Rust - Serde Serialization
-│   └── tokio/        # Rust - Tokio Async Runtime
-└── test-files/       # 単体テストファイル
+nekocode-cpp-github/         # ルート
+├── nekocode-rust-clean/     # このディレクトリ（GitHub同期）
+└── test-workspace/          # 🚨 テストはここだけ！絶対安全！
+    ├── test-real-projects/  # 実プロジェクトテストデータ
+    │   ├── express/         # JavaScript - Express.js
+    │   ├── typescript/      # TypeScript - MS TypeScript Compiler  
+    │   ├── react/           # JavaScript/TypeScript - Facebook React
+    │   ├── flask/           # Python - Flask Web Framework
+    │   ├── django/          # Python - Django Framework
+    │   ├── json/            # C++ - nlohmann/json
+    │   ├── grpc/            # C++ - Google gRPC
+    │   ├── nlog/            # C# - NLog Logging
+    │   ├── gin/             # Go - Gin Web Framework
+    │   ├── mux/             # Go - Gorilla Mux Router
+    │   ├── serde/           # Rust - Serde Serialization
+    │   └── tokio/           # Rust - Tokio Async Runtime
+    └── test-files/          # 単体テストファイル
 ```
 
-**重要**: これらは性能テスト・検証用の重要データです。削除厳禁！
+### 🚨 **絶対に守るべきルール**
+1. **テストは `../test-workspace/` でのみ実行**
+2. **このディレクトリ内にtest-workspace作成禁止**
+3. **理由**: Git管理外で絶対にGitHubアップロードされない
+4. **サイズ**: 871MB（でかくてもOK・安全優先）
+
+### 🔥 **コマンド例（必ずこのパスを使用）**
+```bash
+# 必ず一個上のtest-workspaceを使用
+./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/express/
+./target/release/nekocode-rust session-create ../test-workspace/test-real-projects/flask/
+```
+
+**🛡️ 安全性**: test-workspaceがGitリポジトリ外にあるため物理的に分離・絶対安全！
 
 ## ⚡ **使用方法**
 
@@ -89,20 +105,20 @@ test-workspace/
 # ビルド（3秒で完了）
 cargo build --release
 
-# 高速解析
-./target/release/nekocode-rust analyze test-workspace/test-real-projects/express/ --parser tree-sitter
+# 高速解析（必ず ../test-workspace/ を使用）
+./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/express/ --parser tree-sitter
 
-# セッション作成  
-./target/release/nekocode-rust session-create test-workspace/test-real-projects/flask/
+# セッション作成（必ず ../test-workspace/ を使用）
+./target/release/nekocode-rust session-create ../test-workspace/test-real-projects/flask/
 
-# 性能比較
-./target/release/nekocode-rust analyze test-workspace/test-real-projects/typescript/ --benchmark
+# 性能比較（必ず ../test-workspace/ を使用）
+./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/typescript/ --benchmark
 ```
 
 ### **MCP経由（Claude Code）**
 ```bash
-# stats_onlyで大規模プロジェクトも安全
-nekocode-analyze(path: "test-workspace/test-real-projects/typescript", stats_only: true)
+# stats_onlyで大規模プロジェクトも安全（パスは自動調整される）
+nekocode-analyze(path: "../test-workspace/test-real-projects/typescript", stats_only: true)
 ```
 
 ## 🎯 **重要なファイル**
@@ -131,17 +147,18 @@ cd nekocode-rust-clean
 # ビルド
 cargo build --release
 
-# テスト実行（小さいプロジェクトで）
-./target/release/nekocode-rust analyze examples/
+# テスト実行（必ず ../test-workspace/ を使用）
+./target/release/nekocode-rust analyze ../test-workspace/test-files/
 ```
 
 ### **注意点**
 - **メインディレクトリ**: `nekocode-rust-clean/` を使用
 - **GitHubリポジトリ**: `github.com/moe-charm/nekocode-rust.git` 
-- **大容量テストデータ**: `test-workspace/` はGit追跡対象外
+- **🚨 テストデータ**: `../test-workspace/` を絶対使用（Git管理外・物理分離）
 - **MCPサーバー**: stats_only問題は修正済み
+- **安全性**: test-workspaceがGitリポジトリ外にあるため絶対にアップロードされない
 
 ---
-**最終更新**: 2025-08-11 14:45:00  
+**最終更新**: 2025-08-11 15:15:00  
 **作成者**: Claude + User collaborative design  
-**状況**: 🎉 **メインディレクトリ移行完了！MCP修正も適用済み！**
+**状況**: 🛡️ **テストフォルダ統一完了！絶対安全なGit管理外配置！**
