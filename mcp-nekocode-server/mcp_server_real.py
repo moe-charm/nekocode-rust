@@ -261,6 +261,143 @@ class NekoCodeMCPServer:
                     },
                     "required": ["session_id", "edit_id"]
                 }
+            },
+            {
+                "name": "ast_stats",
+                "description": "🌳 AST統計情報（セッション）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"}
+                    },
+                    "required": ["session_id"]
+                }
+            },
+            {
+                "name": "ast_query",
+                "description": "🔍 AST構造クエリ（パス指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "path": {"type": "string", "description": "クエリパス（例: MyClass::myMethod）"}
+                    },
+                    "required": ["session_id", "path"]
+                }
+            },
+            {
+                "name": "scope_analysis",
+                "description": "🎯 スコープ解析（行番号指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "line": {"type": "integer", "description": "解析対象行番号"}
+                    },
+                    "required": ["session_id", "line"]
+                }
+            },
+            {
+                "name": "ast_dump",
+                "description": "📊 AST構造ダンプ（形式指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "format": {"type": "string", "description": "出力形式（tree/json/flat）", "default": "tree"}
+                    },
+                    "required": ["session_id"]
+                }
+            },
+            {
+                "name": "moveclass_preview",
+                "description": "🔄 クラス移動プレビュー（セッション）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "symbol_id": {"type": "string", "description": "移動対象シンボルID"},
+                        "target": {"type": "string", "description": "移動先ファイルパス"}
+                    },
+                    "required": ["session_id", "symbol_id", "target"]
+                }
+            },
+            {
+                "name": "moveclass_confirm",
+                "description": "✅ クラス移動実行（プレビューID指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "preview_id": {"type": "string", "description": "プレビューID"}
+                    },
+                    "required": ["preview_id"]
+                }
+            },
+            {
+                "name": "memory_save",
+                "description": "💾 メモリ保存（タイプ・名前・内容指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "memory_type": {"type": "string", "description": "メモリタイプ（auto/memo/api/cache）"},
+                        "name": {"type": "string", "description": "メモリ名"},
+                        "content": {"type": "string", "description": "保存内容"}
+                    },
+                    "required": ["memory_type", "name", "content"]
+                }
+            },
+            {
+                "name": "memory_load",
+                "description": "📂 メモリ読み込み（タイプ・名前指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "memory_type": {"type": "string", "description": "メモリタイプ"},
+                        "name": {"type": "string", "description": "メモリ名"}
+                    },
+                    "required": ["memory_type", "name"]
+                }
+            },
+            {
+                "name": "memory_list",
+                "description": "📋 メモリ一覧（タイプフィルタ可能）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "memory_type": {"type": "string", "description": "フィルタ用メモリタイプ（省略可）"}
+                    }
+                }
+            },
+            {
+                "name": "memory_timeline",
+                "description": "📅 メモリタイムライン（日数指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "memory_type": {"type": "string", "description": "フィルタ用メモリタイプ（省略可）"},
+                        "days": {"type": "integer", "description": "表示日数", "default": 7}
+                    }
+                }
+            },
+            {
+                "name": "config_show",
+                "description": "⚙️ 設定表示",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "config_set",
+                "description": "⚙️ 設定変更（キー・値指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "key": {"type": "string", "description": "設定キー"},
+                        "value": {"type": "string", "description": "設定値"}
+                    },
+                    "required": ["key", "value"]
+                }
             }
         ]
     
@@ -469,6 +606,30 @@ class NekoCodeMCPServer:
                 return await self._tool_edit_history(arguments)
             elif tool_name == "edit_show":
                 return await self._tool_edit_show(arguments)
+            elif tool_name == "ast_stats":
+                return await self._tool_ast_stats(arguments)
+            elif tool_name == "ast_query":
+                return await self._tool_ast_query(arguments)
+            elif tool_name == "scope_analysis":
+                return await self._tool_scope_analysis(arguments)
+            elif tool_name == "ast_dump":
+                return await self._tool_ast_dump(arguments)
+            elif tool_name == "moveclass_preview":
+                return await self._tool_moveclass_preview(arguments)
+            elif tool_name == "moveclass_confirm":
+                return await self._tool_moveclass_confirm(arguments)
+            elif tool_name == "memory_save":
+                return await self._tool_memory_save(arguments)
+            elif tool_name == "memory_load":
+                return await self._tool_memory_load(arguments)
+            elif tool_name == "memory_list":
+                return await self._tool_memory_list(arguments)
+            elif tool_name == "memory_timeline":
+                return await self._tool_memory_timeline(arguments)
+            elif tool_name == "config_show":
+                return await self._tool_config_show(arguments)
+            elif tool_name == "config_set":
+                return await self._tool_config_set(arguments)
             else:
                 return {
                     "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
@@ -774,6 +935,108 @@ class NekoCodeMCPServer:
         except Exception as e:
             logger.error(f"Message receive error: {e}")
             return None
+    
+    # ========================================
+    # 🌳 AST関連ツール
+    # ========================================
+    
+    async def _tool_ast_stats(self, args: Dict) -> Dict:
+        """AST統計情報を取得"""
+        session_id = args["session_id"]
+        result = await self._run_nekocode(["ast-stats", session_id])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_ast_query(self, args: Dict) -> Dict:
+        """AST構造をクエリ"""
+        session_id = args["session_id"]
+        path = args["path"]
+        result = await self._run_nekocode(["ast-query", session_id, path])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_scope_analysis(self, args: Dict) -> Dict:
+        """スコープ解析を実行"""
+        session_id = args["session_id"]
+        line = str(args["line"])
+        result = await self._run_nekocode(["scope-analysis", session_id, line])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_ast_dump(self, args: Dict) -> Dict:
+        """AST構造をダンプ"""
+        session_id = args["session_id"]
+        format_type = args.get("format", "tree")
+        result = await self._run_nekocode(["ast-dump", session_id, format_type])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    # ========================================
+    # 🔄 クラス移動ツール
+    # ========================================
+    
+    async def _tool_moveclass_preview(self, args: Dict) -> Dict:
+        """クラス移動のプレビューを生成"""
+        session_id = args["session_id"]
+        symbol_id = args["symbol_id"]
+        target = args["target"]
+        result = await self._run_nekocode(["moveclass-preview", session_id, symbol_id, target])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_moveclass_confirm(self, args: Dict) -> Dict:
+        """クラス移動を実行"""
+        preview_id = args["preview_id"]
+        result = await self._run_nekocode(["moveclass-confirm", preview_id])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    # ========================================
+    # 💾 メモリシステムツール
+    # ========================================
+    
+    async def _tool_memory_save(self, args: Dict) -> Dict:
+        """メモリに内容を保存"""
+        memory_type = args["memory_type"]
+        name = args["name"]
+        content = args["content"]
+        result = await self._run_nekocode(["memory", "save", memory_type, name, content])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_memory_load(self, args: Dict) -> Dict:
+        """メモリから内容を読み込み"""
+        memory_type = args["memory_type"]
+        name = args["name"]
+        result = await self._run_nekocode(["memory", "load", memory_type, name])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_memory_list(self, args: Dict) -> Dict:
+        """メモリ一覧を取得"""
+        cmd_args = ["memory", "list"]
+        if "memory_type" in args:
+            cmd_args.append(args["memory_type"])
+        result = await self._run_nekocode(cmd_args)
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_memory_timeline(self, args: Dict) -> Dict:
+        """メモリタイムラインを取得"""
+        cmd_args = ["memory", "timeline"]
+        if "memory_type" in args:
+            cmd_args.append(args["memory_type"])
+        if "days" in args:
+            cmd_args.extend(["--days", str(args["days"])])
+        result = await self._run_nekocode(cmd_args)
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    # ========================================
+    # ⚙️ 設定ツール
+    # ========================================
+    
+    async def _tool_config_show(self, args: Dict) -> Dict:
+        """現在の設定を表示"""
+        result = await self._run_nekocode(["config", "show"])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_config_set(self, args: Dict) -> Dict:
+        """設定を変更"""
+        key = args["key"]
+        value = args["value"]
+        result = await self._run_nekocode(["config", "set", key, value])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def run(self):
         """MCPサーバー実行"""
