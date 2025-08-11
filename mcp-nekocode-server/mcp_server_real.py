@@ -253,6 +253,72 @@ class NekoCodeMCPServer:
             }
         ]
     
+    def _extract_summary(self, result: Dict) -> str:
+        """解析結果から統計サマリーを抽出"""
+        try:
+            if "error" in result:
+                return json.dumps(result, indent=2, ensure_ascii=False)
+            
+            summary = []
+            summary.append("📊 **解析結果サマリー**\n")
+            
+            # 基本情報
+            if "directory_path" in result:
+                summary.append(f"📁 パス: {result['directory_path']}")
+            
+            # ファイル統計
+            if "files" in result:
+                files = result["files"]
+                total_files = len(files)
+                summary.append(f"📄 総ファイル数: {total_files}")
+                
+                # 言語別統計
+                lang_counts = {}
+                total_functions = 0
+                total_classes = 0
+                total_lines = 0
+                total_code_lines = 0
+                
+                for file in files:
+                    lang = file.get("language", "unknown")
+                    lang_counts[lang] = lang_counts.get(lang, 0) + 1
+                    
+                    if "functions" in file:
+                        total_functions += len(file["functions"])
+                    if "classes" in file:
+                        total_classes += len(file["classes"])
+                    if "file_info" in file:
+                        info = file["file_info"]
+                        total_lines += info.get("total_lines", 0)
+                        total_code_lines += info.get("code_lines", 0)
+                
+                summary.append(f"\n📈 **統計情報:**")
+                summary.append(f"  • 総行数: {total_lines:,}")
+                summary.append(f"  • コード行数: {total_code_lines:,}")
+                summary.append(f"  • 関数数: {total_functions:,}")
+                summary.append(f"  • クラス数: {total_classes:,}")
+                
+                if lang_counts:
+                    summary.append(f"\n🗂️ **言語別:**")
+                    for lang, count in sorted(lang_counts.items()):
+                        summary.append(f"  • {lang}: {count} files")
+            
+            # 実行時間情報（もしあれば）
+            if "output" in result and "Total directory analysis took:" in result.get("output", ""):
+                # outputから実行時間を抽出
+                output_lines = result["output"].split("\n")
+                for line in output_lines:
+                    if "Total directory analysis took:" in line:
+                        summary.append(f"\n⏱️ {line.strip()}")
+                        break
+            
+            return "\n".join(summary)
+            
+        except Exception as e:
+            logger.error(f"サマリー抽出エラー: {e}")
+            # エラー時は少なくとも基本情報を返す
+            return f"⚠️ サマリー生成エラー: {str(e)}\n\n元データのキー: {list(result.keys())}"
+    
     async def _run_nekocode(self, args: List[str]) -> Dict:
         """NekoCode実行"""
         try:
@@ -268,10 +334,28 @@ class NekoCodeMCPServer:
             # stderrに出力される場合もある（helpなど）
             output = result.stdout if result.stdout.strip() else result.stderr
             
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                return {"output": output, "raw": True}
+            # Rust版はプログレス情報をJSON前に出力するので、JSON部分だけを抽出
+            lines = output.split('\n')
+            json_start = -1
+            for i, line in enumerate(lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            if json_start >= 0:
+                # JSON部分だけを取り出して解析
+                json_text = '\n'.join(lines[json_start:])
+                try:
+                    return json.loads(json_text)
+                except json.JSONDecodeError:
+                    # JSONパースに失敗した場合は元の出力を返す
+                    return {"output": output, "raw": True}
+            else:
+                # JSON開始が見つからない場合は、全体をJSONとして解析を試みる
+                try:
+                    return json.loads(output)
+                except json.JSONDecodeError:
+                    return {"output": output, "raw": True}
                 
         except subprocess.TimeoutExpired:
             return {"error": "実行がタイムアウトしました"}
@@ -407,6 +491,13 @@ class NekoCodeMCPServer:
         cmd_args.extend(["--threads", "8"])
         
         result = await self._run_nekocode(cmd_args)
+        
+        # stats_onlyの場合は統計情報だけを抽出
+        if stats_only and isinstance(result, dict):
+            summary = self._extract_summary(result)
+            return {
+                "content": [{"type": "text", "text": summary}]
+            }
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
