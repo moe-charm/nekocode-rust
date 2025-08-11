@@ -73,6 +73,10 @@ class NekoCodeMCPServer:
             "session_create",
             """🎮 セッション作成（メイン機能）
 
+⚠️ パス指定について:
+- 絶対パス推奨: /full/path/to/project  
+- 相対パス例: ../nekocode-cpp-github/test-workspace/test-real-projects/flask
+
 セッション作成後、以下のコマンドが利用可能:
 📊 基本分析:
   • stats              - 統計情報
@@ -120,7 +124,11 @@ class NekoCodeMCPServer:
             "analyze",
             """🚀 単発解析（セッション不要）
 
-軽量な一回限りの解析用。継続的な分析にはsession_createを推奨。""",
+軽量な一回限りの解析用。継続的な分析にはsession_createを推奨。
+
+⚠️ パス指定について:
+- 絶対パス推奨: /full/path/to/project
+- 相対パス例: ../nekocode-cpp-github/test-workspace/test-real-projects/express""",
             self.analyze_project,
             {
                 "type": "object",
@@ -201,8 +209,16 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
     # ツール実装
     # ========================================
     
+    def _normalize_path(self, path: str) -> str:
+        """パス正規化：よくある相対パスパターンを自動修正"""
+        # ../test-workspace/ -> ../nekocode-cpp-github/test-workspace/ に自動変換
+        if path.startswith("../test-workspace/"):
+            path = path.replace("../test-workspace/", "../nekocode-cpp-github/test-workspace/")
+        return path
+    
     async def analyze_project(self, path: str, language: str = "auto", stats_only: bool = False) -> Dict:
         """プロジェクト解析"""
+        path = self._normalize_path(path)  # パス正規化
         args = ["analyze", path]
         
         # Rust版は言語を自動検出するため--langオプションなし
@@ -226,6 +242,7 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
     
     async def create_session(self, path: str) -> Dict:
         """セッション作成"""
+        path = self._normalize_path(path)  # パス正規化
         result = await self._run_nekocode(["session-create", path])
         
         if "session_id" in result:
