@@ -1,0 +1,64 @@
+# ⚠️ CRITICAL: Never commit these! ⚠️
+# Claude Code: These patterns MUST be respected
+
+# Build artifacts - NEVER commit
+target/
+build/
+_deps/
+obj/
+*.o
+*.a
+*.so
+*.dll
+*.exe
+*.lib
+
+# Test projects - DOWNLOAD SEPARATELY 
+test-real-projects/
+test-projects/
+test-projects-*/
+*/test-real-projects/
+
+# Other large projects
+nyash/
+nyash-rust/
+
+# IDE and temporary files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.dSYM/
+*.pdb
+
+# Package files - too large
+*.jar
+*.tar.gz
+*.zip
+*.7z
+
+# Sessions (can be large)
+sessions/
+*.session
+
+# Backup files
+*.bak
+*.backup
+*_backup*
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IMPORTANT: Maximum file size check
+# Any file > 10MB should trigger a warning!

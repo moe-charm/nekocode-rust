@@ -1,0 +1,12 @@
+# NekoCode MCP Server 依存関係
+# 実際のMCP実装は標準ライブラリのみで動作
+
+# Python 3.8+ 標準ライブラリ使用:
+# - asyncio (非同期処理)
+# - json (JSON-RPC通信)
+# - subprocess (NekoCode実行)
+# - sys (stdio通信)
+# - logging (ログ出力)
+
+# 特別な外部ライブラリは不要！
+# MCPプロトコルはstdio + JSON-RPCで実装
