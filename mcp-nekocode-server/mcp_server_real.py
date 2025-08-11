@@ -32,33 +32,44 @@ class NekoCodeMCPServer:
         self.config = self._load_config()
     
     def _find_nekocode_binary(self) -> str:
-        """nekocode_ai バイナリの場所を特定"""
+        """nekocode-rust バイナリの場所を特定"""
         # 環境変数から取得を優先
         env_path = os.environ.get('NEKOCODE_BINARY_PATH')
         if env_path and os.path.exists(env_path):
             return os.path.abspath(env_path)
         
         possible_paths = [
+            # 🦀 NEW: Rust版のバイナリパスを優先
+            "./target/release/nekocode-rust",
+            "../target/release/nekocode-rust",
+            "./target/debug/nekocode-rust",
+            "../target/debug/nekocode-rust",
+            # Legacy C++ paths
             "./bin/nekocode_ai",
             "../bin/nekocode_ai",
             "./build/nekocode_ai",
             "../build/nekocode_ai", 
             "/usr/local/bin/nekocode_ai",
-            "nekocode_ai"
+            "nekocode_ai",
+            "nekocode-rust"
         ]
         
         for path in possible_paths:
             if os.path.exists(path):
                 return os.path.abspath(path)
         
-        # PATHから検索
+        # PATHから検索（Rust版を優先）
         import shutil
-        binary = shutil.which("nekocode_ai")
-        if binary:
-            return binary
+        rust_binary = shutil.which("nekocode-rust")
+        if rust_binary:
+            return rust_binary
         
-        # デフォルト（エラーは実行時に出す）
-        return "./bin/nekocode_ai"
+        legacy_binary = shutil.which("nekocode_ai")
+        if legacy_binary:
+            return legacy_binary
+        
+        # デフォルト（Rust版を優先）
+        return "./target/release/nekocode-rust"
     
     def _load_config(self) -> Dict:
         """nekocode_config.json を読み込み（あれば）"""
@@ -483,22 +494,35 @@ class NekoCodeMCPServer:
         cmd_args = ["analyze", path]
         if language != "auto":
             cmd_args.extend(["--lang", language])
-        # Rust版では--stats-onlyは存在しないため削除
-        # if stats_only:
-        #     cmd_args.append("--stats-only")
+        
+        # 🚀 NEW: Rust版に--stats-onlyオプションを追加済み！
+        if stats_only:
+            cmd_args.append("--stats-only")
         
         # Rust版では--io-threads → --threads に変更
         cmd_args.extend(["--threads", "8"])
         
         result = await self._run_nekocode(cmd_args)
         
-        # stats_onlyの場合は統計情報だけを抽出
-        if stats_only and isinstance(result, dict):
-            summary = self._extract_summary(result)
-            return {
-                "content": [{"type": "text", "text": summary}]
-            }
+        # stats_onlyの場合はRust側で既に統計サマリー形式で出力される（plaintext）
+        if stats_only:
+            if isinstance(result, dict) and "output" in result:
+                # plain textが{"output": "..."} 形式で返される場合
+                return {
+                    "content": [{"type": "text", "text": result["output"]}]
+                }
+            elif isinstance(result, dict) and "raw" in result:
+                # raw出力の場合
+                return {
+                    "content": [{"type": "text", "text": result["output"]}]
+                }
+            else:
+                # その他の場合はそのまま返す
+                return {
+                    "content": [{"type": "text", "text": str(result)}]
+                }
         
+        # 通常のJSONモードの場合
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
         }

@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use crate::core::session::{AnalysisSession, SessionManager};
-use crate::core::types::AnalysisConfig;
+use crate::core::types::{AnalysisConfig, DirectoryAnalysis};
 use crate::core::config::ConfigManager;
 use crate::core::memory::{MemoryManager, MemoryType};
 use crate::core::preview::PreviewManager;
@@ -39,6 +39,10 @@ enum Commands {
         /// Include test files
         #[arg(long)]
         include_tests: bool,
+        
+        /// Show only statistics summary (compact output)
+        #[arg(long)]
+        stats_only: bool,
         
         /// Number of worker threads (default: 16)
         #[arg(short, long, default_value = "16")]
@@ -288,6 +292,57 @@ enum ConfigOperation {
     },
 }
 
+/// Extract summary statistics from analysis result
+fn extract_summary(result: &DirectoryAnalysis) -> String {
+    let mut summary = Vec::new();
+    summary.push("📊 **解析結果サマリー**\n".to_string());
+    
+    // 基本情報
+    summary.push(format!("📁 パス: {}", result.directory_path.display()));
+    
+    // ファイル統計
+    let total_files = result.files.len();
+    summary.push(format!("📄 総ファイル数: {}", total_files));
+    
+    // 言語別統計と総計
+    let mut lang_counts = std::collections::HashMap::new();
+    let mut total_functions = 0;
+    let mut total_classes = 0;
+    let mut total_lines = 0;
+    let mut total_code_lines = 0;
+    
+    for file in &result.files {
+        // 言語カウント
+        let lang = &file.language;
+        *lang_counts.entry(format!("{:?}", lang)).or_insert(0) += 1;
+        
+        // 機能カウント
+        total_functions += file.functions.len();
+        total_classes += file.classes.len();
+        
+        // 行数カウント
+        total_lines += file.file_info.total_lines;
+        total_code_lines += file.file_info.code_lines;
+    }
+    
+    summary.push(format!("\n📈 **統計情報:**"));
+    summary.push(format!("  • 総行数: {}", total_lines));
+    summary.push(format!("  • コード行数: {}", total_code_lines));
+    summary.push(format!("  • 関数数: {}", total_functions));
+    summary.push(format!("  • クラス数: {}", total_classes));
+    
+    if !lang_counts.is_empty() {
+        summary.push(format!("\n🗂️ **言語別:**"));
+        let mut sorted_langs: Vec<_> = lang_counts.into_iter().collect();
+        sorted_langs.sort_by(|a, b| a.0.cmp(&b.0));
+        for (lang, count) in sorted_langs {
+            summary.push(format!("  • {}: {} files", lang, count));
+        }
+    }
+    
+    summary.join("\n")
+}
+
 fn main() -> Result<()> {
     // Parse CLI to get thread count first
     let cli: Cli = clap::Parser::parse();
@@ -311,7 +366,7 @@ async fn async_main() -> Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Analyze { path, format, verbose, include_tests, threads } => {
+        Commands::Analyze { path, format, verbose, include_tests, stats_only, threads } => {
             let mut config = AnalysisConfig::default();
             config.verbose_output = verbose;
             config.include_test_files = include_tests;
@@ -328,13 +383,19 @@ async fn async_main() -> Result<()> {
             
             let result = session.analyze_path(&path, include_tests).await?;
             
-            match format.as_str() {
-                "json" => {
-                    let json = serde_json::to_string_pretty(&result)?;
-                    println!("{}", json);
-                }
-                _ => {
-                    anyhow::bail!("Unsupported output format: {}", format);
+            // Check if stats_only mode is enabled
+            if stats_only {
+                let summary = extract_summary(&result);
+                println!("{}", summary);
+            } else {
+                match format.as_str() {
+                    "json" => {
+                        let json = serde_json::to_string_pretty(&result)?;
+                        println!("{}", json);
+                    }
+                    _ => {
+                        anyhow::bail!("Unsupported output format: {}", format);
+                    }
                 }
             }
             
