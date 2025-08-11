@@ -337,33 +337,347 @@ impl SessionManager {
         Ok(output)
     }
     
+    /// Calculate real session statistics from stored analysis data
+    fn calculate_session_stats(&self, session_info: &SessionInfo) -> Result<serde_json::Value> {
+        let mut total_files = 0;
+        let mut total_lines = 0;
+        let mut total_code_lines = 0;
+        let mut total_functions = 0;
+        let mut total_classes = 0;
+        let mut language_counts = std::collections::HashMap::new();
+        
+        for result in &session_info.analysis_results {
+            total_files += 1;
+            total_lines += result.file_info.total_lines;
+            total_code_lines += result.file_info.code_lines;
+            total_functions += result.functions.len();
+            total_classes += result.classes.len();
+            
+            let lang_str = format!("{:?}", result.language);
+            *language_counts.entry(lang_str).or_insert(0) += 1;
+        }
+        
+        let mut language_breakdown = Vec::new();
+        for (lang, count) in language_counts {
+            language_breakdown.push(serde_json::json!({
+                "language": lang,
+                "file_count": count
+            }));
+        }
+        
+        Ok(serde_json::json!({
+            "session_id": session_info.id,
+            "created_at": session_info.created_at,
+            "last_accessed": session_info.last_accessed,
+            "project_path": session_info.path,
+            "file_statistics": {
+                "total_files": total_files,
+                "total_lines": total_lines,
+                "total_code_lines": total_code_lines,
+                "code_ratio": if total_lines > 0 { total_code_lines as f64 / total_lines as f64 } else { 0.0 }
+            },
+            "code_statistics": {
+                "total_functions": total_functions,
+                "total_classes": total_classes
+            },
+            "language_breakdown": language_breakdown,
+            "ast_statistics": session_info.combined_ast_stats
+        }))
+    }
+    
+    /// Calculate complexity analysis from AST data
+    fn calculate_session_complexity(&self, session_info: &SessionInfo) -> Result<serde_json::Value> {
+        let mut complexity_by_file = Vec::new();
+        let mut total_complexity = 0;
+        let mut complexity_distribution = std::collections::HashMap::new();
+        
+        for result in &session_info.analysis_results {
+            let mut file_complexity = 0;
+            let mut function_complexities = Vec::new();
+            
+            // Calculate complexity for each function
+            for function in &result.functions {
+                // Simple complexity based on control structures + 1
+                let mut complexity = 1;
+                
+                if let Some(ref ast_stats) = result.ast_statistics {
+                    // Rough estimate: control structures contribute to complexity
+                    complexity += ast_stats.control_structures / result.functions.len().max(1) as u32;
+                }
+                
+                function_complexities.push(serde_json::json!({
+                    "name": function.name,
+                    "complexity": complexity,
+                    "line_start": function.start_line,
+                    "line_end": function.end_line
+                }));
+                
+                file_complexity += complexity;
+                total_complexity += complexity;
+                
+                // Track complexity distribution
+                let complexity_range = match complexity {
+                    1..=5 => "low",
+                    6..=10 => "medium", 
+                    11..=20 => "high",
+                    _ => "very_high"
+                };
+                *complexity_distribution.entry(complexity_range).or_insert(0) += 1;
+            }
+            
+            if !function_complexities.is_empty() {
+                complexity_by_file.push(serde_json::json!({
+                    "file": result.file_info.path,
+                    "language": format!("{:?}", result.language),
+                    "total_complexity": file_complexity,
+                    "function_count": result.functions.len(),
+                    "average_complexity": if !result.functions.is_empty() { 
+                        file_complexity as f64 / result.functions.len() as f64 
+                    } else { 0.0 },
+                    "functions": function_complexities
+                }));
+            }
+        }
+        
+        Ok(serde_json::json!({
+            "session_id": session_info.id,
+            "total_complexity": total_complexity,
+            "total_functions": session_info.analysis_results.iter().map(|r| r.functions.len()).sum::<usize>(),
+            "average_complexity": if !session_info.analysis_results.is_empty() {
+                total_complexity as f64 / session_info.analysis_results.iter().map(|r| r.functions.len()).sum::<usize>() as f64
+            } else { 0.0 },
+            "complexity_distribution": complexity_distribution,
+            "files": complexity_by_file
+        }))
+    }
+    
+    /// Calculate project structure analysis
+    fn calculate_session_structure(&self, session_info: &SessionInfo) -> Result<serde_json::Value> {
+        let mut structure_by_language = std::collections::HashMap::new();
+        let mut directory_structure = std::collections::HashMap::new();
+        
+        for result in &session_info.analysis_results {
+            let lang_str = format!("{:?}", result.language);
+            let lang_entry = structure_by_language.entry(lang_str).or_insert_with(|| serde_json::json!({
+                "files": [],
+                "total_classes": 0,
+                "total_functions": 0,
+                "total_lines": 0
+            }));
+            
+            // Update language totals
+            lang_entry["total_classes"] = serde_json::Value::from(lang_entry["total_classes"].as_u64().unwrap_or(0) + result.classes.len() as u64);
+            lang_entry["total_functions"] = serde_json::Value::from(lang_entry["total_functions"].as_u64().unwrap_or(0) + result.functions.len() as u64);
+            lang_entry["total_lines"] = serde_json::Value::from(lang_entry["total_lines"].as_u64().unwrap_or(0) + result.file_info.total_lines as u64);
+            
+            // Add file info
+            lang_entry["files"].as_array_mut().unwrap().push(serde_json::json!({
+                "path": result.file_info.path,
+                "classes": result.classes.len(),
+                "functions": result.functions.len(),
+                "lines": result.file_info.total_lines
+            }));
+            
+            // Track directory structure
+            if let Some(parent) = result.file_info.path.parent() {
+                let dir_str = parent.to_string_lossy().to_string();
+                let dir_entry = directory_structure.entry(dir_str).or_insert_with(|| serde_json::json!({
+                    "files": 0,
+                    "total_lines": 0,
+                    "languages": std::collections::HashMap::<String, u32>::new()
+                }));
+                
+                dir_entry["files"] = serde_json::Value::from(dir_entry["files"].as_u64().unwrap_or(0) + 1);
+                dir_entry["total_lines"] = serde_json::Value::from(dir_entry["total_lines"].as_u64().unwrap_or(0) + result.file_info.total_lines as u64);
+            }
+        }
+        
+        Ok(serde_json::json!({
+            "session_id": session_info.id,
+            "project_path": session_info.path,
+            "languages": structure_by_language,
+            "directories": directory_structure,
+            "summary": {
+                "total_files": session_info.analysis_results.len(),
+                "total_languages": structure_by_language.len(),
+                "total_directories": directory_structure.len()
+            }
+        }))
+    }
+    
+    /// Find symbols matching the search term
+    fn find_session_symbols(&self, session_info: &SessionInfo, term: &str) -> Result<serde_json::Value> {
+        let mut matches = Vec::new();
+        let term_lower = term.to_lowercase();
+        
+        for result in &session_info.analysis_results {
+            // Search in classes
+            for class in &result.classes {
+                if class.name.to_lowercase().contains(&term_lower) {
+                    matches.push(serde_json::json!({
+                        "type": "class",
+                        "name": class.name,
+                        "file": result.file_info.path,
+                        "line_start": class.start_line,
+                        "line_end": class.end_line,
+                        "scope": "global"
+                    }));
+                }
+            }
+            
+            // Search in functions
+            for function in &result.functions {
+                if function.name.to_lowercase().contains(&term_lower) {
+                    matches.push(serde_json::json!({
+                        "type": "function",
+                        "name": function.name,
+                        "file": result.file_info.path,
+                        "line_start": function.start_line,
+                        "line_end": function.end_line,
+                        "scope": "global",
+                        "parameters": function.parameters
+                    }));
+                }
+            }
+            
+            // Search in AST nodes if available
+            if let Some(ref ast_root) = result.ast_root {
+                let ast_matches = self.search_ast_nodes(ast_root, &term_lower);
+                for ast_match in ast_matches {
+                    let name = if ast_match.name.is_empty() { "anonymous" } else { &ast_match.name };
+                    matches.push(serde_json::json!({
+                        "type": "ast_node",
+                        "name": name,
+                        "node_type": ast_match.type_string(),
+                        "file": result.file_info.path,
+                        "line_start": ast_match.start_line,
+                        "line_end": ast_match.end_line,
+                        "scope_path": ast_match.scope_path
+                    }));
+                }
+            }
+        }
+        
+        Ok(serde_json::json!({
+            "session_id": session_info.id,
+            "search_term": term,
+            "total_matches": matches.len(),
+            "matches": matches
+        }))
+    }
+    
+    /// Helper method to search AST nodes recursively
+    fn search_ast_nodes<'a>(&self, node: &'a ASTNode, term: &str) -> Vec<&'a ASTNode> {
+        let mut results = Vec::new();
+        
+        // Check current node
+        if !node.name.is_empty() && node.name.to_lowercase().contains(term) {
+            results.push(node);
+        }
+        
+        // Search children recursively
+        for child in &node.children {
+            results.extend(self.search_ast_nodes(child, term));
+        }
+        
+        results
+    }
+    
+    /// Find include cycles (mainly for C/C++ files)
+    fn find_session_include_cycles(&self, session_info: &SessionInfo) -> Result<serde_json::Value> {
+        let mut dependencies = std::collections::HashMap::new();
+        let mut cycles = Vec::new();
+        
+        // Build dependency graph
+        for result in &session_info.analysis_results {
+            let file_path = result.file_info.path.to_string_lossy().to_string();
+            let mut includes = Vec::new();
+            
+            // Extract imports for C/C++ files (use imports instead of includes)
+            if matches!(result.language, crate::core::types::Language::Cpp | crate::core::types::Language::C) {
+                for import in &result.imports {
+                    includes.push(import.module_path.clone());
+                }
+            }
+            
+            dependencies.insert(file_path, includes);
+        }
+        
+        // Simple cycle detection using DFS
+        let mut visited = std::collections::HashSet::new();
+        let mut rec_stack = std::collections::HashSet::new();
+        
+        for file in dependencies.keys() {
+            if !visited.contains(file) {
+                if let Some(cycle) = self.detect_cycle_dfs(file, &dependencies, &mut visited, &mut rec_stack) {
+                    cycles.push(cycle);
+                }
+            }
+        }
+        
+        Ok(serde_json::json!({
+            "session_id": session_info.id,
+            "total_files_analyzed": dependencies.len(),
+            "cycles_found": cycles.len(),
+            "dependency_graph": dependencies,
+            "cycles": cycles
+        }))
+    }
+    
+    /// Helper method for cycle detection using DFS
+    fn detect_cycle_dfs(
+        &self,
+        file: &str,
+        dependencies: &std::collections::HashMap<String, Vec<String>>,
+        visited: &mut std::collections::HashSet<String>,
+        rec_stack: &mut std::collections::HashSet<String>
+    ) -> Option<Vec<String>> {
+        visited.insert(file.to_string());
+        rec_stack.insert(file.to_string());
+        
+        if let Some(deps) = dependencies.get(file) {
+            for dep in deps {
+                if !visited.contains(dep) {
+                    if let Some(cycle) = self.detect_cycle_dfs(dep, dependencies, visited, rec_stack) {
+                        return Some(cycle);
+                    }
+                } else if rec_stack.contains(dep) {
+                    // Found a cycle
+                    return Some(vec![file.to_string(), dep.clone()]);
+                }
+            }
+        }
+        
+        rec_stack.remove(file);
+        None
+    }
+    
     pub fn execute_session_command(&mut self, session_id: &str, command: &str, args: &[String]) -> Result<String> {
+        // Get session info which contains the actual analysis data
+        let session_info = self.get_session_info(session_id)
+            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+        
         match command {
             "stats" => {
-                let session = self.get_session(session_id)
-                    .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
-                Ok(format!("Session {} statistics:\n{:?}", session_id, session.get_stats()))
+                let stats = self.calculate_session_stats(session_info)?;
+                Ok(serde_json::to_string_pretty(&stats)?)
             }
             "complexity" => {
-                let session = self.get_session(session_id)
-                    .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
-                Ok(format!("Session {} complexity analysis:\n{:?}", session_id, session.get_complexity()))
+                let complexity = self.calculate_session_complexity(session_info)?;
+                Ok(serde_json::to_string_pretty(&complexity)?)
             }
             "structure" => {
-                let session = self.get_session(session_id)
-                    .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
-                Ok(format!("Session {} structure:\n{:?}", session_id, session.get_structure()))
+                let structure = self.calculate_session_structure(session_info)?;
+                Ok(serde_json::to_string_pretty(&structure)?)
             }
             "find" => {
                 let term = args.get(0).unwrap_or(&String::new()).clone();
-                let session = self.get_session(session_id)
-                    .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
-                Ok(format!("Session {} find results for '{}':\n{:?}", session_id, term, session.find_symbols(&term)))
+                let results = self.find_session_symbols(session_info, &term)?;
+                Ok(serde_json::to_string_pretty(&results)?)
             }
             "include-cycles" => {
-                let session = self.get_session(session_id)
-                    .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
-                Ok(format!("Session {} include cycles:\n{:?}", session_id, session.find_include_cycles()))
+                let cycles = self.find_session_include_cycles(session_info)?;
+                Ok(serde_json::to_string_pretty(&cycles)?)
             }
             _ => anyhow::bail!("Unknown session command: {}", command),
         }
