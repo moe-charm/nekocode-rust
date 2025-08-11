@@ -205,13 +205,12 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
         """プロジェクト解析"""
         args = ["analyze", path]
         
-        if language != "auto":
-            args.extend(["--lang", language])
+        # Rust版は言語を自動検出するため--langオプションなし
+        # if language != "auto":
+        #     args.extend(["--lang", language])
         
         if stats_only:
             args.append("--stats-only")
-        
-        args.extend(["--performance", "--compact"])
         
         result = await self._run_nekocode(args)
         
