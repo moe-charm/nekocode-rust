@@ -1,0 +1,136 @@
+// Python Grammar for pest parser
+// This grammar defines the parsing rules for detecting Python classes, functions, imports, decorators
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ line_comment }
+line_comment = _{ "#" ~ (!"\n" ~ ANY)* }
+
+// Identifiers
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// String literals
+string_literal = _{ triple_string | double_string | single_string }
+triple_string = @{ "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" | "'''" ~ (!"'''" ~ ANY)* ~ "'''" }
+double_string = @{ "\"" ~ (!("\"" | "\\") ~ ANY | "\\" ~ ANY)* ~ "\"" }
+single_string = @{ "'" ~ (!("'" | "\\") ~ ANY | "\\" ~ ANY)* ~ "'" }
+
+// Keywords
+def_keyword = { "def" }
+class_keyword = { "class" }
+async_keyword = { "async" }
+await_keyword = { "await" }
+import_keyword = { "import" }
+from_keyword = { "from" }
+as_keyword = { "as" }
+if_keyword = { "if" }
+elif_keyword = { "elif" }
+else_keyword = { "else" }
+for_keyword = { "for" }
+while_keyword = { "while" }
+try_keyword = { "try" }
+except_keyword = { "except" }
+finally_keyword = { "finally" }
+with_keyword = { "with" }
+lambda_keyword = { "lambda" }
+return_keyword = { "return" }
+yield_keyword = { "yield" }
+
+// Decorators
+decorator = { "@" ~ identifier ~ ("." ~ identifier)* ~ ("(" ~ parameter_list? ~ ")")? }
+
+// Function parameters
+parameter_list = { "(" ~ (parameter ~ ("," ~ parameter)*)? ~ ")" }
+parameter = { identifier ~ (":" ~ type_annotation)? ~ ("=" ~ default_value)? }
+type_annotation = { identifier ~ type_args? | string_literal }
+type_args = { "[" ~ type_annotation ~ ("," ~ type_annotation)* ~ "]" }
+default_value = { identifier | string_literal | number | "None" | "True" | "False" }
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+
+// Colon and indentation markers
+colon = { ":" }
+arrow = { "->" }
+
+// Class inheritance
+inheritance = { "(" ~ class_list ~ ")" }
+class_list = { identifier ~ ("," ~ identifier)* }
+
+// Import constructs
+import_list = { identifier ~ ("," ~ identifier)* }
+from_import = { from_keyword ~ module_path ~ import_keyword ~ (import_list | "*") }
+simple_import = { import_keyword ~ module_path ~ (as_keyword ~ identifier)? }
+module_path = { identifier ~ ("." ~ identifier)* }
+
+// Function definition
+function_def = { 
+    decorator* ~ 
+    async_keyword? ~ 
+    def_keyword ~ 
+    identifier ~ 
+    parameter_list ~ 
+    (arrow ~ type_annotation)? ~ 
+    colon 
+}
+
+// Class definition
+class_def = { 
+    decorator* ~ 
+    class_keyword ~ 
+    identifier ~ 
+    inheritance? ~ 
+    colon 
+}
+
+// Method definition (function inside class)
+method_def = { 
+    decorator* ~ 
+    async_keyword? ~ 
+    def_keyword ~ 
+    identifier ~ 
+    parameter_list ~ 
+    (arrow ~ type_annotation)? ~ 
+    colon 
+}
+
+// Lambda function
+lambda_func = { lambda_keyword ~ parameter_list? ~ colon ~ expression }
+expression = { identifier | string_literal | number | lambda_func | "(" ~ expression ~ ")" }
+
+// Statements that increase complexity
+if_stmt = { if_keyword ~ expression ~ colon }
+elif_stmt = { elif_keyword ~ expression ~ colon }
+else_stmt = { else_keyword ~ colon }
+for_stmt = { for_keyword ~ identifier ~ "in" ~ expression ~ colon }
+while_stmt = { while_keyword ~ expression ~ colon }
+try_stmt = { try_keyword ~ colon }
+except_stmt = { except_keyword ~ (identifier ~ (as_keyword ~ identifier)?)? ~ colon }
+finally_stmt = { finally_keyword ~ colon }
+with_stmt = { with_keyword ~ expression ~ (as_keyword ~ identifier)? ~ colon }
+
+// Function calls
+function_call = { identifier ~ "(" ~ argument_list? ~ ")" }
+method_call = { identifier ~ "." ~ identifier ~ "(" ~ argument_list? ~ ")" }
+argument_list = { expression ~ ("," ~ expression)* }
+
+// Main program structure
+statement = _{ 
+    function_def | 
+    class_def | 
+    from_import | 
+    simple_import | 
+    if_stmt | 
+    elif_stmt | 
+    else_stmt |
+    for_stmt | 
+    while_stmt | 
+    try_stmt | 
+    except_stmt | 
+    finally_stmt |
+    with_stmt |
+    function_call |
+    method_call |
+    lambda_func |
+    decorator |
+    ANY
+}
+
+program = { SOI ~ statement* ~ EOI }

@@ -1,0 +1,39 @@
+// Rust Grammar (simplified for quick implementation) 
+program = { SOI ~ item* ~ EOI }
+item = { function_def | struct_def | enum_def | trait_def | impl_block | use_stmt | mod_def | ANY }
+
+// Basic constructs
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+function_def = { visibility? ~ "async"? ~ "fn" ~ identifier ~ generic_params? ~ "(" ~ parameter_list? ~ ")" ~ return_type? ~ where_clause? ~ ("{" | ";") }
+struct_def = { visibility? ~ "struct" ~ identifier ~ generic_params? ~ (struct_body | ";") }
+enum_def = { visibility? ~ "enum" ~ identifier ~ generic_params? ~ "{" }
+trait_def = { visibility? ~ "trait" ~ identifier ~ generic_params? ~ "{" }
+impl_block = { "impl" ~ generic_params? ~ type_path ~ where_clause? ~ "{" }
+use_stmt = { visibility? ~ "use" ~ use_path ~ ";" }
+mod_def = { visibility? ~ "mod" ~ identifier ~ ("{" | ";") }
+
+visibility = { "pub" ~ ("(" ~ ("crate" | "super" | "self" | ("in" ~ path)) ~ ")")? }
+generic_params = { "<" ~ generic_param_list ~ ">" }
+generic_param_list = { generic_param ~ ("," ~ generic_param)* }
+generic_param = { identifier ~ (":" ~ type_bound)? }
+type_bound = { type_path }
+parameter_list = { parameter ~ ("," ~ parameter)* }
+parameter = { pattern ~ ":" ~ type_path }
+pattern = { identifier }
+return_type = { "->" ~ type_path }
+where_clause = { "where" ~ where_item ~ ("," ~ where_item)* }
+where_item = { type_path ~ ":" ~ type_bound }
+struct_body = { "{" ~ field_list? ~ "}" | "(" ~ field_list? ~ ")" }
+field_list = { field ~ ("," ~ field)* ~ ","? }
+field = { visibility? ~ identifier ~ ":" ~ type_path }
+type_path = { path_segment ~ ("::" ~ path_segment)* }
+path_segment = { identifier ~ generic_args? }
+generic_args = { "<" ~ type_list ~ ">" }
+type_list = { type_path ~ ("," ~ type_path)* }
+use_path = { path_segment ~ ("::" ~ (path_segment | "*" | "{" ~ use_list ~ "}"))* }
+use_list = { use_item ~ ("," ~ use_item)* }
+use_item = { identifier ~ ("as" ~ identifier)? }
+path = { path_segment ~ ("::" ~ path_segment)* }
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

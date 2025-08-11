@@ -1,0 +1,152 @@
+// JavaScript Grammar for pest parser
+// This grammar defines the parsing rules for detecting JavaScript classes, functions, imports, exports
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ line_comment | block_comment }
+line_comment = _{ "//" ~ (!"\n" ~ ANY)* }
+block_comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+// Identifiers
+identifier = @{ (ASCII_ALPHA | "_" | "$") ~ (ASCII_ALPHANUMERIC | "_" | "$")* }
+
+// String literals
+string_literal = _{ "\"" ~ inner_string_double ~ "\"" | "'" ~ inner_string_single ~ "'" | "`" ~ inner_template ~ "`" }
+inner_string_double = @{ (!("\"" | "\\") ~ ANY | "\\" ~ ANY)* }
+inner_string_single = @{ (!("'" | "\\") ~ ANY | "\\" ~ ANY)* }
+inner_template = @{ (!("`" | "\\") ~ ANY | "\\" ~ ANY)* }
+
+// Keywords
+async_keyword = { "async" }
+function_keyword = { "function" }
+class_keyword = { "class" }
+extends_keyword = { "extends" }
+import_keyword = { "import" }
+export_keyword = { "export" }
+default_keyword = { "default" }
+from_keyword = { "from" }
+const_keyword = { "const" }
+let_keyword = { "let" }
+var_keyword = { "var" }
+if_keyword = { "if" }
+for_keyword = { "for" }
+while_keyword = { "while" }
+switch_keyword = { "switch" }
+try_keyword = { "try" }
+catch_keyword = { "catch" }
+
+// Function parameters
+parameter_list = { "(" ~ (parameter ~ ("," ~ parameter)*)? ~ ")" }
+parameter = { identifier }
+
+// Arrow function arrow
+arrow = { "=>" }
+
+// Braces and blocks
+open_brace = { "{" }
+close_brace = { "}" }
+open_paren = { "(" }
+close_paren = { ")" }
+
+// Basic block matching (simplified)
+block = { open_brace ~ (!close_brace ~ ANY)* ~ close_brace }
+
+// Import statements
+import_stmt = {
+    import_keyword ~ 
+    (
+        identifier ~ from_keyword ~ string_literal |
+        "{" ~ import_list ~ "}" ~ from_keyword ~ string_literal |
+        identifier ~ "," ~ "{" ~ import_list ~ "}" ~ from_keyword ~ string_literal
+    ) ~ ";"?
+}
+
+import_list = { identifier ~ ("," ~ identifier)* }
+
+// Export statements
+export_stmt = {
+    export_keyword ~ 
+    (
+        default_keyword ~ (class_decl | function_decl | identifier) |
+        function_decl |
+        class_decl |
+        "{" ~ export_list ~ "}" |
+        identifier
+    ) ~ ";"?
+}
+
+export_list = { identifier ~ ("," ~ identifier)* }
+
+// Function declarations
+function_decl = {
+    (async_keyword ~ WHITESPACE+)? ~
+    function_keyword ~ WHITESPACE+ ~
+    identifier ~
+    parameter_list ~
+    block
+}
+
+// Arrow functions
+arrow_function = {
+    (const_keyword | let_keyword | var_keyword) ~ WHITESPACE+ ~
+    identifier ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~
+    (async_keyword ~ WHITESPACE+)? ~
+    parameter_list ~ WHITESPACE* ~
+    arrow ~ WHITESPACE* ~
+    block
+}
+
+// Class declarations
+class_decl = {
+    class_keyword ~ WHITESPACE+ ~
+    identifier ~
+    (WHITESPACE+ ~ extends_keyword ~ WHITESPACE+ ~ identifier)? ~
+    WHITESPACE* ~
+    class_body
+}
+
+class_body = { open_brace ~ class_member* ~ close_brace }
+
+// Class methods
+class_method = {
+    (async_keyword ~ WHITESPACE+)? ~
+    identifier ~
+    parameter_list ~
+    block
+}
+
+class_member = { class_method | (!close_brace ~ ANY) }
+
+// Control structures (for complexity calculation)
+control_structure = {
+    if_statement |
+    for_loop |
+    while_loop |
+    switch_statement |
+    try_catch
+}
+
+if_statement = { if_keyword ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren ~ block }
+for_loop = { for_keyword ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren ~ block }
+while_loop = { while_keyword ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren ~ block }
+switch_statement = { switch_keyword ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren ~ block }
+try_catch = { try_keyword ~ block ~ (catch_keyword ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren ~ block)? }
+
+// Function calls (for call analysis)
+function_call = { identifier ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren }
+method_call = { identifier ~ "." ~ identifier ~ open_paren ~ (!close_paren ~ ANY)* ~ close_paren }
+
+// Top level constructs
+declaration = _{
+    import_stmt |
+    export_stmt |
+    function_decl |
+    arrow_function |
+    class_decl |
+    control_structure |
+    function_call |
+    method_call |
+    ANY
+}
+
+// Main program
+program = { SOI ~ declaration* ~ EOI }

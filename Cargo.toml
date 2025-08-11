@@ -1,0 +1,59 @@
+[package]
+name = "nekocode-rust"
+version = "1.0.0"
+edition = "2021"
+description = "High-performance code analysis tool - Complete Rust port of NekoCode"
+authors = ["NekoCode Team"]
+license = "MIT"
+
+[[bin]]
+name = "nekocode-rust"
+path = "src/main.rs"
+
+
+
+[dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+clap = { version = "4.0", features = ["derive"] }
+anyhow = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+
+# Parsing dependencies
+pest = "2.7"
+pest_derive = "2.7"
+
+# 🚀 Tree-sitter - Ultra-fast parsing (100x faster than PEST!)
+tree-sitter = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+
+# File system and path handling
+walkdir = "2.4"
+regex = "1.10"
+
+# Async and parallel processing
+rayon = "1.8"
+futures = "0.3"
+
+# JSON handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

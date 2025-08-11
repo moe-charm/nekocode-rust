@@ -1,0 +1,36 @@
+{
+  "name": "nekocode",
+  "version": "1.0.0",
+  "description": "🐱 NekoCode MCP Server - 革命的多言語解析エンジン",
+  "capabilities": {
+    "tools": true,
+    "resources": false,
+    "prompts": false
+  },
+  "nekocode": {
+    "binary_paths": [
+      "./build/nekocode_ai",
+      "../build/nekocode_ai",
+      "/usr/local/bin/nekocode_ai",
+      "nekocode_ai"
+    ],
+    "supported_languages": ["javascript", "typescript", "cpp", "c"],
+    "planned_languages": ["csharp", "python", "java", "go", "rust"],
+    "features": {
+      "fast_analysis": "38ms初回解析",
+      "session_mode": "3ms継続操作", 
+      "cpp_specialization": "循環依存検出・依存グラフ・最適化提案",
+      "japanese_support": "完全日本語対応",
+      "unique_advantages": [
+        "Serenaより900倍高速",
+        "C++特化機能（Serenaにない）",
+        "セッション方式による爆速継続操作"
+      ]
+    }
+  },
+  "mcp_integration": {
+    "server_type": "stdio",
+    "protocol_version": "0.1.0",
+    "tools_prefix": "mcp__nekocode__"
+  }
+}
