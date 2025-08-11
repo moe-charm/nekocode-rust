@@ -1,0 +1,581 @@
+{
+  "id": "ff1b7fec",
+  "path": "/tmp/test-js",
+  "created_at": "2025-08-11T19:59:44.195212752Z",
+  "last_accessed": "2025-08-11T19:59:44.195212862Z",
+  "metadata": {},
+  "analysis_results": [
+    {
+      "file_info": {
+        "name": "app.js",
+        "path": "/tmp/test-js/app.js",
+        "size_bytes": 0,
+        "total_lines": 65,
+        "code_lines": 55,
+        "comment_lines": 0,
+        "empty_lines": 10,
+        "code_ratio": 0.8461538461538461,
+        "analyzed_at": "2025-08-11T19:59:44.188743102Z",
+        "metadata": {}
+      },
+      "language": "javascript",
+      "classes": [
+        {
+          "name": "UserManager",
+          "parent_class": null,
+          "start_line": 1,
+          "end_line": 39,
+          "methods": [
+            {
+              "name": "constructor",
+              "start_line": 2,
+              "end_line": 4,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "addUser",
+              "start_line": 6,
+              "end_line": 20,
+              "parameters": [
+                "name",
+                "email"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "findUser",
+              "start_line": 22,
+              "end_line": 29,
+              "parameters": [
+                "id"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "deactivateUser",
+              "start_line": 31,
+              "end_line": 38,
+              "parameters": [
+                "id"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            }
+          ],
+          "properties": [],
+          "member_variables": [],
+          "metadata": {}
+        }
+      ],
+      "functions": [
+        {
+          "name": "constructor",
+          "start_line": 2,
+          "end_line": 4,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "addUser",
+          "start_line": 6,
+          "end_line": 20,
+          "parameters": [
+            "name",
+            "email"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "findUser",
+          "start_line": 22,
+          "end_line": 29,
+          "parameters": [
+            "id"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "deactivateUser",
+          "start_line": 31,
+          "end_line": 38,
+          "parameters": [
+            "id"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "validateEmail",
+          "start_line": 41,
+          "end_line": 44,
+          "parameters": [
+            "email"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "processUsers",
+          "start_line": 46,
+          "end_line": 63,
+          "parameters": [
+            "userManager",
+            "userData"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        }
+      ],
+      "imports": [],
+      "exports": [
+        {
+          "type": "es6_export",
+          "exported_names": [],
+          "is_default": false,
+          "line_number": 65
+        }
+      ],
+      "function_calls": [],
+      "call_frequency": {},
+      "complexity": {
+        "cyclomatic_complexity": 1,
+        "max_nesting_depth": 0,
+        "cognitive_complexity": 0,
+        "rating": "simple",
+        "rating_emoji": "🟢"
+      },
+      "commented_lines": [],
+      "metadata": {},
+      "stats": {
+        "class_count": 1,
+        "function_count": 6,
+        "import_count": 0,
+        "export_count": 1,
+        "unique_calls": 0,
+        "total_calls": 0,
+        "commented_lines_count": 0
+      },
+      "ast_root": {
+        "type": "file_root",
+        "name": "",
+        "full_name": "",
+        "start_line": 0,
+        "end_line": 0,
+        "start_column": 0,
+        "end_column": 0,
+        "depth": 0,
+        "scope_path": "",
+        "children": [
+          {
+            "type": "class",
+            "name": "UserManager",
+            "full_name": "",
+            "start_line": 1,
+            "end_line": 39,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "constructor",
+            "full_name": "",
+            "start_line": 2,
+            "end_line": 4,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "addUser",
+            "full_name": "",
+            "start_line": 6,
+            "end_line": 20,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 7,
+            "end_line": 9,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "user",
+            "full_name": "",
+            "start_line": 11,
+            "end_line": 16,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "findUser",
+            "full_name": "",
+            "start_line": 22,
+            "end_line": 29,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "for_loop",
+            "name": "",
+            "full_name": "",
+            "start_line": 23,
+            "end_line": 27,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "i",
+            "full_name": "",
+            "start_line": 23,
+            "end_line": 23,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 7,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 24,
+            "end_line": 26,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 7,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "deactivateUser",
+            "full_name": "",
+            "start_line": 31,
+            "end_line": 38,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "user",
+            "full_name": "",
+            "start_line": 32,
+            "end_line": 32,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 33,
+            "end_line": 36,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "function",
+            "name": "validateEmail",
+            "full_name": "",
+            "start_line": 41,
+            "end_line": 44,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "regex",
+            "full_name": "",
+            "start_line": 42,
+            "end_line": 42,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 4,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "function",
+            "name": "processUsers",
+            "full_name": "",
+            "start_line": 46,
+            "end_line": 63,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "results",
+            "full_name": "",
+            "start_line": 47,
+            "end_line": 47,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 4,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "for_loop",
+            "name": "",
+            "full_name": "",
+            "start_line": 49,
+            "end_line": 60,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 51,
+            "end_line": 56,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 7,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "user",
+            "full_name": "",
+            "start_line": 52,
+            "end_line": 52,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 10,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "export",
+            "name": "",
+            "full_name": "",
+            "start_line": 65,
+            "end_line": 65,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          }
+        ],
+        "attributes": {},
+        "source_text": null
+      },
+      "ast_statistics": {
+        "total_nodes": 21,
+        "max_depth": 10,
+        "node_type_counts": {
+          "if_statement": 4,
+          "for_loop": 2,
+          "function": 2,
+          "method": 4,
+          "variable": 6,
+          "export": 1,
+          "file_root": 1,
+          "class": 1
+        },
+        "classes": 1,
+        "functions": 2,
+        "methods": 4,
+        "variables": 6,
+        "control_structures": 6
+      },
+      "generated_at": "2025-08-11T19:59:44.188748853Z"
+    }
+  ],
+  "combined_ast_stats": {
+    "total_nodes": 21,
+    "max_depth": 10,
+    "node_type_counts": {
+      "variable": 6,
+      "file_root": 1,
+      "if_statement": 4,
+      "for_loop": 2,
+      "class": 1,
+      "export": 1,
+      "method": 4,
+      "function": 2
+    },
+    "classes": 1,
+    "functions": 2,
+    "methods": 4,
+    "variables": 6,
+    "control_structures": 6
+  }
+}
