@@ -1,0 +1,1443 @@
+{
+  "id": "118433ba",
+  "path": "/tmp/demo-project",
+  "created_at": "2025-08-11T20:06:25.237062566Z",
+  "last_accessed": "2025-08-11T20:06:25.237062677Z",
+  "metadata": {},
+  "analysis_results": [
+    {
+      "file_info": {
+        "name": "calculator.js",
+        "path": "/tmp/demo-project/calculator.js",
+        "size_bytes": 0,
+        "total_lines": 102,
+        "code_lines": 77,
+        "comment_lines": 10,
+        "empty_lines": 15,
+        "code_ratio": 0.7549019607843137,
+        "analyzed_at": "2025-08-11T20:06:25.228019739Z",
+        "metadata": {}
+      },
+      "language": "javascript",
+      "classes": [
+        {
+          "name": "Calculator",
+          "parent_class": null,
+          "start_line": 5,
+          "end_line": 85,
+          "methods": [
+            {
+              "name": "constructor",
+              "start_line": 6,
+              "end_line": 9,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "add",
+              "start_line": 12,
+              "end_line": 16,
+              "parameters": [
+                "a",
+                "b"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "subtract",
+              "start_line": 18,
+              "end_line": 22,
+              "parameters": [
+                "a",
+                "b"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "multiply",
+              "start_line": 24,
+              "end_line": 28,
+              "parameters": [
+                "a",
+                "b"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "divide",
+              "start_line": 30,
+              "end_line": 37,
+              "parameters": [
+                "a",
+                "b"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "power",
+              "start_line": 40,
+              "end_line": 44,
+              "parameters": [
+                "base",
+                "exponent"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "sqrt",
+              "start_line": 46,
+              "end_line": 53,
+              "parameters": [
+                "number"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "memoryStore",
+              "start_line": 56,
+              "end_line": 58,
+              "parameters": [
+                "value"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "memoryRecall",
+              "start_line": 60,
+              "end_line": 62,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "memoryClear",
+              "start_line": 64,
+              "end_line": 66,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "addToHistory",
+              "start_line": 69,
+              "end_line": 76,
+              "parameters": [
+                "operation",
+                "operands",
+                "result"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "getHistory",
+              "start_line": 78,
+              "end_line": 80,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "clearHistory",
+              "start_line": 82,
+              "end_line": 84,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            }
+          ],
+          "properties": [],
+          "member_variables": [],
+          "metadata": {}
+        }
+      ],
+      "functions": [
+        {
+          "name": "constructor",
+          "start_line": 6,
+          "end_line": 9,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "add",
+          "start_line": 12,
+          "end_line": 16,
+          "parameters": [
+            "a",
+            "b"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "subtract",
+          "start_line": 18,
+          "end_line": 22,
+          "parameters": [
+            "a",
+            "b"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "multiply",
+          "start_line": 24,
+          "end_line": 28,
+          "parameters": [
+            "a",
+            "b"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "divide",
+          "start_line": 30,
+          "end_line": 37,
+          "parameters": [
+            "a",
+            "b"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "power",
+          "start_line": 40,
+          "end_line": 44,
+          "parameters": [
+            "base",
+            "exponent"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "sqrt",
+          "start_line": 46,
+          "end_line": 53,
+          "parameters": [
+            "number"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "memoryStore",
+          "start_line": 56,
+          "end_line": 58,
+          "parameters": [
+            "value"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "memoryRecall",
+          "start_line": 60,
+          "end_line": 62,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "memoryClear",
+          "start_line": 64,
+          "end_line": 66,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "addToHistory",
+          "start_line": 69,
+          "end_line": 76,
+          "parameters": [
+            "operation",
+            "operands",
+            "result"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "getHistory",
+          "start_line": 78,
+          "end_line": 80,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "clearHistory",
+          "start_line": 82,
+          "end_line": 84,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "validateInput",
+          "start_line": 88,
+          "end_line": 92,
+          "parameters": [
+            "value"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "formatResult",
+          "start_line": 94,
+          "end_line": 99,
+          "parameters": [
+            "result"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        }
+      ],
+      "imports": [],
+      "exports": [
+        {
+          "type": "es6_export",
+          "exported_names": [],
+          "is_default": false,
+          "line_number": 102
+        }
+      ],
+      "function_calls": [],
+      "call_frequency": {},
+      "complexity": {
+        "cyclomatic_complexity": 1,
+        "max_nesting_depth": 0,
+        "cognitive_complexity": 0,
+        "rating": "simple",
+        "rating_emoji": "🟢"
+      },
+      "commented_lines": [],
+      "metadata": {},
+      "stats": {
+        "class_count": 1,
+        "function_count": 15,
+        "import_count": 0,
+        "export_count": 1,
+        "unique_calls": 0,
+        "total_calls": 0,
+        "commented_lines_count": 0
+      },
+      "ast_root": {
+        "type": "file_root",
+        "name": "",
+        "full_name": "",
+        "start_line": 0,
+        "end_line": 0,
+        "start_column": 0,
+        "end_column": 0,
+        "depth": 0,
+        "scope_path": "",
+        "children": [
+          {
+            "type": "class",
+            "name": "Calculator",
+            "full_name": "",
+            "start_line": 5,
+            "end_line": 85,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "constructor",
+            "full_name": "",
+            "start_line": 6,
+            "end_line": 9,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "add",
+            "full_name": "",
+            "start_line": 12,
+            "end_line": 16,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 13,
+            "end_line": 13,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "subtract",
+            "full_name": "",
+            "start_line": 18,
+            "end_line": 22,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 19,
+            "end_line": 19,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "multiply",
+            "full_name": "",
+            "start_line": 24,
+            "end_line": 28,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 25,
+            "end_line": 25,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "divide",
+            "full_name": "",
+            "start_line": 30,
+            "end_line": 37,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 31,
+            "end_line": 33,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 34,
+            "end_line": 34,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "power",
+            "full_name": "",
+            "start_line": 40,
+            "end_line": 44,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 41,
+            "end_line": 41,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "sqrt",
+            "full_name": "",
+            "start_line": 46,
+            "end_line": 53,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 47,
+            "end_line": 49,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 50,
+            "end_line": 50,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "memoryStore",
+            "full_name": "",
+            "start_line": 56,
+            "end_line": 58,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "memoryRecall",
+            "full_name": "",
+            "start_line": 60,
+            "end_line": 62,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "memoryClear",
+            "full_name": "",
+            "start_line": 64,
+            "end_line": 66,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "addToHistory",
+            "full_name": "",
+            "start_line": 69,
+            "end_line": 76,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "getHistory",
+            "full_name": "",
+            "start_line": 78,
+            "end_line": 80,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "clearHistory",
+            "full_name": "",
+            "start_line": 82,
+            "end_line": 84,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "function",
+            "name": "validateInput",
+            "full_name": "",
+            "start_line": 88,
+            "end_line": 92,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 89,
+            "end_line": 91,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "function",
+            "name": "formatResult",
+            "full_name": "",
+            "start_line": 94,
+            "end_line": 99,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 95,
+            "end_line": 97,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "export",
+            "name": "",
+            "full_name": "",
+            "start_line": 102,
+            "end_line": 102,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          }
+        ],
+        "attributes": {},
+        "source_text": null
+      },
+      "ast_statistics": {
+        "total_nodes": 28,
+        "max_depth": 6,
+        "node_type_counts": {
+          "class": 1,
+          "method": 13,
+          "if_statement": 4,
+          "function": 2,
+          "variable": 6,
+          "file_root": 1,
+          "export": 1
+        },
+        "classes": 1,
+        "functions": 2,
+        "methods": 13,
+        "variables": 6,
+        "control_structures": 4
+      },
+      "generated_at": "2025-08-11T20:06:25.228027233Z"
+    },
+    {
+      "file_info": {
+        "name": "operations.js",
+        "path": "/tmp/demo-project/operations.js",
+        "size_bytes": 0,
+        "total_lines": 68,
+        "code_lines": 51,
+        "comment_lines": 5,
+        "empty_lines": 12,
+        "code_ratio": 0.75,
+        "analyzed_at": "2025-08-11T20:06:25.228020780Z",
+        "metadata": {}
+      },
+      "language": "javascript",
+      "classes": [
+        {
+          "name": "MathOperations",
+          "parent_class": null,
+          "start_line": 6,
+          "end_line": 66,
+          "methods": [
+            {
+              "name": "constructor",
+              "start_line": 7,
+              "end_line": 9,
+              "parameters": [],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "chainCalculation",
+              "start_line": 12,
+              "end_line": 37,
+              "parameters": [
+                "operations"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "calculateAverage",
+              "start_line": 40,
+              "end_line": 51,
+              "parameters": [
+                "numbers"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            },
+            {
+              "name": "findMinMax",
+              "start_line": 53,
+              "end_line": 65,
+              "parameters": [
+                "numbers"
+              ],
+              "is_async": false,
+              "is_arrow_function": false,
+              "complexity": {
+                "cyclomatic_complexity": 1,
+                "max_nesting_depth": 0,
+                "cognitive_complexity": 0,
+                "rating": "simple",
+                "rating_emoji": "🟢"
+              },
+              "metadata": {}
+            }
+          ],
+          "properties": [],
+          "member_variables": [],
+          "metadata": {}
+        }
+      ],
+      "functions": [
+        {
+          "name": "constructor",
+          "start_line": 7,
+          "end_line": 9,
+          "parameters": [],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "chainCalculation",
+          "start_line": 12,
+          "end_line": 37,
+          "parameters": [
+            "operations"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "calculateAverage",
+          "start_line": 40,
+          "end_line": 51,
+          "parameters": [
+            "numbers"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "",
+          "start_line": 45,
+          "end_line": 48,
+          "parameters": [
+            "acc",
+            "num"
+          ],
+          "is_async": false,
+          "is_arrow_function": true,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        },
+        {
+          "name": "findMinMax",
+          "start_line": 53,
+          "end_line": 65,
+          "parameters": [
+            "numbers"
+          ],
+          "is_async": false,
+          "is_arrow_function": false,
+          "complexity": {
+            "cyclomatic_complexity": 1,
+            "max_nesting_depth": 0,
+            "cognitive_complexity": 0,
+            "rating": "simple",
+            "rating_emoji": "🟢"
+          },
+          "metadata": {}
+        }
+      ],
+      "imports": [
+        {
+          "type": "es6_import",
+          "module_path": "./calculator.js",
+          "imported_names": [],
+          "alias": null,
+          "line_number": 1,
+          "metadata": {}
+        }
+      ],
+      "exports": [
+        {
+          "type": "es6_export",
+          "exported_names": [],
+          "is_default": false,
+          "line_number": 68
+        }
+      ],
+      "function_calls": [],
+      "call_frequency": {},
+      "complexity": {
+        "cyclomatic_complexity": 1,
+        "max_nesting_depth": 0,
+        "cognitive_complexity": 0,
+        "rating": "simple",
+        "rating_emoji": "🟢"
+      },
+      "commented_lines": [],
+      "metadata": {},
+      "stats": {
+        "class_count": 1,
+        "function_count": 5,
+        "import_count": 1,
+        "export_count": 1,
+        "unique_calls": 0,
+        "total_calls": 0,
+        "commented_lines_count": 0
+      },
+      "ast_root": {
+        "type": "file_root",
+        "name": "",
+        "full_name": "",
+        "start_line": 0,
+        "end_line": 0,
+        "start_column": 0,
+        "end_column": 0,
+        "depth": 0,
+        "scope_path": "",
+        "children": [
+          {
+            "type": "import",
+            "name": "",
+            "full_name": "",
+            "start_line": 1,
+            "end_line": 1,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "class",
+            "name": "MathOperations",
+            "full_name": "",
+            "start_line": 6,
+            "end_line": 66,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "constructor",
+            "full_name": "",
+            "start_line": 7,
+            "end_line": 9,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "chainCalculation",
+            "full_name": "",
+            "start_line": 12,
+            "end_line": 37,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "result",
+            "full_name": "",
+            "start_line": 13,
+            "end_line": 13,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "for_loop",
+            "name": "",
+            "full_name": "",
+            "start_line": 15,
+            "end_line": 34,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "calculateAverage",
+            "full_name": "",
+            "start_line": 40,
+            "end_line": 51,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 41,
+            "end_line": 43,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "variable",
+            "name": "sum",
+            "full_name": "",
+            "start_line": 45,
+            "end_line": 48,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 6,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "function",
+            "name": "",
+            "full_name": "",
+            "start_line": 45,
+            "end_line": 48,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 9,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "method",
+            "name": "findMinMax",
+            "full_name": "",
+            "start_line": 53,
+            "end_line": 65,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 3,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "if_statement",
+            "name": "",
+            "full_name": "",
+            "start_line": 54,
+            "end_line": 56,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 5,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          },
+          {
+            "type": "export",
+            "name": "",
+            "full_name": "",
+            "start_line": 68,
+            "end_line": 68,
+            "start_column": 0,
+            "end_column": 0,
+            "depth": 1,
+            "scope_path": "",
+            "children": [],
+            "attributes": {},
+            "source_text": null
+          }
+        ],
+        "attributes": {},
+        "source_text": null
+      },
+      "ast_statistics": {
+        "total_nodes": 14,
+        "max_depth": 9,
+        "node_type_counts": {
+          "file_root": 1,
+          "import": 1,
+          "export": 1,
+          "class": 1,
+          "method": 4,
+          "for_loop": 1,
+          "function": 1,
+          "variable": 2,
+          "if_statement": 2
+        },
+        "classes": 1,
+        "functions": 1,
+        "methods": 4,
+        "variables": 2,
+        "control_structures": 3
+      },
+      "generated_at": "2025-08-11T20:06:25.228026651Z"
+    }
+  ],
+  "combined_ast_stats": {
+    "total_nodes": 42,
+    "max_depth": 9,
+    "node_type_counts": {
+      "method": 17,
+      "if_statement": 6,
+      "function": 3,
+      "variable": 8,
+      "import": 1,
+      "file_root": 2,
+      "export": 2,
+      "for_loop": 1,
+      "class": 2
+    },
+    "classes": 2,
+    "functions": 3,
+    "methods": 17,
+    "variables": 8,
+    "control_structures": 7
+  }
+}
