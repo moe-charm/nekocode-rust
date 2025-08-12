@@ -175,37 +175,74 @@ impl ImpactAnalyzer {
         }
         
         // Perform analysis based on git comparison mode
-        let (current_analysis, changed_files_for_detection) = if let Some(ref compare_ref) = self.config.compare_ref {
+        let (current_analysis, changed_symbols) = if let Some(ref compare_ref) = self.config.compare_ref {
             if self.config.verbose {
                 println!("📊 Comparing against git reference: {}", compare_ref);
             }
-            let git_changed_files = self.get_changed_files_from_git(path, compare_ref)?;
             
-            if git_changed_files.is_empty() {
+            // Get changed files from git
+            let changed_files = self.get_changed_files_from_git(path, compare_ref)?;
+            
+            if changed_files.is_empty() {
                 if self.config.verbose {
-                    println!("📄 No changed files found, analyzing all files");
+                    println!("📄 No changed files found - no differences detected");
                 }
-                (self.analyze_current_state(path).await?, Vec::new())
+                // No changes - return empty analysis
+                let current_analysis = self.analyze_current_state(path).await?;
+                (current_analysis, Vec::new())
             } else {
                 if self.config.verbose {
-                    println!("🔍 Git mode: Analyzing all files for references, detecting changes in {} files", git_changed_files.len());
+                    println!("🔍 Git mode: Comparing {} changed files between {} and current", changed_files.len(), compare_ref);
                 }
-                // Analyze all files for complete reference graph, but track changed files
-                let analysis = self.analyze_current_state(path).await?;
-                (analysis, git_changed_files)
+                
+                // Analyze current state for full reference graph
+                let current_analysis = self.analyze_current_state(path).await?;
+                
+                // Compare each changed file
+                let mut all_changed_symbols = Vec::new();
+                
+                for file_path in &changed_files {
+                    if self.config.verbose {
+                        println!("🔍 Comparing file: {}", file_path.display());
+                    }
+                    
+                    // Get old version of file
+                    let old_analysis = self.analyze_file_at_ref(path, compare_ref, file_path).await?;
+                    
+                    // Get current version of file
+                    let new_analysis = if file_path.exists() {
+                        let mut session = AnalysisSession::default();
+                        match session.analyze_path(file_path, self.config.include_tests).await {
+                            Ok(analysis) => analysis.files.into_iter().next(),
+                            Err(e) => {
+                                if self.config.verbose {
+                                    println!("⚠️ Failed to analyze current file {}: {}", file_path.display(), e);
+                                }
+                                None
+                            }
+                        }
+                    } else {
+                        None // File was deleted
+                    };
+                    
+                    // Compare the two versions
+                    let file_changes = self.compare_analyses(&old_analysis, &new_analysis, file_path)?;
+                    all_changed_symbols.extend(file_changes);
+                }
+                
+                if self.config.verbose {
+                    println!("🔍 Found {} total symbol changes across {} files", all_changed_symbols.len(), changed_files.len());
+                }
+                
+                (current_analysis, all_changed_symbols)
             }
         } else {
             if self.config.verbose {
-                println!("🔍 Analyzing all files (no git comparison)");
+                println!("🔍 Analyzing all files (no git comparison) - using heuristic detection");
             }
-            (self.analyze_current_state(path).await?, Vec::new())
-        };
-        
-        // Detect changes (either in specific files from git, or simulated for all files)
-        let changed_symbols = if !changed_files_for_detection.is_empty() {
-            self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?
-        } else {
-            self.detect_changed_symbols(&current_analysis)?
+            let current_analysis = self.analyze_current_state(path).await?;
+            let changed_symbols = self.detect_changed_symbols(&current_analysis)?;
+            (current_analysis, changed_symbols)
         };
         
         // Find references for changed symbols
@@ -240,13 +277,16 @@ impl ImpactAnalyzer {
         
         let analysis_time_ms = start_time.elapsed().as_millis() as u64;
         
+        // Determine modified files
+        let modified_files = if let Some(ref compare_ref) = self.config.compare_ref {
+            self.get_changed_files_from_git(path, compare_ref).unwrap_or_else(|_| vec![path.to_path_buf()])
+        } else {
+            vec![path.to_path_buf()]
+        };
+        
         Ok(ImpactAnalysisResult {
             analysis_path: path.to_path_buf(),
-            modified_files: if !changed_files_for_detection.is_empty() { 
-                changed_files_for_detection 
-            } else { 
-                vec![path.to_path_buf()] 
-            },
+            modified_files,
             changed_symbols: symbols_with_refs,
             affected_files,
             circular_dependencies,
@@ -650,39 +690,392 @@ impl ImpactAnalyzer {
         
         Ok(changed_files)
     }
-    
-    /// Analyze only the changed files
-    async fn analyze_changed_files(&self, repo_path: &Path, changed_files: &[PathBuf]) -> Result<DirectoryAnalysis> {
-        let mut analysis = DirectoryAnalysis::new(repo_path.to_path_buf());
+
+    /// Get file content at specific git reference
+    fn get_file_content_at_ref(&self, repo_path: &Path, git_ref: &str, file_path: &Path) -> Result<String> {
+        use std::process::Command;
         
-        for file_path in changed_files {
-            if file_path.exists() {
-                let relative_path = file_path.strip_prefix(repo_path)
-                    .unwrap_or(file_path)
-                    .to_path_buf();
-                    
+        // Convert absolute path to relative path from repo root
+        let relative_path = if file_path.starts_with(repo_path) {
+            file_path.strip_prefix(repo_path)
+                .context("Failed to get relative path")?
+        } else {
+            file_path
+        };
+        
+        let git_path = format!("{}:{}", git_ref, relative_path.display());
+        
+        if self.config.verbose {
+            println!("📄 Getting file content: {}", git_path);
+        }
+        
+        let output = Command::new("git")
+            .arg("show")
+            .arg(&git_path)
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to run git show command: {}", e))?;
+            
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            // File might not exist in the reference (newly added file)
+            if error.contains("does not exist") || error.contains("exists on disk, but not in") {
+                return Ok(String::new()); // Return empty content for new files
+            }
+            anyhow::bail!("Git show failed for {}: {}", git_path, error);
+        }
+        
+        let content = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(content)
+    }
+
+    /// Analyze file content at specific git reference
+    async fn analyze_file_at_ref(&self, repo_path: &Path, git_ref: &str, file_path: &Path) -> Result<Option<AnalysisResult>> {
+        let content = match self.get_file_content_at_ref(repo_path, git_ref, file_path) {
+            Ok(content) => content,
+            Err(e) => {
                 if self.config.verbose {
-                    println!("📄 Analyzing changed file: {}", relative_path.display());
+                    println!("⚠️ Could not get file content at {}: {}", git_ref, e);
+                }
+                return Ok(None);
+            }
+        };
+        
+        if content.is_empty() {
+            if self.config.verbose {
+                println!("📄 File {} was empty or didn't exist at {}", file_path.display(), git_ref);
+            }
+            return Ok(None); // File didn't exist at this ref
+        }
+        
+        if self.config.verbose {
+            println!("📄 Analyzing {} at {} ({} chars)", file_path.display(), git_ref, content.len());
+        }
+        
+        // Create a temporary file for analysis
+        use std::io::Write;
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!("nekocode_git_{}.js", uuid::Uuid::new_v4()));
+        
+        {
+            let mut file = std::fs::File::create(&temp_file)
+                .context("Failed to create temporary file")?;
+            file.write_all(content.as_bytes())
+                .context("Failed to write to temporary file")?;
+        }
+        
+        if self.config.verbose {
+            println!("📄 Created temporary file: {}", temp_file.display());
+        }
+        
+        // Analyze the temporary file
+        let mut session = AnalysisSession::default();
+        let result = match session.analyze_path(&temp_file, self.config.include_tests).await {
+            Ok(mut analysis) => {
+                if self.config.verbose {
+                    println!("📄 Successfully analyzed temp file, found {} files", analysis.files.len());
+                }
+                // Update the file path to match the original file
+                if let Some(file_result) = analysis.files.first_mut() {
+                    if self.config.verbose {
+                        println!("📄 Found {} functions, {} classes in old version", 
+                               file_result.functions.len(), file_result.classes.len());
+                    }
+                    file_result.file_info.path = file_path.to_path_buf();
+                    Some(file_result.clone())
+                } else {
+                    if self.config.verbose {
+                        println!("📄 No analysis results found for temp file");
+                    }
+                    None
+                }
+            }
+            Err(e) => {
+                if self.config.verbose {
+                    println!("⚠️ Failed to analyze file at {}: {}", git_ref, e);
+                }
+                None
+            }
+        };
+        
+        // Clean up temporary file
+        let _ = std::fs::remove_file(temp_file);
+        
+        Ok(result)
+    }
+    
+    /// Compare two analysis results to detect actual changes
+    fn compare_analyses(&self, old_analysis: &Option<AnalysisResult>, new_analysis: &Option<AnalysisResult>, file_path: &Path) -> Result<Vec<ChangedSymbol>> {
+        let mut changed_symbols = Vec::new();
+        
+        match (old_analysis, new_analysis) {
+            (None, None) => {
+                // File didn't exist in either version - no changes
+                if self.config.verbose {
+                    println!("📄 File {} unchanged: didn't exist in either version", file_path.display());
+                }
+            }
+            (None, Some(new)) => {
+                // File was added - all functions and classes are new
+                if self.config.verbose {
+                    println!("📄 File {} was added: {} functions, {} classes", 
+                             file_path.display(), new.functions.len(), new.classes.len());
                 }
                 
-                // Create a temporary session for each file
-                let mut session = AnalysisSession::default();
-                match session.analyze_path(file_path, self.config.include_tests).await {
-                    Ok(file_analysis) => {
-                        // Merge the single-file analysis into our result
-                        analysis.files.extend(file_analysis.files);
-                    }
-                    Err(e) => {
-                        if self.config.verbose {
-                            println!("⚠️ Failed to analyze {}: {}", relative_path.display(), e);
-                        }
-                    }
+                for function in &new.functions {
+                    changed_symbols.push(ChangedSymbol {
+                        name: function.name.clone(),
+                        symbol_type: "function".to_string(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: function.start_line,
+                        change_type: ChangeType::FunctionAdded,
+                        signature_before: None,
+                        signature_after: Some(self.format_function_signature(function)),
+                        references: Vec::new(),
+                        risk_level: RiskLevel::Low, // Will be calculated later
+                        breaking_change: false, // New functions are not breaking
+                    });
+                }
+                
+                for class in &new.classes {
+                    changed_symbols.push(ChangedSymbol {
+                        name: class.name.clone(),
+                        symbol_type: "class".to_string(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: class.start_line,
+                        change_type: ChangeType::ClassAdded,
+                        signature_before: None,
+                        signature_after: Some(format!("class {}", class.name)),
+                        references: Vec::new(),
+                        risk_level: RiskLevel::Low,
+                        breaking_change: false,
+                    });
+                }
+            }
+            (Some(old), None) => {
+                // File was deleted - all functions and classes are removed
+                if self.config.verbose {
+                    println!("📄 File {} was deleted: {} functions, {} classes removed", 
+                             file_path.display(), old.functions.len(), old.classes.len());
+                }
+                
+                for function in &old.functions {
+                    changed_symbols.push(ChangedSymbol {
+                        name: function.name.clone(),
+                        symbol_type: "function".to_string(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: function.start_line,
+                        change_type: ChangeType::FunctionRemoved,
+                        signature_before: Some(self.format_function_signature(function)),
+                        signature_after: None,
+                        references: Vec::new(),
+                        risk_level: RiskLevel::High, // Deletion is always high risk
+                        breaking_change: true, // Deletions are always breaking
+                    });
+                }
+                
+                for class in &old.classes {
+                    changed_symbols.push(ChangedSymbol {
+                        name: class.name.clone(),
+                        symbol_type: "class".to_string(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: class.start_line,
+                        change_type: ChangeType::ClassRemoved,
+                        signature_before: Some(format!("class {}", class.name)),
+                        signature_after: None,
+                        references: Vec::new(),
+                        risk_level: RiskLevel::High,
+                        breaking_change: true,
+                    });
+                }
+            }
+            (Some(old), Some(new)) => {
+                // File exists in both versions - compare functions and classes
+                if self.config.verbose {
+                    println!("📄 Comparing file {}: {} -> {} functions, {} -> {} classes", 
+                             file_path.display(), old.functions.len(), new.functions.len(),
+                             old.classes.len(), new.classes.len());
+                }
+                
+                // Compare functions
+                changed_symbols.extend(self.compare_functions(&old.functions, &new.functions, file_path)?);
+                
+                // Compare classes  
+                changed_symbols.extend(self.compare_classes(&old.classes, &new.classes, file_path)?);
+            }
+        }
+        
+        Ok(changed_symbols)
+    }
+
+    /// Compare function lists between old and new versions
+    fn compare_functions(&self, old_functions: &[FunctionInfo], new_functions: &[FunctionInfo], file_path: &Path) -> Result<Vec<ChangedSymbol>> {
+        let mut changed_symbols = Vec::new();
+        
+        // Create maps for easier lookup
+        let old_map: HashMap<String, &FunctionInfo> = old_functions.iter()
+            .map(|f| (f.name.clone(), f))
+            .collect();
+        let new_map: HashMap<String, &FunctionInfo> = new_functions.iter()
+            .map(|f| (f.name.clone(), f))
+            .collect();
+        
+        // Find deleted functions
+        for (name, old_func) in &old_map {
+            if !new_map.contains_key(name) {
+                changed_symbols.push(ChangedSymbol {
+                    name: name.clone(),
+                    symbol_type: "function".to_string(),
+                    file_path: file_path.to_path_buf(),
+                    line_number: old_func.start_line,
+                    change_type: ChangeType::FunctionRemoved,
+                    signature_before: Some(self.format_function_signature(old_func)),
+                    signature_after: None,
+                    references: Vec::new(),
+                    risk_level: RiskLevel::High, // Deletions are high risk
+                    breaking_change: true,
+                });
+            }
+        }
+        
+        // Find added functions
+        for (name, new_func) in &new_map {
+            if !old_map.contains_key(name) {
+                changed_symbols.push(ChangedSymbol {
+                    name: name.clone(),
+                    symbol_type: "function".to_string(),
+                    file_path: file_path.to_path_buf(),
+                    line_number: new_func.start_line,
+                    change_type: ChangeType::FunctionAdded,
+                    signature_before: None,
+                    signature_after: Some(self.format_function_signature(new_func)),
+                    references: Vec::new(),
+                    risk_level: RiskLevel::Low, // Additions are low risk
+                    breaking_change: false,
+                });
+            }
+        }
+        
+        // Find modified functions
+        for (name, old_func) in &old_map {
+            if let Some(new_func) = new_map.get(name) {
+                let old_signature = self.format_function_signature(old_func);
+                let new_signature = self.format_function_signature(new_func);
+                
+                if old_signature != new_signature {
+                    // Function signature changed
+                    let breaking_change = self.is_signature_change_breaking(old_func, new_func);
+                    
+                    changed_symbols.push(ChangedSymbol {
+                        name: name.clone(),
+                        symbol_type: "function".to_string(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: new_func.start_line,
+                        change_type: ChangeType::SignatureChanged,
+                        signature_before: Some(old_signature),
+                        signature_after: Some(new_signature),
+                        references: Vec::new(),
+                        risk_level: if breaking_change { RiskLevel::High } else { RiskLevel::Medium },
+                        breaking_change,
+                    });
                 }
             }
         }
         
-        analysis.update_summary();
-        Ok(analysis)
+        Ok(changed_symbols)
+    }
+
+    /// Compare class lists between old and new versions
+    fn compare_classes(&self, old_classes: &[ClassInfo], new_classes: &[ClassInfo], file_path: &Path) -> Result<Vec<ChangedSymbol>> {
+        let mut changed_symbols = Vec::new();
+        
+        // Create maps for easier lookup
+        let old_map: HashMap<String, &ClassInfo> = old_classes.iter()
+            .map(|c| (c.name.clone(), c))
+            .collect();
+        let new_map: HashMap<String, &ClassInfo> = new_classes.iter()
+            .map(|c| (c.name.clone(), c))
+            .collect();
+        
+        // Find deleted classes
+        for (name, old_class) in &old_map {
+            if !new_map.contains_key(name) {
+                changed_symbols.push(ChangedSymbol {
+                    name: name.clone(),
+                    symbol_type: "class".to_string(),
+                    file_path: file_path.to_path_buf(),
+                    line_number: old_class.start_line,
+                    change_type: ChangeType::ClassRemoved,
+                    signature_before: Some(format!("class {}", old_class.name)),
+                    signature_after: None,
+                    references: Vec::new(),
+                    risk_level: RiskLevel::High,
+                    breaking_change: true,
+                });
+            }
+        }
+        
+        // Find added classes
+        for (name, new_class) in &new_map {
+            if !old_map.contains_key(name) {
+                changed_symbols.push(ChangedSymbol {
+                    name: name.clone(),
+                    symbol_type: "class".to_string(),
+                    file_path: file_path.to_path_buf(),
+                    line_number: new_class.start_line,
+                    change_type: ChangeType::ClassAdded,
+                    signature_before: None,
+                    signature_after: Some(format!("class {}", new_class.name)),
+                    references: Vec::new(),
+                    risk_level: RiskLevel::Low,
+                    breaking_change: false,
+                });
+            }
+        }
+        
+        // Find modified classes (simplified - just check if method count changed)
+        for (name, old_class) in &old_map {
+            if let Some(new_class) = new_map.get(name) {
+                if old_class.methods.len() != new_class.methods.len() || 
+                   old_class.parent_class != new_class.parent_class {
+                    
+                    changed_symbols.push(ChangedSymbol {
+                        name: name.clone(),
+                        symbol_type: "class".to_string(),
+                        file_path: file_path.to_path_buf(),
+                        line_number: new_class.start_line,
+                        change_type: ChangeType::ClassModified,
+                        signature_before: Some(format!("class {} (methods: {})", old_class.name, old_class.methods.len())),
+                        signature_after: Some(format!("class {} (methods: {})", new_class.name, new_class.methods.len())),
+                        references: Vec::new(),
+                        risk_level: RiskLevel::Medium,
+                        breaking_change: old_class.methods.len() > new_class.methods.len(), // Removing methods is breaking
+                    });
+                }
+            }
+        }
+        
+        Ok(changed_symbols)
+    }
+
+    /// Check if a signature change is breaking
+    fn is_signature_change_breaking(&self, old_func: &FunctionInfo, new_func: &FunctionInfo) -> bool {
+        // Parameter count reduction is always breaking
+        if new_func.parameters.len() < old_func.parameters.len() {
+            return true;
+        }
+        
+        // Parameter count increase might be breaking (depends on defaults, but we assume breaking)
+        if new_func.parameters.len() > old_func.parameters.len() {
+            return true;
+        }
+        
+        // Same parameter count but different names/types could be breaking
+        if old_func.parameters != new_func.parameters {
+            return true;
+        }
+        
+        false
     }
 }
 
