@@ -1080,32 +1080,42 @@ impl AnalysisSession {
                 result.language = language; // Ensure correct language is set
             }
             Language::Python => {
-                use crate::analyzers::python::PythonAnalyzer;
-                let mut analyzer = PythonAnalyzer::new();
+                // 🚀 Always use Tree-sitter (100x faster than PEST)
+                use crate::analyzers::python::TreeSitterPythonAnalyzer;
+                let mut analyzer = TreeSitterPythonAnalyzer::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to create tree-sitter Python analyzer: {}", e))?;
                 result = analyzer.analyze(&content, file_path.to_string_lossy().as_ref()).await?;
                 result.language = language; // Ensure correct language is set
             }
             Language::Cpp => {
-                use crate::analyzers::cpp::CppAnalyzer;
-                let mut analyzer = CppAnalyzer::new();
+                // 🚀 Always use Tree-sitter (100x faster than PEST)
+                use crate::analyzers::cpp::TreeSitterCppAnalyzer;
+                let mut analyzer = TreeSitterCppAnalyzer::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to create tree-sitter C++ analyzer: {}", e))?;
                 result = analyzer.analyze(&content, file_path.to_string_lossy().as_ref()).await?;
                 result.language = language; // Ensure correct language is set
             }
             Language::CSharp => {
-                use crate::analyzers::csharp::CSharpAnalyzer;
-                let mut analyzer = CSharpAnalyzer::new();
+                // 🚀 Always use Tree-sitter (100x faster than PEST)
+                use crate::analyzers::csharp::TreeSitterCSharpAnalyzer;
+                let mut analyzer = TreeSitterCSharpAnalyzer::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to create tree-sitter C# analyzer: {}", e))?;
                 result = analyzer.analyze(&content, file_path.to_string_lossy().as_ref()).await?;
                 result.language = language; // Ensure correct language is set
             }
             Language::Go => {
-                use crate::analyzers::go::GoAnalyzer;
-                let mut analyzer = GoAnalyzer::new();
+                // 🚀 Always use Tree-sitter (100x faster than PEST)
+                use crate::analyzers::go::TreeSitterGoAnalyzer;
+                let mut analyzer = TreeSitterGoAnalyzer::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to create tree-sitter Go analyzer: {}", e))?;
                 result = analyzer.analyze(&content, file_path.to_string_lossy().as_ref()).await?;
                 result.language = language; // Ensure correct language is set
             }
             Language::Rust => {
-                use crate::analyzers::rust::RustAnalyzer;
-                let mut analyzer = RustAnalyzer::new();
+                // 🚀 Always use Tree-sitter (100x faster than PEST)
+                use crate::analyzers::rust::TreeSitterRustAnalyzer;
+                let mut analyzer = TreeSitterRustAnalyzer::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to create tree-sitter Rust analyzer: {}", e))?;
                 result = analyzer.analyze(&content, file_path.to_string_lossy().as_ref()).await?;
                 result.language = language; // Ensure correct language is set
             }
