@@ -101,6 +101,9 @@ cargo build --release
 ./bin/nekocode_ai session-create src/
 # Session ID: 12345678
 
+# Circular dependency detection (NEW!)
+./target/release/nekocode-rust session-command 12345678 include-cycles
+
 # AST analysis
 ./bin/nekocode_ai session-command 12345678 ast-stats
 ./bin/nekocode_ai session-command 12345678 ast-query "MyClass::myMethod"
@@ -134,6 +137,7 @@ cargo build --release
 - **Function Detection**: Including arrow functions, async functions
 - **Class Analysis**: Inheritance, methods, properties
 - **Dependency Mapping**: Imports, exports, module relationships
+- **🔄 Circular Dependency Detection**: Multi-language cycle detection for JS, Python, Go, Rust
 - **Complexity Metrics**: Cyclomatic complexity, nesting depth
 - **AST Operations**: Query, scope analysis, structure dump
 
