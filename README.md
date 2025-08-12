@@ -1,326 +1,340 @@
-# 🦀 NekoCode Rust - Ultra-Fast Code Analyzer | 16x Faster than C++ | Tree-sitter Powered
+# 🦀 NekoCode - Ultra-fast Multi-language Code Analyzer
 
-> 🚀 **Revolutionary Rust-powered code analyzer** delivering **16x faster performance** than traditional parsers!  
-> 🤖 **Claude Code Optimized**: Perfect for AI-assisted development workflows  
-> 📊 **8 Languages Supported**: JavaScript, TypeScript, C++, C, Python, C#, Go, Rust  
-> 🎯 **Ultra-Lightweight**: Only 9MB repository (vs 200MB+ alternatives)!
+[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tree-sitter](https://img.shields.io/badge/Tree--sitter-20232A?style=for-the-badge&logo=tree-sitter&logoColor=white)](https://tree-sitter.github.io/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)
 
-[![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tree-sitter](https://img.shields.io/badge/Tree--sitter-green.svg)](https://tree-sitter.github.io/tree-sitter/)
-[![AI Compatible](https://img.shields.io/badge/AI-Compatible-purple.svg)](https://github.com/moe-charm/nekocode-rust)
-[![Multi Language](https://img.shields.io/badge/Multi--Language-orange.svg)](https://github.com/moe-charm/nekocode-rust)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/moe-charm/nekocode-rust)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/moe-charm/nekocode-rust/blob/main/LICENSE)
+> **16x faster than traditional parsers** • **8 languages supported** • **GitHub PR automation ready**
 
-[🇯🇵 日本語版](README_jp.md) | English
+## 🚀 What NekoCode Does
 
-**Author**: CharmPic
-- GitHub: [@moe-charm](https://github.com/moe-charm)
-- Twitter: [@CharmNexusCore](https://x.com/CharmNexusCore)
-- Support: [☕ Buy me a coffee](https://coff.ee/moecharmde6)
+- **⚡ Lightning-fast analysis**: Analyze 1000+ files in seconds using Tree-sitter
+- **🔍 PR Impact Detection**: Automatically detect breaking changes in Pull Requests  
+- **🤖 GitHub Actions Integration**: Auto-comment PR analysis results
+- **🌐 Multi-language**: JavaScript, TypeScript, Python, C++, C#, Go, Rust, C
+- **🔧 Advanced Features**: Sessions, AST queries, Claude Code integration
 
-## 🚀 Why NekoCode Rust?
+## 📦 Quick Start
 
-### ⚡ **Blazing Fast Performance**
+### Installation
 ```bash
-# TypeScript Compiler (68 files) Performance Comparison:
-┌──────────────────┬────────────┬─────────────┐
-│ Parser           │ Time       │ Speed       │
-├──────────────────┼────────────┼─────────────┤
-│ Rust Tree-sitter │    1.2s    │ 🚀 16.38x   │
-│ C++ (PEGTL)      │   19.5s    │ 1.00x       │
-│ Rust (PEST)      │   60.7s    │ 0.32x       │
-└──────────────────┴────────────┴─────────────┘
-```
+# Linux/macOS
+curl -L https://github.com/moe-charm/nekocode-rust/releases/latest/download/nekocode-rust > nekocode
+chmod +x nekocode
 
-### 🎯 **Superior Detection Accuracy**
-```bash
-# Detection Comparison (Medium JS File):
-┌──────────────────┬───────────┬──────────┬────────┐
-│ Parser           │ Functions │ Classes  │ Total  │
-├──────────────────┼───────────┼──────────┼────────┤
-│ Rust Tree-sitter │    20     │    2     │   22   │
-│ Rust (PEST)      │    13     │    1     │   14   │
-│ C++ (PEGTL)      │     4     │    2     │    6   │
-└──────────────────┴───────────┴──────────┴────────┘
-```
-
-### 🛠️ **Zero Build Hell**
-```bash
-# Rust Edition (Heaven ✨)
-cargo build --release  # Done in 3 seconds!
-
-# vs C++ Edition (Hell 💀)
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j16  # Template errors, dependency hell, 5+ hours debugging...
-```
-
-## 🔧 Installation
-
-### Prerequisites
-- [Rust](https://rustup.rs/) (Latest stable)
-
-### Quick Option 1: Use Pre-built Binary (Instant!)
-```bash
-git clone https://github.com/moe-charm/nekocode-rust.git
-cd nekocode-rust/
-./bin/nekocode_ai --help  # Ready to use!
-```
-
-### Quick Option 2: Build from Source (3 seconds!)
-```bash
-git clone https://github.com/moe-charm/nekocode-rust.git
-cd nekocode-rust/
+# Or build from source
 cargo build --release
-
-# Binary location: ./target/release/nekocode-rust
 ```
 
-## 🚀 Quick Start
-
-### Basic Analysis
+### Basic Usage
 ```bash
-# Analyze a JavaScript/TypeScript project
-./bin/nekocode_ai analyze src/
+# Analyze a directory
+./nekocode analyze src/
 
-# OR use the Rust binary
-./target/release/nekocode-rust analyze src/ --parser tree-sitter
-
-# Compare parsers (PEST vs Tree-sitter)
-./target/release/nekocode-rust analyze src/ --benchmark
+# Get detailed analysis
+./nekocode analyze src/ --output json
 
 # Analyze specific languages
-./target/release/nekocode-rust analyze myfile.py --parser tree-sitter
-./target/release/nekocode-rust analyze myfile.cpp --parser tree-sitter
+./nekocode analyze . --type js
 ```
 
-### Advanced Features
+## 🎯 Core Features
+
+### 1. **Code Analysis** (Core Feature)
+
+**Supported Languages:**
+- **JavaScript/TypeScript** - Functions, classes, imports/exports
+- **Python** - Functions, classes, imports, decorators  
+- **C/C++** - Functions, classes, includes, namespaces
+- **C#** - Methods, classes, using statements, properties
+- **Go** - Functions, structs, imports, interfaces
+- **Rust** - Functions, structs, traits, modules
+
+**What it detects:**
 ```bash
-# Session-based analysis
-./bin/nekocode_ai session-create src/
-# Session ID: 12345678
-
-# Circular dependency detection (NEW!)
-./target/release/nekocode-rust session-command 12345678 include-cycles
-
-# AST analysis
-./bin/nekocode_ai session-command 12345678 ast-stats
-./bin/nekocode_ai session-command 12345678 ast-query "MyClass::myMethod"
-
-# Code editing (MCP integration)
-./bin/nekocode_ai replace-preview file.js "oldCode" "newCode"
-./bin/nekocode_ai moveclass-preview 12345678 MyClass target.js
+✅ Functions and methods with parameters
+✅ Classes and structs with inheritance  
+✅ Import/export dependencies
+✅ Complexity metrics and line counts
+✅ Cross-file references and calls
 ```
 
-## 🌟 Key Features
-
-### 🚀 **Ultra-High Performance**
-- **Tree-sitter Integration**: GitHub's cutting-edge parser technology
-- **Parallel Processing**: Safe Rust concurrency for maximum speed
-- **Incremental Parsing**: Only re-analyze changed parts
-- **Memory Efficient**: Rust's zero-cost abstractions
-
-### 🎯 **Multi-Language Support**
-```
-🟨 JavaScript (.js, .mjs, .jsx, .cjs)
-🔷 TypeScript (.ts, .tsx)  
-🔵 C++ (.cpp, .cxx, .cc, .hpp, .hxx, .hh)
-🔵 C (.c, .h)
-🐍 Python (.py, .pyw, .pyi)
-🟦 C# (.cs)
-🐹 Go (.go)
-🦀 Rust (.rs)
+**Example Output:**
+```json
+{
+  "functions": [
+    {
+      "name": "getUserById", 
+      "line": 25,
+      "parameters": ["id", "includeMetadata"],
+      "complexity": 3
+    }
+  ],
+  "references": [
+    {"file": "api.js", "line": 15, "type": "call"}
+  ]
+}
 ```
 
-### 🧠 **AI-Optimized Analysis**
-- **Function Detection**: Including arrow functions, async functions
-- **Class Analysis**: Inheritance, methods, properties
-- **Dependency Mapping**: Imports, exports, module relationships
-- **🔄 Circular Dependency Detection**: Multi-language cycle detection for JS, Python, Go, Rust
-- **Complexity Metrics**: Cyclomatic complexity, nesting depth
-- **AST Operations**: Query, scope analysis, structure dump
+### 2. **PR Impact Analysis** (GitHub Integration)
 
-### 🔧 **Developer-Friendly**
-- **Session Management**: Persistent analysis sessions
-- **Code Editing**: Replace, insert, move operations with preview
-- **Memory System**: Save/load analysis results
-- **MCP Integration**: Claude Code Server support
-- **Configuration**: Flexible settings management
-
-## 📊 Benchmarks
-
-### Real-World Performance
-```bash
-# TypeScript Compiler (Microsoft)
-# 68 files, ~200KB total
-Rust Tree-sitter: 1.189s ⚡
-C++ PEGTL:       19.477s
-Rust PEST:       60.733s
-
-# Detection Accuracy: 
-# Functions detected: 1,000+ (Tree-sitter) vs 200+ (PEGTL)
-```
-
-## 🤖 Claude Code Integration (MCP Server)
-
-### 🚀 One-Command Setup!
-
-NekoCode Rust Edition includes seamless MCP (Model Context Protocol) integration:
+**Automatically detect breaking changes in Pull Requests:**
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/moe-charm/nekocode-rust.git
-cd nekocode-rust
-
-# 2. Run setup script to get the command (in nekocode-rust directory)
-python3 bin/setup.py
-# Displays the command with absolute paths - copy it!
-
-# 3. IMPORTANT: Navigate to YOUR project directory
-cd /path/to/your/project  # ← Your project, not nekocode!
-# Example: cd ~/my-awesome-project
-
-# 4. Paste the command from step 2
-# claude mcp add nekocode \
-#   -e NEKOCODE_BINARY_PATH=/absolute/path/bin/nekocode_ai \
-#   -- python3 /absolute/path/mcp-nekocode-server/mcp_server_real.py
-
-# 5. Restart Claude Code - Done! 🎉
+# Compare branches for breaking changes
+./nekocode analyze-impact src/ --compare-ref master --format github-comment
 ```
 
-**⚠️ Where you run commands matters!**
-- Run `setup.py` in nekocode-rust directory (to get absolute paths)
-- Run `claude mcp add` in YOUR project directory (where you want to use NekoCode)
-- MCP server will only be available in that project directory
+**What it catches:**
+- ❌ **Deleted functions** with existing references
+- ⚠️ **Signature changes** that may break calls
+- ✅ **New functions** (safe additions)
+- 🔄 **Renamed functions** needing updates
 
-### MCP Tools Available in Claude Code
-
-```python
-# These MCP tools become directly available!
-await mcp__nekocode__analyze("/path/to/project", stats_only=True)
-await mcp__nekocode__session_create("/path/to/project")  # Ultra-fast sessions!
-await mcp__nekocode__session_stats(session_id)          # 3ms response!
-await mcp__nekocode__include_cycles(session_id)         # C++ dependency analysis
-await mcp__nekocode__list_languages()                   # Check supported languages
+**GitHub Actions Setup:**
+```yaml
+# .github/workflows/pr-analysis.yml
+name: PR Impact Analysis
+on: [pull_request]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run NekoCode Analysis
+      run: |
+        ./nekocode analyze-impact src/ --compare-ref origin/${{ github.base_ref }} --format github-comment
 ```
 
-**That's it!** MCP server provides:
-- ✅ Native Claude Code integration
-- ✅ Session management (3ms operations after initial analysis)
-- ✅ Advanced C++ dependency analysis tools
-- ✅ All NekoCode features as MCP tools
+**Auto-generated PR Comments:**
+```markdown
+🔍 **Impact Analysis Results**
 
-📚 **Full MCP Documentation**: [mcp-nekocode-server/README.md](mcp-nekocode-server/README.md)
+⚠️ **BREAKING CHANGES DETECTED**
+- `getUser()` function deleted (3 references found)
+- `src/api.js:25` - calls getUser() ❌
+- `src/order.js:18` - calls getUser() ❌
 
-## 📚 Commands Reference
-
-### Analysis Commands
-```bash
-analyze <path>              # Analyze files/directories
-languages                   # List supported languages  
+**Risk Level:** 🔴 High - Manual fixes required before merge
 ```
+
+## 🔧 Advanced Features
 
 ### Session Management
 ```bash
-session-create <path>       # Create analysis session
-session-command <id> <cmd>  # Execute session command
+# Create persistent analysis session
+./nekocode session-create src/
+./nekocode session-command <id> stats
+./nekocode session-command <id> ast-query "MyClass::myMethod"
 ```
 
-### Code Editing (MCP)
+### AST Queries  
 ```bash
-replace-preview <file> <pattern> <replacement>  # Preview replacement
-replace-confirm <preview_id>                    # Confirm replacement
-insert-preview <file> <line> <content>          # Preview insertion
-moveclass-preview <session> <class> <target>    # Preview class move
+# Deep syntax tree analysis
+./nekocode session-command <id> ast-stats
+./nekocode session-command <id> scope-analysis 42
 ```
 
-### AST Operations
+### Claude Code Integration
 ```bash
-ast-stats <session>         # AST statistics
-ast-query <session> <path>  # Query AST nodes
-scope-analysis <session> <line>  # Analyze scope at line
-ast-dump <session> [format] # Dump AST structure
+# MCP server for Claude Code
+python mcp-nekocode-server/mcp_server_real.py
 ```
 
-## 🏆 Why Choose NekoCode Rust?
+## 📊 Performance Comparison
 
-### ✅ **Performance Champion**
-- 16x faster than C++ implementation
-- Superior detection accuracy
-- Tree-sitter's cutting-edge technology
-- Parallel processing safety
+| Parser | Time (TypeScript 68 files) | Speed vs PEGTL |
+|--------|----------------------------|-----------------|
+| 🦀 **NekoCode (Tree-sitter)** | **1.2s** | **16.38x faster** |
+| C++ PEGTL | 19.5s | 1.00x baseline |
+| Rust PEST | 60.7s | 0.32x slower |
 
-### ✅ **Developer Experience**
-- One-command build: `cargo build --release`
-- No dependency hell, no template errors
-- Cross-platform compilation
-- Modern tooling and packaging
+## 🎮 Examples & Use Cases
 
-### ✅ **Future-Proof**
-- Tree-sitter: Used by GitHub, Neovim, Atom
-- Rust: Growing ecosystem, memory safety
-- Active development and modern features
-- AI-first design philosophy
-
-## 🗂️ Repository Structure
-
+### Use Case 1: Daily Development
+```bash
+# Before committing - check what changed
+./nekocode analyze src/ --output json | jq '.functions | length'
+# "Added 3 new functions, modified 2 existing"
 ```
-nekocode-rust/
-├── src/
-│   ├── analyzers/          # Language-specific analyzers
-│   │   ├── javascript/     # JS/TS with Tree-sitter + PEST
-│   │   ├── python/         # Python analyzer
-│   │   ├── cpp/           # C++ analyzer  
-│   │   └── ...            # Other languages
-│   ├── core/              # Core functionality
-│   │   ├── session.rs     # Session management
-│   │   ├── memory.rs      # Memory system
-│   │   └── ast.rs         # AST operations
-│   └── main.rs            # CLI interface
-├── bin/
-│   └── nekocode_ai        # Pre-built binary (6.6MB)
-├── docs/                  # Documentation
-└── mcp-nekocode-server/   # MCP Server integration
+
+### Use Case 2: PR Reviews
+```bash
+# Automated in GitHub Actions
+# Reviewer sees: "⚠️ Breaking change: getUserData() deleted, 5 references found"
 ```
+
+### Use Case 3: Refactoring Safety
+```bash
+# Before large refactor - baseline analysis
+./nekocode analyze . > baseline.json
+
+# After refactor - compare
+./nekocode analyze-impact . --compare-ref baseline-commit
+# Shows exactly what broke and needs fixing
+```
+
+## 🛠️ Installation & Setup
+
+### Requirements
+- **Rust 1.70+** (for building from source)
+- **Git** (for PR analysis features)  
+- **GitHub CLI** (optional, for GitHub Actions)
+
+### Build from Source
+```bash
+git clone https://github.com/moe-charm/nekocode-rust.git
+cd nekocode-rust
+cargo build --release
+./target/release/nekocode-rust --help
+```
+
+### GitHub Actions Integration
+1. **Copy binary to your repository**
+2. **Create `.github/workflows/pr-analysis.yml`** (see example above)
+3. **Set repository permissions**: Settings → Actions → Read and write permissions
 
 ## 🤝 Contributing
 
-We welcome contributions! The Rust edition is now the primary development target.
+1. **Report issues**: Especially for language parsing edge cases
+2. **Test new languages**: Add grammar files for additional languages  
+3. **Improve accuracy**: Help enhance PR impact detection
+4. **Add integrations**: VS Code extensions, CI/CD plugins
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 👤 Author
-
-**CharmPic**
-- GitHub: [@moe-charm](https://github.com/moe-charm)
-- Project: [github.com/moe-charm/nekocode-rust](https://github.com/moe-charm/nekocode-rust)
-- Twitter: [@CharmNexusCore](https://x.com/CharmNexusCore)
-- Support: [☕ Buy me a coffee](https://coff.ee/moecharmde6)
+MIT License - feel free to use in commercial projects.
 
 ---
 
-**🔥 Ready to experience 16x faster code analysis?**
+## 🌏 日本語 (Japanese)
 
+<details>
+<summary>🎌 日本語版README (クリックして展開)</summary>
+
+# 🦀 NekoCode - 超高速多言語コード解析ツール
+
+> **従来パーサーの16倍高速** • **8言語対応** • **GitHub PR自動化対応**
+
+## 🚀 NekoCodeができること
+
+- **⚡ 超高速解析**: Tree-sitterで1000+ファイルを秒単位で解析
+- **🔍 PR影響検出**: プルリクエストの破壊的変更を自動検出
+- **🤖 GitHub Actions統合**: PRに分析結果を自動コメント投稿
+- **🌐 多言語対応**: JavaScript、TypeScript、Python、C++、C#、Go、Rust、C
+- **🔧 高度機能**: セッション、AST、Claude Code統合
+
+## 📦 クイックスタート
+
+### インストール
 ```bash
-# Clone this ultra-lightweight repository (9MB!)
-git clone https://github.com/moe-charm/nekocode-rust.git
-cd nekocode-rust/
+# Linux/macOS
+curl -L https://github.com/moe-charm/nekocode-rust/releases/latest/download/nekocode-rust > nekocode
+chmod +x nekocode
 
-# OR use the pre-built binary (instant use!)
-./bin/nekocode_ai analyze your-project/
-
-# OR build from source (3 seconds!)
+# またはソースからビルド
 cargo build --release
-./target/release/nekocode-rust analyze your-project/ --parser tree-sitter
 ```
 
-**No more build hell. No more waiting. Just blazing fast analysis.** 🚀🦀
+### 基本的な使用方法
+```bash
+# ディレクトリを解析
+./nekocode analyze src/
+
+# 詳細な解析結果
+./nekocode analyze src/ --output json
+
+# 特定言語のみ解析
+./nekocode analyze . --type js
+```
+
+## 🎯 主要機能
+
+### 1. **コード解析** (コア機能)
+
+**対応言語:**
+- **JavaScript/TypeScript** - 関数、クラス、import/export
+- **Python** - 関数、クラス、import、デコレータ
+- **C/C++** - 関数、クラス、include、namespace
+- **C#** - メソッド、クラス、using、プロパティ
+- **Go** - 関数、構造体、import、interface
+- **Rust** - 関数、構造体、trait、モジュール
+
+### 2. **PR影響分析** (GitHub統合)
+
+**プルリクエストの破壊的変更を自動検出:**
+
+```bash
+# ブランチ間の破壊的変更を比較
+./nekocode analyze-impact src/ --compare-ref master --format github-comment
+```
+
+**検出する内容:**
+- ❌ **削除された関数** (既存の参照あり)
+- ⚠️ **シグネチャ変更** (呼び出しが壊れる可能性)
+- ✅ **新規関数** (安全な追加)
+- 🔄 **関数名変更** (更新が必要)
+
+### GitHub Actions設定例
+```yaml
+# .github/workflows/pr-analysis.yml
+name: PR Impact Analysis
+on: [pull_request]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: NekoCode解析実行
+      run: |
+        ./nekocode analyze-impact src/ --compare-ref origin/${{ github.base_ref }} --format github-comment
+```
+
+**自動生成されるPRコメント:**
+```markdown
+🔍 **影響分析結果**
+
+⚠️ **破壊的変更を検出**
+- `getUser()` 関数が削除されました (3箇所で参照)
+- `src/api.js:25` - getUser()を呼び出し ❌
+- `src/order.js:18` - getUser()を呼び出し ❌
+
+**リスクレベル:** 🔴 高 - マージ前に手動修正が必要
+```
+
+## 🔧 高度機能
+
+### セッション管理
+```bash
+# 永続的な解析セッション作成
+./nekocode session-create src/
+./nekocode session-command <id> stats
+./nekocode session-command <id> ast-query "MyClass::myMethod"
+```
+
+### ASTクエリ
+```bash
+# 構文木の詳細分析
+./nekocode session-command <id> ast-stats
+./nekocode session-command <id> scope-analysis 42
+```
+
+### Claude Code統合
+```bash
+# Claude Code用MCPサーバー
+python mcp-nekocode-server/mcp_server_real.py
+```
+
+## 📊 性能比較
+
+| パーサー | 時間 (TypeScript 68ファイル) | PEGTL比 |
+|---------|----------------------------|---------|
+| 🦀 **NekoCode (Tree-sitter)** | **1.2秒** | **16.38倍高速** |
+| C++ PEGTL | 19.5秒 | 1.00倍 |
+| Rust PEST | 60.7秒 | 0.32倍 |
+
+</details>
 
 ---
 
-**Made with 🐱 by CharmPic**
-
-*"Revolutionary code analysis, delivered at light speed!"*
+**Made with 🦀 Rust and ❤️ for developers worldwide**
