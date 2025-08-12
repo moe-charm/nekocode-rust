@@ -238,11 +238,21 @@ impl ImpactAnalyzer {
     fn detect_changed_symbols(&self, analysis: &DirectoryAnalysis) -> Result<Vec<ChangedSymbol>> {
         let mut changed_symbols = Vec::new();
         
+        // First pass: count references for each function to identify widely-used functions
+        let mut function_usage_count = std::collections::HashMap::new();
+        for file in &analysis.files {
+            for call in &file.function_calls {
+                *function_usage_count.entry(call.function_name.clone()).or_insert(0) += 1;
+            }
+        }
+        
         // For initial implementation, treat functions and classes with certain patterns as "potentially changed"
         // In a real implementation, this would compare with git history
         for file in &analysis.files {
             // Detect function changes - look for functions that likely represent changes
             for function in &file.functions {
+                let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
+                
                 let is_likely_changed = function.name.contains("new") || 
                                       function.name.contains("update") || 
                                       function.name.contains("modify") || 
@@ -251,12 +261,14 @@ impl ImpactAnalyzer {
                                       function.name.contains("Feature") ||
                                       function.name.ends_with("New") ||
                                       function.name.starts_with("new") ||
-                                      function.parameters.len() > 2; // Functions with many params are likely complex/changed
+                                      function.parameters.len() > 2 || // Functions with many params are likely complex/changed
+                                      *usage_count >= 2; // Functions with multiple references are likely important
                 
                 if is_likely_changed {
                     let breaking_change = function.parameters.len() > 3 || 
                                         function.name.contains("API") ||
-                                        function.name.contains("new");
+                                        function.name.contains("new") ||
+                                        *usage_count >= 3; // High-usage functions are more likely to cause breaking changes
                                         
                     changed_symbols.push(ChangedSymbol {
                         name: function.name.clone(),
@@ -308,6 +320,10 @@ impl ImpactAnalyzer {
         
         if self.config.verbose {
             println!("🔍 Detected {} potentially changed symbols", changed_symbols.len());
+            for symbol in &changed_symbols {
+                let usage = function_usage_count.get(&symbol.name).unwrap_or(&0);
+                println!("  📍 {} '{}' (usage count: {})", symbol.symbol_type, symbol.name, usage);
+            }
         }
         
         Ok(changed_symbols)
