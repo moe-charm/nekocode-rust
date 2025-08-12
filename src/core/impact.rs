@@ -174,11 +174,39 @@ impl ImpactAnalyzer {
             println!("🔍 Starting impact analysis for: {}", path.display());
         }
         
-        // Perform current analysis
-        let current_analysis = self.analyze_current_state(path).await?;
+        // Perform analysis based on git comparison mode
+        let (current_analysis, changed_files_for_detection) = if let Some(ref compare_ref) = self.config.compare_ref {
+            if self.config.verbose {
+                println!("📊 Comparing against git reference: {}", compare_ref);
+            }
+            let git_changed_files = self.get_changed_files_from_git(path, compare_ref)?;
+            
+            if git_changed_files.is_empty() {
+                if self.config.verbose {
+                    println!("📄 No changed files found, analyzing all files");
+                }
+                (self.analyze_current_state(path).await?, Vec::new())
+            } else {
+                if self.config.verbose {
+                    println!("🔍 Git mode: Analyzing all files for references, detecting changes in {} files", git_changed_files.len());
+                }
+                // Analyze all files for complete reference graph, but track changed files
+                let analysis = self.analyze_current_state(path).await?;
+                (analysis, git_changed_files)
+            }
+        } else {
+            if self.config.verbose {
+                println!("🔍 Analyzing all files (no git comparison)");
+            }
+            (self.analyze_current_state(path).await?, Vec::new())
+        };
         
-        // Detect changes (for now, simulate as we don't have git integration yet)
-        let changed_symbols = self.detect_changed_symbols(&current_analysis)?;
+        // Detect changes (either in specific files from git, or simulated for all files)
+        let changed_symbols = if !changed_files_for_detection.is_empty() {
+            self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?
+        } else {
+            self.detect_changed_symbols(&current_analysis)?
+        };
         
         // Find references for changed symbols
         let mut symbols_with_refs = Vec::new();
@@ -214,7 +242,11 @@ impl ImpactAnalyzer {
         
         Ok(ImpactAnalysisResult {
             analysis_path: path.to_path_buf(),
-            modified_files: vec![path.to_path_buf()], // Simplified
+            modified_files: if !changed_files_for_detection.is_empty() { 
+                changed_files_for_detection 
+            } else { 
+                vec![path.to_path_buf()] 
+            },
             changed_symbols: symbols_with_refs,
             affected_files,
             circular_dependencies,
@@ -320,6 +352,83 @@ impl ImpactAnalyzer {
         
         if self.config.verbose {
             println!("🔍 Detected {} potentially changed symbols", changed_symbols.len());
+            for symbol in &changed_symbols {
+                let usage = function_usage_count.get(&symbol.name).unwrap_or(&0);
+                println!("  📍 {} '{}' (usage count: {})", symbol.symbol_type, symbol.name, usage);
+            }
+        }
+        
+        Ok(changed_symbols)
+    }
+    
+    /// Detect changed symbols specifically in the provided files (git mode)
+    fn detect_changed_symbols_in_files(&self, analysis: &DirectoryAnalysis, changed_files: &[PathBuf]) -> Result<Vec<ChangedSymbol>> {
+        let mut changed_symbols = Vec::new();
+        
+        // First pass: count references for each function to identify widely-used functions
+        let mut function_usage_count = std::collections::HashMap::new();
+        for file in &analysis.files {
+            for call in &file.function_calls {
+                *function_usage_count.entry(call.function_name.clone()).or_insert(0) += 1;
+            }
+        }
+        
+        // Create a set of changed file paths for quick lookup
+        let changed_file_set: HashSet<PathBuf> = changed_files.iter().cloned().collect();
+        
+        // Only look for changed symbols in the files that were actually modified
+        for file in &analysis.files {
+            // Skip files that weren't changed according to git
+            if !changed_file_set.contains(&file.file_info.path) {
+                continue;
+            }
+            
+            if self.config.verbose {
+                println!("🔍 Checking for symbol changes in: {}", file.file_info.path.display());
+            }
+            
+            // For git mode, consider ALL functions in changed files as potentially changed
+            // because we can't determine what specifically changed without deeper git integration
+            for function in &file.functions {
+                let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
+                
+                // In git mode, all functions in changed files are considered changed
+                let breaking_change = function.parameters.len() > 1 || // Any function with parameters could be breaking
+                                    *usage_count >= 2; // Functions with multiple references are more likely to cause breaking changes
+                                    
+                changed_symbols.push(ChangedSymbol {
+                    name: function.name.clone(),
+                    symbol_type: "function".to_string(),
+                    file_path: file.file_info.path.clone(),
+                    line_number: function.start_line,
+                    change_type: ChangeType::FunctionModified, // Assume modified in git mode
+                    signature_before: None,
+                    signature_after: Some(self.format_function_signature(function)),
+                    references: Vec::new(),
+                    risk_level: RiskLevel::Low, // Will be calculated later
+                    breaking_change,
+                });
+            }
+            
+            // Also check classes in changed files
+            for class in &file.classes {
+                changed_symbols.push(ChangedSymbol {
+                    name: class.name.clone(),
+                    symbol_type: "class".to_string(),
+                    file_path: file.file_info.path.clone(),
+                    line_number: class.start_line,
+                    change_type: ChangeType::ClassModified,
+                    signature_before: None,
+                    signature_after: Some(format!("class {}", class.name)),
+                    references: Vec::new(),
+                    risk_level: RiskLevel::Low,
+                    breaking_change: !class.methods.is_empty(),
+                });
+            }
+        }
+        
+        if self.config.verbose {
+            println!("🔍 Detected {} potentially changed symbols in {} files", changed_symbols.len(), changed_files.len());
             for symbol in &changed_symbols {
                 let usage = function_usage_count.get(&symbol.name).unwrap_or(&0);
                 println!("  📍 {} '{}' (usage count: {})", symbol.symbol_type, symbol.name, usage);
@@ -492,6 +601,88 @@ impl ImpactAnalyzer {
     fn format_function_signature(&self, function: &FunctionInfo) -> String {
         let params = function.parameters.join(", ");
         format!("{}({})", function.name, params)
+    }
+    
+    /// Get changed files from git comparison
+    fn get_changed_files_from_git(&self, repo_path: &Path, compare_ref: &str) -> Result<Vec<PathBuf>> {
+        use std::process::Command;
+        
+        if self.config.verbose {
+            println!("🔍 Running git diff to find changed files...");
+        }
+        
+        let output = Command::new("git")
+            .arg("diff")
+            .arg("--name-only")
+            .arg(compare_ref)
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to run git command: {}. Make sure you're in a git repository.", e))?;
+            
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Git command failed: {}", error);
+        }
+        
+        let files_output = String::from_utf8_lossy(&output.stdout);
+        let changed_files: Vec<PathBuf> = files_output
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| repo_path.join(line.trim()))
+            .filter(|path| {
+                // Only include supported file types for analysis
+                if let Some(ext) = path.extension() {
+                    matches!(ext.to_str(), Some("js") | Some("ts") | Some("jsx") | Some("tsx") | 
+                                          Some("py") | Some("cpp") | Some("hpp") | Some("c") | 
+                                          Some("h") | Some("cs") | Some("go") | Some("rs"))
+                } else {
+                    false
+                }
+            })
+            .collect();
+            
+        if self.config.verbose {
+            println!("📝 Found {} changed files:", changed_files.len());
+            for file in &changed_files {
+                println!("  • {}", file.display());
+            }
+        }
+        
+        Ok(changed_files)
+    }
+    
+    /// Analyze only the changed files
+    async fn analyze_changed_files(&self, repo_path: &Path, changed_files: &[PathBuf]) -> Result<DirectoryAnalysis> {
+        let mut analysis = DirectoryAnalysis::new(repo_path.to_path_buf());
+        
+        for file_path in changed_files {
+            if file_path.exists() {
+                let relative_path = file_path.strip_prefix(repo_path)
+                    .unwrap_or(file_path)
+                    .to_path_buf();
+                    
+                if self.config.verbose {
+                    println!("📄 Analyzing changed file: {}", relative_path.display());
+                }
+                
+                // Create a temporary session for each file
+                let mut session = AnalysisSession::default();
+                match session.analyze_path(file_path, self.config.include_tests).await {
+                    Ok(file_analysis) => {
+                        // Merge the single-file analysis into our result
+                        analysis.files.extend(file_analysis.files);
+                    }
+                    Err(e) => {
+                        if self.config.verbose {
+                            println!("⚠️ Failed to analyze {}: {}", relative_path.display(), e);
+                        }
+                    }
+                }
+            }
+        }
+        
+        analysis.update_summary();
+        Ok(analysis)
     }
 }
 

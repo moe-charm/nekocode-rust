@@ -3,10 +3,15 @@
 /**
  * Get user by ID
  * @param {string} id - User ID 
+ * @param {boolean} includeDetails - Whether to include extra details
  * @returns {Object} User object
  */
-export function getUserById(id) {
-    return { id: id, name: 'Test User' };
+export function getUserById(id, includeDetails = false) {
+    const user = { id: id, name: 'Test User' };
+    if (includeDetails) {
+        user.details = { created: new Date(), active: true };
+    }
+    return user;
 }
 
 /**
