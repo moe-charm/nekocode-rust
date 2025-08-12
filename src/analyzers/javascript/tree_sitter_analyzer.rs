@@ -40,6 +40,13 @@ impl TreeSitterJavaScriptAnalyzer {
         Ok(())
     }
     
+    /// Get current Tree-sitter language
+    fn get_current_language(&self) -> tree_sitter::Language {
+        // Default to JavaScript - this is a simplification
+        // In a more robust implementation, we'd track which language is currently set
+        tree_sitter_javascript::LANGUAGE.into()
+    }
+    
     /// Extract functions using tree-sitter query
     fn extract_functions(&self, tree: &tree_sitter::Tree, source: &str) -> Result<Vec<FunctionInfo>> {
         let mut functions = Vec::new();
@@ -215,6 +222,86 @@ impl TreeSitterJavaScriptAnalyzer {
         }
         
         Ok(exports)
+    }
+    
+    /// Extract function calls using tree-sitter query
+    fn extract_function_calls(&self, tree: &tree_sitter::Tree, source: &str) -> Result<Vec<FunctionCall>> {
+        let mut function_calls = Vec::new();
+        
+        // Query for function calls and method calls
+        let query_str = r#"
+            [
+              (call_expression
+                function: (identifier) @function) @call
+              (call_expression
+                function: (member_expression
+                  property: (property_identifier) @property)) @method_call
+              (call_expression
+                function: (member_expression
+                  object: (identifier) @object
+                  property: (property_identifier) @property)) @method_call
+            ]
+        "#;
+        
+        let query = Query::new(&self.get_current_language(), query_str)?;
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        
+        for mat in matches {
+            let mut function_name = String::new();
+            let mut line_number = 0;
+            
+            for capture in mat.captures {
+                match query.capture_names()[capture.index as usize].as_ref() {
+                    "function" => {
+                        function_name = capture.node.utf8_text(source.as_bytes())?.to_string();
+                        line_number = capture.node.start_position().row as u32 + 1;
+                    }
+                    "property" => {
+                        // For method calls, use the property name as the function name
+                        let property_name = capture.node.utf8_text(source.as_bytes())?.to_string();
+                        if function_name.is_empty() {
+                            function_name = property_name;
+                            line_number = capture.node.start_position().row as u32 + 1;
+                        }
+                    }
+                    "object" => {
+                        // For method calls like obj.method(), we want to capture both
+                        let object_name = capture.node.utf8_text(source.as_bytes())?.to_string();
+                        if !function_name.is_empty() {
+                            function_name = format!("{}.{}", object_name, function_name);
+                        }
+                    }
+                    "call" | "method_call" => {
+                        if line_number == 0 {
+                            line_number = capture.node.start_position().row as u32 + 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            if !function_name.is_empty() {
+                let function_call = FunctionCall::new(function_name, line_number);
+                
+                // Try to extract arguments count
+                let call_node = mat.captures.iter()
+                    .find(|c| {
+                        let name = &query.capture_names()[c.index as usize];
+                        *name == "call" || *name == "method_call"
+                    })
+                    .map(|c| c.node);
+                
+                if let Some(_node) = call_node {
+                    // For now, just create the function call without metadata
+                    // TODO: Could extend FunctionCall struct to include argument count
+                }
+                
+                function_calls.push(function_call);
+            }
+        }
+        
+        Ok(function_calls)
     }
     
     /// Helper: Extract parameters from a function node
@@ -394,6 +481,7 @@ impl LanguageAnalyzer for TreeSitterJavaScriptAnalyzer {
         result.classes = self.extract_classes(&tree, content)?;
         result.imports = self.extract_imports(&tree, content)?;
         result.exports = self.extract_exports(&tree, content)?;
+        result.function_calls = self.extract_function_calls(&tree, content)?;
         let extract_duration = extract_start.elapsed();
         
         if std::env::var("NEKOCODE_DEBUG").is_ok() {
