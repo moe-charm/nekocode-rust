@@ -201,6 +201,16 @@ cargo build --release
 3. **Improve accuracy**: Help enhance PR impact detection
 4. **Add integrations**: VS Code extensions, CI/CD plugins
 
+## 👤 Author & Support
+
+**Created by CharmPic** 🐱
+
+- 🐙 **GitHub**: [@moe-charm](https://github.com/moe-charm)
+- 🐦 **Twitter**: [@CharmNexusCore](https://x.com/CharmNexusCore)
+- ☕ **Support**: [Buy me a coffee](https://buymeacoffee.com/moecharmde6)
+
+*If NekoCode helps your development workflow, consider supporting the project!*
+
 ## 📄 License
 
 MIT License - feel free to use in commercial projects.
@@ -332,6 +342,16 @@ python mcp-nekocode-server/mcp_server_real.py
 | 🦀 **NekoCode (Tree-sitter)** | **1.2秒** | **16.38倍高速** |
 | C++ PEGTL | 19.5秒 | 1.00倍 |
 | Rust PEST | 60.7秒 | 0.32倍 |
+
+## 👤 作者・サポート
+
+**作者: CharmPic** 🐱
+
+- 🐙 **GitHub**: [@moe-charm](https://github.com/moe-charm)
+- 🐦 **Twitter**: [@CharmNexusCore](https://x.com/CharmNexusCore)  
+- ☕ **サポート**: [Buy me a coffee](https://buymeacoffee.com/moecharmde6)
+
+*NekoCodeがあなたの開発を助けているなら、プロジェクトのサポートをご検討ください！*
 
 </details>
 
