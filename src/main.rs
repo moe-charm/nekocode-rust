@@ -10,6 +10,7 @@ use crate::core::types::{AnalysisConfig, DirectoryAnalysis};
 use crate::core::config::ConfigManager;
 use crate::core::memory::{MemoryManager, MemoryType};
 use crate::core::preview::PreviewManager;
+use crate::core::impact::{ImpactAnalyzer, ImpactConfig, OutputFormatter, RiskLevel};
 
 #[derive(Parser)]
 #[command(name = "nekocode-rust")]
@@ -47,6 +48,37 @@ enum Commands {
         /// Number of worker threads (default: 16)
         #[arg(short, long, default_value = "16")]
         threads: usize,
+    },
+    
+    /// Analyze code changes and show their impact across the codebase
+    AnalyzeImpact {
+        /// Path to analyze (file or directory)
+        #[arg(value_name = "PATH")]
+        path: PathBuf,
+        
+        /// Output format (plain, json, github-comment)
+        #[arg(short, long, default_value = "plain")]
+        format: String,
+        
+        /// Enable verbose output
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Include test files in analysis
+        #[arg(long)]
+        include_tests: bool,
+        
+        /// Compare against specific git reference (branch, commit, tag)
+        #[arg(long)]
+        compare_ref: Option<String>,
+        
+        /// Skip circular dependency analysis
+        #[arg(long)]
+        skip_circular: bool,
+        
+        /// Risk threshold for reporting (low, medium, high)
+        #[arg(long, default_value = "low")]
+        risk_threshold: String,
     },
     
     // SESSION MODE
@@ -401,6 +433,58 @@ async fn async_main() -> Result<()> {
             
             if verbose {
                 println!("✅ Analysis completed!");
+            }
+        }
+        
+        Commands::AnalyzeImpact { path, format, verbose, include_tests, compare_ref, skip_circular, risk_threshold } => {
+            if verbose {
+                println!("🔍 NekoCode Impact Analysis Starting...");
+                println!("📂 Target: {}", path.display());
+                println!("📊 Format: {}", format);
+            }
+            
+            // Parse risk threshold
+            let risk_level = match risk_threshold.as_str() {
+                "low" => RiskLevel::Low,
+                "medium" => RiskLevel::Medium,
+                "high" => RiskLevel::High,
+                _ => {
+                    anyhow::bail!("Invalid risk threshold: {}. Use 'low', 'medium', or 'high'", risk_threshold);
+                }
+            };
+            
+            // Create impact configuration
+            let config = ImpactConfig {
+                include_tests,
+                compare_ref,
+                skip_circular,
+                risk_threshold: risk_level,
+                verbose,
+            };
+            
+            // Create analyzer and run analysis
+            let analyzer = ImpactAnalyzer::new(config);
+            let result = analyzer.analyze_impact(&path).await?;
+            
+            // Format and output results
+            match format.as_str() {
+                "plain" => {
+                    println!("{}", OutputFormatter::format_plain(&result));
+                }
+                "json" => {
+                    let json = OutputFormatter::format_json(&result)?;
+                    println!("{}", json);
+                }
+                "github-comment" => {
+                    println!("{}", OutputFormatter::format_github_comment(&result));
+                }
+                _ => {
+                    anyhow::bail!("Unsupported output format: {}. Use 'plain', 'json', or 'github-comment'", format);
+                }
+            }
+            
+            if verbose {
+                println!("✅ Impact analysis completed!");
             }
         }
         
