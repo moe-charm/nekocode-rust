@@ -759,7 +759,18 @@ impl SessionManager {
                 if clean_import_path.starts_with("./") || clean_import_path.starts_with("../") {
                     if let Some(parent) = current_file.parent() {
                         let go_path = parent.join(clean_import_path);
-                        return Some(go_path.to_string_lossy().to_string());
+                        // Canonicalize the path if possible
+                        if let Ok(canonical) = go_path.canonicalize() {
+                            return Some(canonical.to_string_lossy().to_string());
+                        } else {
+                            // Try with .go extension
+                            let with_ext = go_path.with_extension("go");
+                            if let Ok(canonical) = with_ext.canonicalize() {
+                                return Some(canonical.to_string_lossy().to_string());
+                            }
+                            // Return non-canonical path for analysis
+                            return Some(go_path.to_string_lossy().to_string());
+                        }
                     }
                 }
                 None
