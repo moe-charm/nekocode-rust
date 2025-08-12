@@ -583,24 +583,24 @@ impl SessionManager {
         results
     }
     
-    /// Find include cycles (mainly for C/C++ files)
+    /// Find circular dependencies for all supported languages
     fn find_session_include_cycles(&self, session_info: &SessionInfo) -> Result<serde_json::Value> {
         let mut dependencies = std::collections::HashMap::new();
         let mut cycles = Vec::new();
         
-        // Build dependency graph
+        // Build dependency graph for all languages
         for result in &session_info.analysis_results {
             let file_path = result.file_info.path.to_string_lossy().to_string();
-            let mut includes = Vec::new();
+            let mut resolved_deps = Vec::new();
             
-            // Extract imports for C/C++ files (use imports instead of includes)
-            if matches!(result.language, crate::core::types::Language::Cpp | crate::core::types::Language::C) {
-                for import in &result.imports {
-                    includes.push(import.module_path.clone());
+            // Extract imports for all languages
+            for import in &result.imports {
+                if let Some(resolved_path) = self.resolve_import_path(&import.module_path, &result.file_info.path, &result.language) {
+                    resolved_deps.push(resolved_path);
                 }
             }
             
-            dependencies.insert(file_path, includes);
+            dependencies.insert(file_path, resolved_deps);
         }
         
         // Simple cycle detection using DFS
@@ -650,6 +650,149 @@ impl SessionManager {
         
         rec_stack.remove(file);
         None
+    }
+    
+    /// Resolve import path based on language-specific rules
+    fn resolve_import_path(&self, import_path: &str, current_file: &std::path::Path, language: &crate::core::types::Language) -> Option<String> {
+        use crate::core::types::Language;
+        
+        // Clean the import path first (remove extra whitespace and newlines)
+        let clean_import_path = import_path.trim();
+        
+        match language {
+            // JavaScript/TypeScript - handle relative and module paths
+            Language::JavaScript | Language::TypeScript => {
+                if clean_import_path.starts_with("./") || clean_import_path.starts_with("../") {
+                    // Relative import - resolve relative to current file
+                    if let Some(parent) = current_file.parent() {
+                        let resolved = parent.join(clean_import_path);
+                        // Canonicalize the path to handle ./ and ../
+                        if let Ok(canonical) = resolved.canonicalize() {
+                            return Some(canonical.to_string_lossy().to_string());
+                        } else {
+                            // Try different extensions
+                            for ext in &[".js", ".ts", ".jsx", ".tsx", ".mjs"] {
+                                let with_ext = resolved.with_extension(&ext[1..]);
+                                if let Ok(canonical) = with_ext.canonicalize() {
+                                    return Some(canonical.to_string_lossy().to_string());
+                                }
+                            }
+                            // Try as directory with index file
+                            for ext in &[".js", ".ts"] {
+                                let index_file = resolved.join(format!("index{}", ext));
+                                if let Ok(canonical) = index_file.canonicalize() {
+                                    return Some(canonical.to_string_lossy().to_string());
+                                }
+                            }
+                            // Return the resolved path even if file doesn't exist (for analysis)
+                            return Some(resolved.to_string_lossy().to_string());
+                        }
+                    }
+                } else if !clean_import_path.starts_with("@") && !clean_import_path.contains("/") {
+                    // Might be a local module, skip node_modules for now
+                    return None;
+                }
+                None
+            }
+            
+            // Python - handle relative and absolute imports
+            Language::Python => {
+                if clean_import_path.starts_with('.') {
+                    // Relative import
+                    if let Some(parent) = current_file.parent() {
+                        let module_path = clean_import_path.trim_start_matches('.');
+                        let py_path = parent.join(module_path.replace('.', "/") + ".py");
+                        return Some(py_path.to_string_lossy().to_string());
+                    }
+                } else {
+                    // Absolute import - convert module.submodule to path
+                    if let Some(parent) = current_file.parent() {
+                        // Simple heuristic: look for module in same directory structure
+                        let py_path = parent.join(clean_import_path.replace('.', "/") + ".py");
+                        if py_path.exists() {
+                            return Some(py_path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                None
+            }
+            
+            // C/C++ - handle include paths
+            Language::C | Language::Cpp => {
+                if clean_import_path.starts_with('"') {
+                    // Local include with quotes
+                    let clean_path = clean_import_path.trim_matches('"');
+                    if let Some(parent) = current_file.parent() {
+                        let include_path = parent.join(clean_path);
+                        return Some(include_path.to_string_lossy().to_string());
+                    }
+                } else if clean_import_path.starts_with('<') {
+                    // System include, skip for cycle detection
+                    return None;
+                } else {
+                    // Direct path
+                    if let Some(parent) = current_file.parent() {
+                        let include_path = parent.join(clean_import_path);
+                        return Some(include_path.to_string_lossy().to_string());
+                    }
+                }
+                None
+            }
+            
+            // C# - handle using statements
+            Language::CSharp => {
+                // For now, only handle relative file imports (not namespace imports)
+                if clean_import_path.contains('.') && !clean_import_path.starts_with("System") {
+                    if let Some(parent) = current_file.parent() {
+                        let cs_path = parent.join(clean_import_path.replace('.', "/") + ".cs");
+                        if cs_path.exists() {
+                            return Some(cs_path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                None
+            }
+            
+            // Go - handle import paths
+            Language::Go => {
+                // Handle relative imports starting with ./
+                if clean_import_path.starts_with("./") || clean_import_path.starts_with("../") {
+                    if let Some(parent) = current_file.parent() {
+                        let go_path = parent.join(clean_import_path);
+                        // Canonicalize the path if possible
+                        if let Ok(canonical) = go_path.canonicalize() {
+                            return Some(canonical.to_string_lossy().to_string());
+                        } else {
+                            // Try with .go extension
+                            let with_ext = go_path.with_extension("go");
+                            if let Ok(canonical) = with_ext.canonicalize() {
+                                return Some(canonical.to_string_lossy().to_string());
+                            }
+                            // Return non-canonical path for analysis
+                            return Some(go_path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                None
+            }
+            
+            // Rust - handle use statements
+            Language::Rust => {
+                // Handle relative crate imports
+                if clean_import_path.starts_with("crate::") || clean_import_path.starts_with("super::") {
+                    if let Some(parent) = current_file.parent() {
+                        let module_path = clean_import_path.replace("::", "/").replace("crate/", "").replace("super/", "../");
+                        let rs_path = parent.join(module_path + ".rs");
+                        if rs_path.exists() {
+                            return Some(rs_path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                None
+            }
+            
+            _ => None,
+        }
     }
     
     pub fn execute_session_command(&mut self, session_id: &str, command: &str, args: &[String]) -> Result<String> {
