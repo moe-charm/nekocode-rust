@@ -29,13 +29,11 @@ impl TreeSitterPythonAnalyzer {
     fn extract_functions(&self, tree: &tree_sitter::Tree, source: &str) -> Result<Vec<FunctionInfo>> {
         let mut functions = Vec::new();
         
-        // Query for function definitions and lambda functions
+        // Simple query for function definitions
         let query_str = r#"
             [
-              (function_definition
-                name: (identifier) @name) @function
-              (lambda 
-                parameters: (parameters)? @params) @function
+              (function_definition) @function
+              (lambda) @function
             ]
         "#;
         
@@ -45,40 +43,34 @@ impl TreeSitterPythonAnalyzer {
         
         for mat in matches {
             let mut func_info = FunctionInfo::new(String::new());
-            let mut func_node = None;
             
             for capture in mat.captures {
-                match query.capture_names()[capture.index as usize].as_ref() {
-                    "name" => {
-                        func_info.name = capture.node.utf8_text(source.as_bytes())?.to_string();
-                    }
-                    "function" => {
-                        func_node = Some(capture.node);
-                        func_info.start_line = capture.node.start_position().row as u32 + 1;
-                        func_info.end_line = capture.node.end_position().row as u32 + 1;
-                        
-                        // Handle lambda functions (which don't have names)
-                        if capture.node.kind() == "lambda" && func_info.name.is_empty() {
-                            func_info.name = "lambda".to_string();
-                            func_info.metadata.insert("is_lambda".to_string(), "true".to_string());
+                let func_node = capture.node;
+                func_info.start_line = func_node.start_position().row as u32 + 1;
+                func_info.end_line = func_node.end_position().row as u32 + 1;
+                
+                if func_node.kind() == "lambda" {
+                    func_info.name = "lambda".to_string();
+                    func_info.metadata.insert("is_lambda".to_string(), "true".to_string());
+                } else {
+                    // Try to extract function name from the node structure
+                    let mut node_cursor = func_node.walk();
+                    for child in func_node.children(&mut node_cursor) {
+                        if child.kind() == "identifier" && func_info.name.is_empty() {
+                            if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                                func_info.name = name.to_string();
+                                break;
+                            }
                         }
                     }
-                    _ => {}
                 }
-            }
-            
-            // Extract parameters if we have a function node
-            if let Some(node) = func_node {
-                func_info.parameters = self.extract_parameters(node, source)?;
-                func_info.is_async = self.is_async_function(node, source);
                 
-                // Check for decorators
-                if let Some(parent) = node.parent() {
-                    func_info.metadata.extend(self.extract_decorators(parent, source)?);
-                }
+                // Extract parameters
+                func_info.parameters = self.extract_parameters(func_node, source)?;
+                func_info.is_async = self.is_async_function(func_node, source);
             }
             
-            // Set default complexity (will be calculated separately)
+            // Set default complexity
             func_info.complexity = ComplexityInfo::default();
             
             functions.push(func_info);
@@ -92,9 +84,7 @@ impl TreeSitterPythonAnalyzer {
         let mut classes = Vec::new();
         
         let query_str = r#"
-            (class_definition
-              name: (identifier) @name
-              superclasses: (argument_list)? @superclasses) @class
+            (class_definition) @class
         "#;
         
         let query = Query::new(&tree_sitter_python::LANGUAGE.into(), query_str)?;
@@ -103,39 +93,27 @@ impl TreeSitterPythonAnalyzer {
         
         for mat in matches {
             let mut class_info = ClassInfo::new(String::new());
-            let mut class_node = None;
             
             for capture in mat.captures {
-                match query.capture_names()[capture.index as usize].as_ref() {
-                    "name" => {
-                        class_info.name = capture.node.utf8_text(source.as_bytes())?.to_string();
-                    }
-                    "superclasses" => {
-                        let parent_classes = self.extract_superclasses(capture.node, source)?;
-                        if !parent_classes.is_empty() {
-                            class_info.parent_class = Some(parent_classes[0].clone());
-                            if parent_classes.len() > 1 {
-                                class_info.metadata.insert("multiple_inheritance".to_string(), parent_classes.join(", "));
+                let class_node = capture.node;
+                class_info.start_line = class_node.start_position().row as u32 + 1;
+                class_info.end_line = class_node.end_position().row as u32 + 1;
+                
+                // Try to extract class name and other info from the node structure
+                let mut cursor = class_node.walk();
+                for child in class_node.children(&mut cursor) {
+                    match child.kind() {
+                        "identifier" if class_info.name.is_empty() => {
+                            if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                                class_info.name = name.to_string();
                             }
                         }
+                        _ => {}
                     }
-                    "class" => {
-                        class_node = Some(capture.node);
-                        class_info.start_line = capture.node.start_position().row as u32 + 1;
-                        class_info.end_line = capture.node.end_position().row as u32 + 1;
-                    }
-                    _ => {}
                 }
-            }
-            
-            // Extract methods and decorators
-            if let Some(node) = class_node {
-                class_info.methods = self.extract_class_methods(node, source)?;
                 
-                // Check for decorators
-                if let Some(parent) = node.parent() {
-                    class_info.metadata.extend(self.extract_decorators(parent, source)?);
-                }
+                // Extract methods
+                class_info.methods = self.extract_class_methods(class_node, source)?;
             }
             
             classes.push(class_info);
@@ -148,13 +126,11 @@ impl TreeSitterPythonAnalyzer {
     fn extract_imports(&self, tree: &tree_sitter::Tree, source: &str) -> Result<Vec<ImportInfo>> {
         let mut imports = Vec::new();
         
+        // Simple query for import statements - be conservative with node names
         let query_str = r#"
             [
-              (import_statement
-                name: (dotted_name) @module) @import
-              (import_from_statement
-                module_name: (dotted_name)? @module
-                name: (import_list)? @names) @from_import
+              (import_statement) @import
+              (import_from_statement) @from_import
             ]
         "#;
         
@@ -164,24 +140,24 @@ impl TreeSitterPythonAnalyzer {
         
         for mat in matches {
             let mut import_info = ImportInfo::new(ImportType::PythonImport, String::new());
-            let mut is_from_import = false;
             
             for capture in mat.captures {
                 match query.capture_names()[capture.index as usize].as_ref() {
-                    "module" => {
-                        import_info.module_path = capture.node.utf8_text(source.as_bytes())?.to_string();
-                    }
-                    "names" => {
-                        import_info.imported_names = self.extract_imported_names(capture.node, source)?;
-                    }
                     "from_import" => {
-                        is_from_import = true;
                         import_info.import_type = ImportType::PythonFromImport;
                         import_info.line_number = capture.node.start_position().row as u32 + 1;
+                        
+                        // Extract the whole import statement text
+                        if let Ok(import_text) = capture.node.utf8_text(source.as_bytes()) {
+                            import_info.module_path = import_text.to_string();
+                        }
                     }
                     "import" => {
-                        if !is_from_import {
-                            import_info.line_number = capture.node.start_position().row as u32 + 1;
+                        import_info.line_number = capture.node.start_position().row as u32 + 1;
+                        
+                        // Extract the whole import statement text
+                        if let Ok(import_text) = capture.node.utf8_text(source.as_bytes()) {
+                            import_info.module_path = import_text.to_string();
                         }
                     }
                     _ => {}
