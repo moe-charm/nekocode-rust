@@ -202,8 +202,21 @@ impl ImpactAnalyzer {
         };
         
         // Detect changes (either in specific files from git, or simulated for all files)
-        let changed_symbols = if !changed_files_for_detection.is_empty() {
-            self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?
+        let mut changed_symbols = if !changed_files_for_detection.is_empty() {
+            // Git mode: detect actual deletions and changes
+            if let Some(ref compare_ref) = self.config.compare_ref {
+                // First, detect deleted symbols from git comparison
+                let mut deleted_symbols = self.detect_deleted_symbols_from_git(&current_analysis, &changed_files_for_detection, compare_ref).await?;
+                
+                // Then detect modified symbols in changed files
+                let mut modified_symbols = self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?;
+                
+                // Combine deleted and modified symbols
+                deleted_symbols.append(&mut modified_symbols);
+                deleted_symbols
+            } else {
+                self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?
+            }
         } else {
             self.detect_changed_symbols(&current_analysis)?
         };
@@ -531,6 +544,12 @@ impl ImpactAnalyzer {
     fn assess_risk_level(&self, symbol: &ChangedSymbol) -> RiskLevel {
         let ref_count = symbol.references.len();
         
+        // Deleted functions with references are always high risk
+        if matches!(symbol.change_type, ChangeType::FunctionRemoved | ChangeType::ClassRemoved) && ref_count > 0 {
+            return RiskLevel::High;
+        }
+        
+        // Breaking changes with many references are high risk
         if symbol.breaking_change || ref_count > 10 {
             RiskLevel::High
         } else if ref_count > 3 || matches!(symbol.change_type, ChangeType::SignatureChanged) {
@@ -603,6 +622,170 @@ impl ImpactAnalyzer {
         format!("{}({})", function.name, params)
     }
     
+    /// Analyze functions at a specific git reference
+    async fn analyze_functions_at_ref(&self, repo_path: &Path, git_ref: &str, file_path: &Path) -> Result<Vec<FunctionInfo>> {
+        use std::process::Command;
+        
+        // Convert file path to relative path from repo root
+        let relative_path = if file_path.is_absolute() {
+            file_path.strip_prefix(repo_path)
+                .unwrap_or(file_path)
+        } else {
+            file_path
+        };
+        
+        if self.config.verbose {
+            println!("🔍 Analyzing functions at git ref '{}' for file: {}", git_ref, relative_path.display());
+        }
+        
+        // Get file content at the specified git reference
+        let output = Command::new("git")
+            .arg("show")
+            .arg(format!("{}:{}", git_ref, relative_path.display()))
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to run git show command: {}", e))?;
+            
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            if self.config.verbose {
+                println!("⚠️ Git show failed for {}:{} - {}", git_ref, relative_path.display(), error);
+            }
+            // If file doesn't exist at this ref, return empty vec
+            if error.contains("does not exist") || error.contains("exists on disk, but not in") {
+                return Ok(Vec::new());
+            }
+            anyhow::bail!("Git show command failed: {}", error);
+        }
+        
+        let file_content = String::from_utf8_lossy(&output.stdout);
+        
+        if self.config.verbose {
+            println!("📄 Got {} bytes of content from git for {}", file_content.len(), relative_path.display());
+        }
+        
+        // Create a temporary file to analyze with the correct extension
+        let temp_dir = std::env::temp_dir();
+        let file_extension = file_path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("txt");
+        let temp_file = temp_dir.join(format!("nekocode_temp_{}.{}", uuid::Uuid::new_v4(), file_extension));
+        std::fs::write(&temp_file, file_content.as_bytes())
+            .context("Failed to write temporary file")?;
+        
+        // Analyze the temporary file
+        let mut session = AnalysisSession::default();
+        let result = session.analyze_path(&temp_file, false).await;
+        
+        // Clean up temporary file
+        let _ = std::fs::remove_file(&temp_file);
+        
+        match result {
+            Ok(analysis) => {
+                if let Some(file_result) = analysis.files.first() {
+                    if self.config.verbose {
+                        println!("📊 Found {} functions in {} at ref {}", 
+                                file_result.functions.len(), 
+                                relative_path.display(), 
+                                git_ref);
+                        for func in &file_result.functions {
+                            println!("  • {}()", func.name);
+                        }
+                    }
+                    Ok(file_result.functions.clone())
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            Err(e) => {
+                if self.config.verbose {
+                    println!("⚠️ Analysis failed for temp file: {}", e);
+                }
+                Ok(Vec::new()) // Return empty if analysis fails
+            }
+        }
+    }
+    
+    /// Compare functions between two git references to find deletions and additions
+    async fn compare_functions_between_refs(&self, repo_path: &Path, base_ref: &str, current_ref: &str, file_path: &Path) -> Result<(Vec<FunctionInfo>, Vec<FunctionInfo>)> {
+        let base_functions = self.analyze_functions_at_ref(repo_path, base_ref, file_path).await?;
+        let current_functions = self.analyze_functions_at_ref(repo_path, current_ref, file_path).await?;
+        
+        // Find deleted functions (in base but not in current)
+        let deleted_functions: Vec<FunctionInfo> = base_functions
+            .iter()
+            .filter(|base_func| {
+                !current_functions.iter().any(|current_func| current_func.name == base_func.name)
+            })
+            .cloned()
+            .collect();
+            
+        // Find added functions (in current but not in base)
+        let added_functions: Vec<FunctionInfo> = current_functions
+            .iter()
+            .filter(|current_func| {
+                !base_functions.iter().any(|base_func| base_func.name == current_func.name)
+            })
+            .cloned()
+            .collect();
+        
+        if self.config.verbose && (!deleted_functions.is_empty() || !added_functions.is_empty()) {
+            println!("🔍 Function changes in {}:", file_path.display());
+            for func in &deleted_functions {
+                println!("  ❌ Deleted: {}()", func.name);
+            }
+            for func in &added_functions {
+                println!("  ✅ Added: {}()", func.name);
+            }
+        }
+        
+        Ok((deleted_functions, added_functions))
+    }
+    
+    /// Detect deleted symbols by comparing with git reference
+    async fn detect_deleted_symbols_from_git(&self, analysis: &DirectoryAnalysis, changed_files: &[PathBuf], compare_ref: &str) -> Result<Vec<ChangedSymbol>> {
+        let mut deleted_symbols = Vec::new();
+        let repo_path = &analysis.directory_path;
+        
+        for file_path in changed_files {
+            let relative_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
+            
+            // Compare functions between base ref and HEAD
+            match self.compare_functions_between_refs(repo_path, compare_ref, "HEAD", file_path).await {
+                Ok((deleted_functions, _added_functions)) => {
+                    for deleted_func in deleted_functions {
+                        deleted_symbols.push(ChangedSymbol {
+                            name: deleted_func.name.clone(),
+                            symbol_type: "function".to_string(),
+                            file_path: relative_path.to_path_buf(),
+                            line_number: deleted_func.start_line,
+                            change_type: ChangeType::FunctionRemoved,
+                            signature_before: Some(self.format_function_signature(&deleted_func)),
+                            signature_after: None,
+                            references: Vec::new(), // Will be filled later
+                            risk_level: RiskLevel::Low, // Will be calculated later
+                            breaking_change: true, // Deletions are always breaking
+                        });
+                    }
+                }
+                Err(e) => {
+                    if self.config.verbose {
+                        println!("⚠️ Failed to compare functions for {}: {}", file_path.display(), e);
+                    }
+                }
+            }
+        }
+        
+        if self.config.verbose {
+            println!("🔍 Detected {} deleted symbols from git comparison", deleted_symbols.len());
+            for symbol in &deleted_symbols {
+                println!("  ❌ Deleted function: {}() in {}", symbol.name, symbol.file_path.display());
+            }
+        }
+        
+        Ok(deleted_symbols)
+    }
+
     /// Get changed files from git comparison
     fn get_changed_files_from_git(&self, repo_path: &Path, compare_ref: &str) -> Result<Vec<PathBuf>> {
         use std::process::Command;
@@ -766,23 +949,63 @@ impl OutputFormatter {
         output.push(format!("- **Modified Files**: {}", result.modified_files.len()));
         output.push(format!("- **Analysis Time**: {:.1}s", result.analysis_time_ms as f64 / 1000.0));
         output.push(format!("- **Risk Level**: {} {}", result.overall_risk.emoji(), result.overall_risk.as_str()));
+        
+        // Breaking changes warning
+        if result.breaking_changes_count > 0 {
+            output.push("".to_string());
+            output.push("⚠️ **BREAKING CHANGES DETECTED**".to_string());
+        }
+        
         output.push("".to_string());
         
         // Impact detection
         if !result.changed_symbols.is_empty() {
             output.push("## ⚠️ Impact Detection".to_string());
             
-            // Group by symbol type
-            let functions: Vec<_> = result.changed_symbols.iter()
-                .filter(|s| s.symbol_type == "function")
+            // Group by change type for better readability
+            let deleted_functions: Vec<_> = result.changed_symbols.iter()
+                .filter(|s| s.symbol_type == "function" && matches!(s.change_type, ChangeType::FunctionRemoved))
+                .collect();
+            let modified_functions: Vec<_> = result.changed_symbols.iter()
+                .filter(|s| s.symbol_type == "function" && !matches!(s.change_type, ChangeType::FunctionRemoved))
                 .collect();
             let classes: Vec<_> = result.changed_symbols.iter()
                 .filter(|s| s.symbol_type == "class")
                 .collect();
             
-            if !functions.is_empty() {
+            // Show deleted functions first (most critical)
+            if !deleted_functions.is_empty() {
+                output.push("**Deleted Functions:**".to_string());
+                for func in deleted_functions {
+                    output.push(format!("- ❌ `{}()` → Found **{} references**", 
+                        func.name, 
+                        func.references.len()
+                    ));
+                    
+                    // Show specific broken references
+                    if !func.references.is_empty() {
+                        output.push("".to_string());
+                        output.push("  **Broken References:**".to_string());
+                        for (i, reference) in func.references.iter().enumerate() {
+                            if i < 5 { // Limit to first 5 references to avoid spam
+                                output.push(format!("  - `{}:{}` - {}",
+                                    reference.file_path.display(),
+                                    reference.line_number,
+                                    reference.context
+                                ));
+                            }
+                        }
+                        if func.references.len() > 5 {
+                            output.push(format!("  - ... and {} more references", func.references.len() - 5));
+                        }
+                        output.push("".to_string());
+                    }
+                }
+            }
+            
+            if !modified_functions.is_empty() {
                 output.push("**Modified Functions:**".to_string());
-                for func in functions {
+                for func in modified_functions {
                     output.push(format!("- `{}()` in `{}:{}`", 
                         func.name, 
                         func.file_path.display(), 
@@ -799,7 +1022,14 @@ impl OutputFormatter {
             if !classes.is_empty() {
                 output.push("**Modified Classes:**".to_string());
                 for class in classes {
-                    output.push(format!("- `{}` in `{}:{}`", 
+                    let change_indicator = match class.change_type {
+                        ChangeType::ClassRemoved => "❌",
+                        ChangeType::ClassAdded => "✅",
+                        _ => "🔄"
+                    };
+                    
+                    output.push(format!("- {} `{}` in `{}:{}`", 
+                        change_indicator,
                         class.name, 
                         class.file_path.display(), 
                         class.line_number
@@ -812,18 +1042,18 @@ impl OutputFormatter {
                 output.push("".to_string());
             }
             
-            // Affected files
+            // Affected files (only show if different from modified files)
             if result.affected_files.len() > result.modified_files.len() {
                 output.push("**Affected Files:**".to_string());
                 let mut count = 0;
                 for file in &result.affected_files {
                     if !result.modified_files.contains(file) && count < 5 {
-                        output.push(format!("1. `{}` - ⚠️ May need review", file.display()));
+                        output.push(format!("- `{}` - ⚠️ May need review", file.display()));
                         count += 1;
                     }
                 }
-                if result.affected_files.len() > 5 {
-                    output.push(format!("... and {} more files", result.affected_files.len() - 5));
+                if result.affected_files.len() > result.modified_files.len() + 5 {
+                    output.push(format!("- ... and {} more files", result.affected_files.len() - result.modified_files.len() - 5));
                 }
                 output.push("".to_string());
             }
