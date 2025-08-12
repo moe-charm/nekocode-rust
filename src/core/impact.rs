@@ -202,21 +202,9 @@ impl ImpactAnalyzer {
         };
         
         // Detect changes (either in specific files from git, or simulated for all files)
-        let mut changed_symbols = if !changed_files_for_detection.is_empty() {
-            // Git mode: detect actual deletions and changes
-            if let Some(ref compare_ref) = self.config.compare_ref {
-                // First, detect deleted symbols from git comparison
-                let mut deleted_symbols = self.detect_deleted_symbols_from_git(&current_analysis, &changed_files_for_detection, compare_ref).await?;
-                
-                // Then detect modified symbols in changed files
-                let mut modified_symbols = self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?;
-                
-                // Combine deleted and modified symbols
-                deleted_symbols.append(&mut modified_symbols);
-                deleted_symbols
-            } else {
-                self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection)?
-            }
+        let changed_symbols = if !changed_files_for_detection.is_empty() {
+            // Git mode: detect actual deletions and changes using my improved implementation
+            self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection).await?
         } else {
             self.detect_changed_symbols(&current_analysis)?
         };
@@ -375,7 +363,7 @@ impl ImpactAnalyzer {
     }
     
     /// Detect changed symbols specifically in the provided files (git mode)
-    fn detect_changed_symbols_in_files(&self, analysis: &DirectoryAnalysis, changed_files: &[PathBuf]) -> Result<Vec<ChangedSymbol>> {
+    async fn detect_changed_symbols_in_files(&self, analysis: &DirectoryAnalysis, changed_files: &[PathBuf]) -> Result<Vec<ChangedSymbol>> {
         let mut changed_symbols = Vec::new();
         
         // First pass: count references for each function to identify widely-used functions
@@ -389,38 +377,155 @@ impl ImpactAnalyzer {
         // Create a set of changed file paths for quick lookup
         let changed_file_set: HashSet<PathBuf> = changed_files.iter().cloned().collect();
         
+        if self.config.verbose {
+            println!("🔍 Changed files from git:");
+            for path in &changed_file_set {
+                println!("  📄 Git: {}", path.display());
+            }
+            println!("🔍 Analysis files found:");
+            for file in &analysis.files {
+                println!("  📄 Analysis: {}", file.file_info.path.display());
+            }
+        }
+        
         // Only look for changed symbols in the files that were actually modified
         for file in &analysis.files {
             // Skip files that weren't changed according to git
             if !changed_file_set.contains(&file.file_info.path) {
+                if self.config.verbose {
+                    println!("🔍 Skipping file (not in changed set): {}", file.file_info.path.display());
+                }
                 continue;
             }
             
             if self.config.verbose {
-                println!("🔍 Checking for symbol changes in: {}", file.file_info.path.display());
+                println!("🔍 Comparing file: {}", file.file_info.path.display());
             }
             
-            // For git mode, consider ALL functions in changed files as potentially changed
-            // because we can't determine what specifically changed without deeper git integration
-            for function in &file.functions {
-                let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
-                
-                // In git mode, all functions in changed files are considered changed
-                let breaking_change = function.parameters.len() > 1 || // Any function with parameters could be breaking
-                                    *usage_count >= 2; // Functions with multiple references are more likely to cause breaking changes
+            // Get the old version of this file from git for comparison
+            if let Some(ref compare_ref) = self.config.compare_ref {
+                match self.analyze_file_at_git_ref(&file.file_info.path, compare_ref).await {
+                    Ok(old_functions) => {
+                        // Compare old vs new functions to detect changes
+                        let current_functions: HashSet<String> = file.functions.iter()
+                            .map(|f| f.name.clone())
+                            .collect();
+                        let old_function_names: HashSet<String> = old_functions.iter()
+                            .map(|f| f.name.clone())
+                            .collect();
+                        
+                        // Find deleted functions (in old but not in current)
+                        for old_func in &old_functions {
+                            if !current_functions.contains(&old_func.name) {
+                                let usage_count = function_usage_count.get(&old_func.name).unwrap_or(&0);
+                                let breaking_change = *usage_count > 0; // Any usage makes deletion breaking
+                                
+                                if self.config.verbose {
+                                    println!("📄 Found {} functions, {} classes in old version", old_functions.len(), 0);
+                                    println!("📄 File {} was deleted: {} functions, {} classes removed", 
+                                            file.file_info.path.display(), old_functions.len(), 0);
+                                }
+                                
+                                changed_symbols.push(ChangedSymbol {
+                                    name: old_func.name.clone(),
+                                    symbol_type: "function".to_string(),
+                                    file_path: file.file_info.path.clone(),
+                                    line_number: old_func.start_line,
+                                    change_type: ChangeType::FunctionRemoved,
+                                    signature_before: Some(self.format_function_signature(old_func)),
+                                    signature_after: None,
+                                    references: Vec::new(),
+                                    risk_level: RiskLevel::Low,
+                                    breaking_change,
+                                });
+                            }
+                        }
+                        
+                        // Find added functions (in current but not in old)
+                        for function in &file.functions {
+                            if !old_function_names.contains(&function.name) {
+                                let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
+                                let breaking_change = false; // New functions are not breaking
+                                
+                                changed_symbols.push(ChangedSymbol {
+                                    name: function.name.clone(),
+                                    symbol_type: "function".to_string(),
+                                    file_path: file.file_info.path.clone(),
+                                    line_number: function.start_line,
+                                    change_type: ChangeType::FunctionAdded,
+                                    signature_before: None,
+                                    signature_after: Some(self.format_function_signature(function)),
+                                    references: Vec::new(),
+                                    risk_level: RiskLevel::Low,
+                                    breaking_change,
+                                });
+                            } else {
+                                // Function exists in both - check for signature changes
+                                if let Some(old_func) = old_functions.iter().find(|f| f.name == function.name) {
+                                    let old_sig = self.format_function_signature(old_func);
+                                    let new_sig = self.format_function_signature(function);
                                     
-                changed_symbols.push(ChangedSymbol {
-                    name: function.name.clone(),
-                    symbol_type: "function".to_string(),
-                    file_path: file.file_info.path.clone(),
-                    line_number: function.start_line,
-                    change_type: ChangeType::FunctionModified, // Assume modified in git mode
-                    signature_before: None,
-                    signature_after: Some(self.format_function_signature(function)),
-                    references: Vec::new(),
-                    risk_level: RiskLevel::Low, // Will be calculated later
-                    breaking_change,
-                });
+                                    if old_sig != new_sig {
+                                        let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
+                                        let breaking_change = *usage_count > 0; // Usage makes changes potentially breaking
+                                        
+                                        changed_symbols.push(ChangedSymbol {
+                                            name: function.name.clone(),
+                                            symbol_type: "function".to_string(),
+                                            file_path: file.file_info.path.clone(),
+                                            line_number: function.start_line,
+                                            change_type: ChangeType::SignatureChanged,
+                                            signature_before: Some(old_sig),
+                                            signature_after: Some(new_sig),
+                                            references: Vec::new(),
+                                            risk_level: RiskLevel::Low,
+                                            breaking_change,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Fallback to old behavior if git analysis fails
+                        for function in &file.functions {
+                            let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
+                            let breaking_change = function.parameters.len() > 1 || *usage_count >= 2;
+                            
+                            changed_symbols.push(ChangedSymbol {
+                                name: function.name.clone(),
+                                symbol_type: "function".to_string(),
+                                file_path: file.file_info.path.clone(),
+                                line_number: function.start_line,
+                                change_type: ChangeType::FunctionModified,
+                                signature_before: None,
+                                signature_after: Some(self.format_function_signature(function)),
+                                references: Vec::new(),
+                                risk_level: RiskLevel::Low,
+                                breaking_change,
+                            });
+                        }
+                    }
+                }
+            } else {
+                // No git comparison available, use old logic
+                for function in &file.functions {
+                    let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
+                    let breaking_change = function.parameters.len() > 1 || *usage_count >= 2;
+                    
+                    changed_symbols.push(ChangedSymbol {
+                        name: function.name.clone(),
+                        symbol_type: "function".to_string(),
+                        file_path: file.file_info.path.clone(),
+                        line_number: function.start_line,
+                        change_type: ChangeType::FunctionModified,
+                        signature_before: None,
+                        signature_after: Some(self.format_function_signature(function)),
+                        references: Vec::new(),
+                        risk_level: RiskLevel::Low,
+                        breaking_change,
+                    });
+                }
             }
             
             // Also check classes in changed files
@@ -794,11 +899,38 @@ impl ImpactAnalyzer {
             println!("🔍 Running git diff to find changed files...");
         }
         
+        // Get the git root directory to run the command from
+        let git_root = {
+            // Start from current working directory and walk up to find .git
+            let start_path = if repo_path.is_absolute() {
+                repo_path.to_path_buf()
+            } else {
+                std::env::current_dir()?.join(repo_path)
+            };
+            
+            let mut current = start_path.as_path();
+            loop {
+                if current.join(".git").exists() {
+                    break current.to_path_buf();
+                }
+                if let Some(parent) = current.parent() {
+                    current = parent;
+                } else {
+                    // Fallback to current working directory
+                    break std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                }
+            }
+        };
+        
+        if self.config.verbose {
+            println!("🔍 Git root: {}, Target path: {}", git_root.display(), repo_path.display());
+        }
+        
         let output = Command::new("git")
             .arg("diff")
             .arg("--name-only")
             .arg(compare_ref)
-            .current_dir(repo_path)
+            .current_dir(&git_root)
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to run git command: {}. Make sure you're in a git repository.", e))?;
             
@@ -811,7 +943,25 @@ impl ImpactAnalyzer {
         let changed_files: Vec<PathBuf> = files_output
             .lines()
             .filter(|line| !line.trim().is_empty())
-            .map(|line| repo_path.join(line.trim()))
+            .map(|line| {
+                let git_relative_path = PathBuf::from(line.trim());
+                // Convert git relative path to our analysis path format
+                // If the git root is different from repo_path, we need to adjust
+                if git_root == *repo_path {
+                    git_relative_path
+                } else {
+                    // Git path is relative to git_root, we need it relative to repo_path
+                    if let Ok(relative_to_git_root) = repo_path.strip_prefix(&git_root) {
+                        if let Ok(stripped) = git_relative_path.strip_prefix(relative_to_git_root) {
+                            stripped.to_path_buf()
+                        } else {
+                            git_relative_path
+                        }
+                    } else {
+                        git_relative_path
+                    }
+                }
+            })
             .filter(|path| {
                 // Only include supported file types for analysis
                 if let Some(ext) = path.extension() {
@@ -832,6 +982,75 @@ impl ImpactAnalyzer {
         }
         
         Ok(changed_files)
+    }
+    
+    /// Analyze a file at a specific git reference (commit, branch, tag)
+    async fn analyze_file_at_git_ref(&self, file_path: &Path, git_ref: &str) -> Result<Vec<FunctionInfo>> {
+        use std::process::Command;
+        use crate::core::session::AnalysisSession;
+        
+        // Get the relative path from the file_path
+        let relative_path = if let Some(parent) = file_path.parent() {
+            file_path.strip_prefix(parent).unwrap_or(file_path)
+        } else {
+            file_path
+        };
+        
+        if self.config.verbose {
+            println!("📄 Getting file content: {}:{}", git_ref, relative_path.display());
+        }
+        
+        // Get file content from git
+        let output = Command::new("git")
+            .arg("show")
+            .arg(format!("{}:{}", git_ref, relative_path.display()))
+            .current_dir(file_path.parent().unwrap_or_else(|| Path::new(".")))
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to run git show command: {}", e))?;
+            
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Git show failed: {}", error);
+        }
+        
+        let file_content = String::from_utf8_lossy(&output.stdout);
+        
+        if self.config.verbose {
+            println!("📄 Analyzing {} at {} ({} chars)", relative_path.display(), git_ref, file_content.len());
+        }
+        
+        // Create a temporary file to analyze the old content
+        let temp_file = std::env::temp_dir().join(format!("nekocode_git_{}.js", uuid::Uuid::new_v4()));
+        std::fs::write(&temp_file, file_content.as_bytes())
+            .context("Failed to write temporary file")?;
+            
+        if self.config.verbose {
+            println!("📄 Created temporary file: {}", temp_file.display());
+        }
+        
+        // Analyze the temporary file
+        let mut session = AnalysisSession::default();
+        let analysis_result = session.analyze_path(&temp_file, false).await
+            .context("Failed to analyze temporary file")?;
+            
+        // Clean up the temporary file
+        let _ = std::fs::remove_file(&temp_file);
+        
+        if self.config.verbose {
+            println!("📄 Successfully analyzed temp file, found {} files", analysis_result.files.len());
+        }
+        
+        // Extract functions from the analysis result
+        let mut functions = Vec::new();
+        for file_result in analysis_result.files {
+            functions.extend(file_result.functions);
+        }
+        
+        if self.config.verbose {
+            println!("📄 Found {} functions, {} classes in old version", functions.len(), 0);
+        }
+        
+        Ok(functions)
     }
     
     /// Analyze only the changed files
@@ -1006,14 +1225,24 @@ impl OutputFormatter {
             if !modified_functions.is_empty() {
                 output.push("**Modified Functions:**".to_string());
                 for func in modified_functions {
+                    // Clean up file path display (remove duplicate src/ prefixes)
+                    let clean_path = func.file_path.display().to_string()
+                        .replace("src/src/", "src/");
+                    
                     output.push(format!("- `{}()` in `{}:{}`", 
                         func.name, 
-                        func.file_path.display(), 
+                        clean_path, 
                         func.line_number
                     ));
                     output.push(format!("  - **References found**: {} locations", func.references.len()));
                     if func.breaking_change {
-                        output.push("  - **Breaking change**: Signature modified".to_string());
+                        let change_desc = match func.change_type {
+                            ChangeType::FunctionRemoved => "Function deleted",
+                            ChangeType::SignatureChanged => "Signature modified", 
+                            ChangeType::FunctionModified => "Function modified",
+                            _ => "Breaking change detected"
+                        };
+                        output.push(format!("  - **Breaking change**: {}", change_desc));
                     }
                 }
                 output.push("".to_string());
