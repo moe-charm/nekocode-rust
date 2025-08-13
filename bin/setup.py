@@ -7,7 +7,23 @@ import os
 # 現在のディレクトリ（bin/）を取得
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
-nekocode_path = os.path.join(current_dir, "nekocode_ai")
+
+# NekoCodeバイナリパスを決定（優先順位順）
+possible_paths = [
+    os.path.join(project_root, "releases", "nekocode-rust"),  # releases/nekocode-rust (新・最優先)
+    os.path.join(project_root, "target", "release", "nekocode-rust"),  # target/release/nekocode-rust (開発用)
+    os.path.join(current_dir, "nekocode_ai"),  # bin/nekocode_ai (レガシー)
+]
+
+nekocode_path = None
+for path in possible_paths:
+    if os.path.exists(path):
+        nekocode_path = path
+        break
+
+if not nekocode_path:
+    nekocode_path = possible_paths[0]  # デフォルトで bin/nekocode_ai
+
 mcp_server_path = os.path.join(project_root, "mcp-nekocode-server", "mcp_server_real.py")
 
 # 絶対パスに変換
