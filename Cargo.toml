@@ -40,7 +40,7 @@ tree-sitter-rust = "0.23"
 # File system and path handling
 walkdir = "2.4"
 regex = "1.10"
-notify = "6.1"
+notify = "8.2"
 
 # Async and parallel processing
 rayon = "1.8"
