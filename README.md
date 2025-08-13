@@ -133,6 +133,38 @@ jobs:
 ./nekocode session-update <session_id> --dry-run       # Preview changes only
 ```
 
+### 🔍 File Watching System (NEW!)
+```bash
+# Start watching a session for automatic updates
+./nekocode watch-start <session_id>
+
+# Check watching status
+./nekocode watch-status                                 # All sessions
+./nekocode watch-status <session_id>                   # Specific session
+
+# Stop watching
+./nekocode watch-stop <session_id>                     # Stop one session
+./nekocode watch-stop-all                              # Stop all watchers
+```
+
+**Smart File Detection:**
+- **Code files**: `.js`, `.ts`, `.py`, `.rs`, `.cpp`, `.go`, `.cs`
+- **Config files**: `Makefile`, `Dockerfile`, `package.json`, `Cargo.toml`
+- **Important files**: `README`, `LICENSE`, `.gitignore`
+- **Auto-debouncing**: 500ms delay to prevent spam updates
+
+### 💾 Memory System (NEW!)
+```bash
+# Save analysis results and memos
+./nekocode memory save auto "analysis-results" "..."
+./nekocode memory save memo "bug-notes" "Found issue in auth.js"
+
+# Load and search memories
+./nekocode memory load memo "bug-notes"
+./nekocode memory list                                  # All memories
+./nekocode memory timeline --days 7                    # Recent memories
+```
+
 **🚀 Incremental Performance Results (nyash project - 85 files):**
 - **Initial analysis**: 267ms (baseline)
 - **Incremental updates**: 23-49ms (**918-1956x speedup!**)
@@ -146,10 +178,37 @@ jobs:
 ./nekocode session-command <id> scope-analysis 42
 ```
 
-### Claude Code Integration
+### 🛠️ Configuration System (NEW!)
+All settings are customizable via `nekocode_config.json`:
+
+```json
+{
+  "file_watching": {
+    "debounce_ms": 500,
+    "include_extensions": ["js", "ts", "py", "rs"],
+    "include_important_files": ["Makefile", "Dockerfile", "LICENSE"],
+    "exclude_patterns": [".git", "node_modules", "target"]
+  },
+  "token_limits": {
+    "ast_dump_max": 8000,
+    "allow_force_output": true
+  },
+  "memory": {
+    "edit_history": { "max_size_mb": 10 }
+  }
+}
+```
+
+### 🤖 Claude Code Integration  
 ```bash
-# MCP server for Claude Code
+# MCP server for Claude Code (with token limits & config support)
 python mcp-nekocode-server/mcp_server_real.py
+
+# Available MCP commands:
+# - nekocode-analyze: Fast analysis with stats-only option
+# - nekocode-session-*: Session management
+# - nekocode-ast-*: AST queries and dumps
+# - nekocode-memory-*: Memory system access
 ```
 
 ## 📊 Performance Comparison
@@ -179,11 +238,15 @@ python mcp-nekocode-server/mcp_server_real.py
 ./nekocode analyze src/ --output json | jq '.functions | length'
 # "Added 3 new functions, modified 2 existing"
 
-# 🚀 NEW: Lightning-fast iterative development
+# 🚀 NEW: Lightning-fast iterative development  
 ./nekocode session-create src/                # One-time setup (267ms)
-# Edit files...
-./nekocode session-update abc123 --verbose    # Instant updates (23ms!)
+./nekocode watch-start abc123                 # Start file watching
+# Edit files... (auto-updates every 500ms)
+./nekocode session-command abc123 stats       # Get latest results instantly
 # "Changed 1 file, analyzed in 23ms (1956x speedup)"
+
+# Alternative: Manual updates
+./nekocode session-update abc123 --verbose    # Manual incremental update
 ```
 
 ### Use Case 2: PR Reviews

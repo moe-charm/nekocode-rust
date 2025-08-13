@@ -44,7 +44,7 @@ python3 --version  # Python 3.8+ 必要
 
 **詳細な設定方法は `TEST_SETUP.md` を参照してください**
 
-### 4. 設定ファイル（オプション）
+### 4. 設定ファイル（オプション） - **NEW! 統合設定システム**
 NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配置することで動作をカスタマイズ可能：
 
 ```json
@@ -62,22 +62,54 @@ NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配
     "ast_dump_max": 8000,
     "summary_threshold": 1000,
     "allow_force_output": true
+  },
+  "file_watching": {
+    "debounce_ms": 500,
+    "max_events_per_second": 1000,
+    "exclude_patterns": [".git", "node_modules", "target"],
+    "include_extensions": ["js", "ts", "py", "rs"],
+    "include_important_files": ["Makefile", "Dockerfile", "LICENSE"]
+  },
+  "analysis": {
+    "included_extensions": [".js", ".ts", ".py", ".rs"],
+    "excluded_patterns": ["node_modules", ".git", "target"],
+    "include_test_files": false
   }
 }
 ```
 
-**🎯 token_limits 設定:**
-- `ast_dump_max`: AST出力のトークン制限（デフォルト: 8000）
-- `summary_threshold`: サイズ情報表示の閾値（デフォルト: 1000）  
-- `allow_force_output`: 強制全出力の許可（デフォルト: true）
+**🎯 統合設定システム:**
+- `token_limits`: AST出力のトークン制限、MCP最適化
+- `file_watching`: **NEW!** ファイル監視設定（拡張子なしファイル対応）
+- `analysis`: 解析対象設定（拡張子・パターン）
+- `memory`: Memory System設定（サイズ制限・履歴管理）
 
 ## 🛠️ 利用可能なツール
 
 ### 🎮 セッション機能（推奨！）
 - `mcp__nekocode__session_create` - **📍 最初にこれを使う！** 対話式セッション作成
 - `mcp__nekocode__session_stats` - 📊 統計情報（超高速3ms）
-- `mcp__nekocode__session_complexity` - 🧮 複雑度分析（超高速3ms）
+- `mcp__nekocode__session_update` - **NEW!** 🚀 インクリメンタル更新（23-49ms、918-1956x高速化）
 - `mcp__nekocode__find_files` - 🔎 ファイル検索（超高速3ms）
+
+### 🔍 File Watching System（NEW!）
+**リアルタイムファイル監視 - 編集と同時に解析自動更新**
+- **自動ファイル監視**: コードファイル・設定ファイル・重要ファイルを自動検出
+- **スマート検出**: `Makefile`, `Dockerfile`, `LICENSE`等の拡張子なしファイル対応
+- **デバウンス処理**: 500ms遅延で連続変更をまとめて処理
+- **設定カスタマイズ**: `nekocode_config.json`で拡張子・パターン調整可能
+
+**使用方法（CLI）:**
+```bash
+# ファイル監視開始
+./nekocode watch-start <session_id>
+
+# 監視状態確認  
+./nekocode watch-status
+
+# 監視停止
+./nekocode watch-stop <session_id>
+```
 
 ### ✏️ コード編集機能（NEW！セッション不要の直接モードも対応！）
 
