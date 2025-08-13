@@ -246,7 +246,20 @@ impl ASTNode {
     
     /// Recursive helper for path queries
     fn query_by_path_recursive<'a>(&'a self, path: &str, result: &mut Vec<&'a ASTNode>) {
+        // Exact matches (original behavior)
         if self.scope_path == path || self.full_name == path {
+            result.push(self);
+        }
+        // Partial name matches (enhanced behavior)
+        else if self.name == path {
+            result.push(self);
+        }
+        // Case-insensitive partial matches
+        else if !path.is_empty() && (
+            self.name.to_lowercase().contains(&path.to_lowercase()) ||
+            self.scope_path.to_lowercase().contains(&path.to_lowercase()) ||
+            self.full_name.to_lowercase().contains(&path.to_lowercase())
+        ) {
             result.push(self);
         }
         
