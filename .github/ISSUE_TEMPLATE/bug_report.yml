@@ -1,0 +1,168 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior in NekoCode
+title: "[Bug] "
+labels: ["bug", "triage"]
+assignees:
+  - moe-charm
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐱 NekoCode Bug Report
+        
+        Thank you for taking the time to report a bug! Please fill out this form to help us investigate and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 🔍 Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 🔄 Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. With file '...'
+        3. See error '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: ✅ Expected Behavior
+      description: What you expected to happen
+      placeholder: Describe the expected behavior...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: ❌ Actual Behavior
+      description: What actually happened
+      placeholder: Describe what actually happened...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: 📦 NekoCode Version
+      description: Which version of NekoCode are you using?
+      options:
+        - "Latest (main branch)"
+        - "v1.0.0"
+        - "Other (please specify in additional context)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 💻 Operating System
+      description: What operating system are you using?
+      options:
+        - "Linux"
+        - "macOS"
+        - "Windows"
+        - "Other (please specify)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: 🗣️ Language Being Analyzed
+      description: Which programming language were you analyzing when the bug occurred?
+      options:
+        - "JavaScript"
+        - "TypeScript" 
+        - "Python"
+        - "C++"
+        - "C"
+        - "C#"
+        - "Go"
+        - "Rust"
+        - "Multiple languages"
+        - "Not language-specific"
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: 🔧 Command Used
+      description: The exact command you ran when the bug occurred
+      placeholder: "./bin/nekocode_ai analyze src/ --format json"
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: 📄 Error Output
+      description: Any error messages or unexpected output
+      placeholder: Paste error messages here...
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: sample-code
+    attributes:
+      label: 📝 Sample Code (if applicable)
+      description: If the bug is related to specific code, please provide a minimal example
+      placeholder: |
+        ```javascript
+        // Minimal code example that triggers the bug
+        function example() {
+          // ...
+        }
+        ```
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: 🌐 Environment Details
+      description: Additional environment information
+      options:
+        - label: "Running inside a container (Docker, etc.)"
+        - label: "Running on CI/CD (GitHub Actions, etc.)"
+        - label: "Using with Claude Code MCP"
+        - label: "Large project (>1000 files)"
+        - label: "Monorepo/multi-language project"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📋 Additional Context
+      description: Any other context about the problem
+      placeholder: |
+        - File size: ...
+        - Project structure: ...
+        - Any workarounds you've found: ...
+        - Related issues: ...
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ Confirmation
+      description: Please confirm the following
+      options:
+        - label: "I have searched existing issues and this is not a duplicate"
+          required: true
+        - label: "I have provided all the required information above"
+          required: true
+        - label: "I understand this is for NekoCode Rust edition bugs only"
+          required: true

@@ -42,11 +42,13 @@ pub struct WatchConfig {
     pub max_events_per_second: usize,
     pub exclude_patterns: Vec<String>,
     pub include_extensions: Vec<String>,
+    pub include_important_files: Vec<String>,
 }
 
 impl Default for WatchConfig {
     fn default() -> Self {
-        Self {
+        // Try to load from config file first
+        Self::load_from_config().unwrap_or_else(|_| Self {
             debounce_ms: 500,
             max_events_per_second: 1000,
             exclude_patterns: vec![
@@ -80,7 +82,66 @@ impl Default for WatchConfig {
                 "go".to_string(),
                 "rs".to_string(),
             ],
+            include_important_files: vec![
+                "Makefile".to_string(),
+                "Dockerfile".to_string(),
+                "LICENSE".to_string(),
+                "README".to_string(),
+                "CHANGELOG".to_string(),
+                "Jenkinsfile".to_string(),
+                ".gitignore".to_string(),
+                ".dockerignore".to_string(),
+                ".env".to_string(),
+                "package.json".to_string(),
+                "Cargo.toml".to_string(),
+                "go.mod".to_string(),
+                "requirements.txt".to_string(),
+            ],
+        })
+    }
+}
+
+impl WatchConfig {
+    /// Load configuration from nekocode_config.json
+    fn load_from_config() -> Result<Self> {
+        let config_path = std::path::Path::new("nekocode_config.json");
+        if !config_path.exists() {
+            anyhow::bail!("Config file not found");
         }
+
+        let config_content = std::fs::read_to_string(config_path)?;
+        let config_json: serde_json::Value = serde_json::from_str(&config_content)?;
+
+        let file_watching = config_json
+            .get("file_watching")
+            .ok_or_else(|| anyhow::anyhow!("file_watching section not found in config"))?;
+
+        Ok(Self {
+            debounce_ms: file_watching
+                .get("debounce_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(500),
+            max_events_per_second: file_watching
+                .get("max_events_per_second")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or(1000),
+            exclude_patterns: file_watching
+                .get("exclude_patterns")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+                .unwrap_or_default(),
+            include_extensions: file_watching
+                .get("include_extensions")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+                .unwrap_or_default(),
+            include_important_files: file_watching
+                .get("include_important_files")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+                .unwrap_or_default(),
+        })
     }
 }
 
@@ -182,6 +243,14 @@ impl FileWatcher {
         for pattern in &self.config.exclude_patterns {
             if path_str.contains(pattern) {
                 return false;
+            }
+        }
+
+        // Check if it's an important file (without extension)
+        if let Some(file_name) = path.file_name() {
+            let file_name_str = file_name.to_string_lossy();
+            if self.config.include_important_files.contains(&file_name_str.to_string()) {
+                return true;
             }
         }
 

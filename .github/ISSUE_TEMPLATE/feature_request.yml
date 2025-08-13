@@ -1,0 +1,179 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for NekoCode
+title: "[Feature] "
+labels: ["enhancement", "feature-request"]
+assignees:
+  - moe-charm
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🚀 NekoCode Feature Request
+        
+        Thank you for suggesting a new feature! Please fill out this form to help us understand your request.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 🎯 Feature Summary
+      description: A clear and concise description of the feature you'd like to see
+      placeholder: Briefly describe the feature...
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 🤔 Problem Statement
+      description: What problem does this feature solve? What use case does it address?
+      placeholder: |
+        I'm frustrated when...
+        This would help with...
+        Currently, there's no way to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe the solution you'd like to see
+      placeholder: |
+        I would like NekoCode to...
+        The feature should work by...
+        Users would benefit from...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 📂 Feature Category
+      description: What category does this feature fall into?
+      options:
+        - "Code Analysis (parsing, detection)"
+        - "Performance (speed, memory)"
+        - "Output Formats (JSON, reports)"
+        - "Language Support (new languages)"
+        - "CLI Interface (commands, options)"
+        - "Integration (APIs, MCP, tools)"
+        - "Session Management"
+        - "Impact Analysis"
+        - "Developer Experience"
+        - "Documentation"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🔥 Priority Level
+      description: How important is this feature to you?
+      options:
+        - "Nice to have"
+        - "Would improve my workflow"
+        - "Important for my use case"
+        - "Critical/blocking"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternative Solutions
+      description: What alternatives have you considered or are currently using?
+      placeholder: |
+        I've tried...
+        Other tools that do this...
+        Workarounds I'm using...
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: 📝 Examples/Use Cases
+      description: Provide specific examples of how this feature would be used
+      placeholder: |
+        Example 1: When analyzing a React project...
+        Example 2: For CI/CD integration...
+        Example 3: In large monorepos...
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 🛠️ Implementation Ideas (Optional)
+      description: If you have ideas about how this could be implemented, share them
+      placeholder: |
+        This could be implemented by...
+        Similar to how [tool/library] does it...
+        API design ideas...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: target-users
+    attributes:
+      label: 👥 Target Users
+      description: Who would benefit from this feature?
+      options:
+        - label: "Individual developers"
+        - label: "Teams using code review"
+        - label: "CI/CD pipelines"
+        - label: "Claude Code users"
+        - label: "Large enterprise projects"
+        - label: "Open source maintainers"
+        - label: "Academic/research use"
+
+  - type: checkboxes
+    id: languages
+    attributes:
+      label: 🗣️ Language Relevance
+      description: Which languages would this feature apply to?
+      options:
+        - label: "JavaScript/TypeScript"
+        - label: "Python"
+        - label: "C/C++"
+        - label: "C#"
+        - label: "Go"
+        - label: "Rust"
+        - label: "Language-agnostic"
+        - label: "All languages"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📋 Additional Context
+      description: Any other context, screenshots, or links related to this feature request
+      placeholder: |
+        Links to similar features in other tools...
+        Screenshots or mockups...
+        Related issues or discussions...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🤝 Contribution
+      description: Would you be interested in contributing to this feature?
+      options:
+        - label: "I'd be willing to help implement this feature"
+        - label: "I could help with testing"
+        - label: "I could help with documentation"
+        - label: "I'm just suggesting the idea"
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ Confirmation
+      description: Please confirm the following
+      options:
+        - label: "I have searched existing issues and this feature hasn't been requested"
+          required: true
+        - label: "This feature aligns with NekoCode's goals (code analysis)"
+          required: true
+        - label: "I understand this may not be implemented immediately"
+          required: true

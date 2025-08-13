@@ -1,0 +1,220 @@
+# 🔒 NekoCode Security Checks
+# Comprehensive security scanning and vulnerability assessment
+
+name: 🛡️ Security
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Mondays
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  cargo-audit:
+    name: 🔍 Cargo Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🦀 Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: 📦 Install cargo-audit
+        run: cargo install cargo-audit
+        
+      - name: 🔍 Run security audit
+        run: cargo audit
+        
+  cargo-deny:
+    name: 📋 License & Dependencies Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🔍 Check licenses and dependencies
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          log-level: warn
+          command: check
+          arguments: --all-features
+          
+  semgrep:
+    name: 🔍 Static Analysis (Semgrep)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🔍 Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/rust
+            p/owasp-top-ten
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          
+  codeql:
+    name: 🔍 CodeQL Analysis
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'rust' ]
+        
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          
+      - name: 🏗️ Autobuild
+        uses: github/codeql-action/autobuild@v3
+        
+      - name: 🔍 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+          
+  container-scan:
+    name: 🐳 Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🏗️ Build minimal container
+        run: |
+          cat > Dockerfile.security << 'EOF'
+          FROM ubuntu:22.04
+          COPY releases/nekocode-rust /usr/local/bin/nekocode-rust
+          RUN chmod +x /usr/local/bin/nekocode-rust
+          USER 1000:1000
+          ENTRYPOINT ["/usr/local/bin/nekocode-rust"]
+          EOF
+          
+          # Create dummy binary for scanning
+          mkdir -p releases/
+          echo '#!/bin/bash\necho "dummy"' > releases/nekocode-rust
+          chmod +x releases/nekocode-rust
+          
+          docker build -f Dockerfile.security -t nekocode-security-test .
+          
+      - name: 🔍 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'nekocode-security-test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          
+      - name: 📋 Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+  secret-scan:
+    name: 🔐 Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 🔍 TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+          
+  supply-chain:
+    name: 📦 Supply Chain Security
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🦀 Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: 📦 Generate SBOM
+        run: |
+          # Install cargo-cyclonedx for SBOM generation
+          cargo install cargo-cyclonedx
+          
+          # Generate Software Bill of Materials
+          cargo cyclonedx --format json --output-file sbom.json
+          
+      - name: 📋 Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-bill-of-materials
+          path: sbom.json
+          retention-days: 90
+          
+  security-report:
+    name: 📊 Security Summary
+    runs-on: ubuntu-latest
+    needs: [cargo-audit, cargo-deny, semgrep, codeql]
+    if: always()
+    
+    steps:
+      - name: 📊 Generate security report
+        run: |
+          echo "# 🛡️ NekoCode Security Report" > security_report.md
+          echo "" >> security_report.md
+          echo "**Scan Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> security_report.md
+          echo "**Repository**: ${{ github.repository }}" >> security_report.md
+          echo "**Commit**: ${{ github.sha }}" >> security_report.md
+          echo "" >> security_report.md
+          
+          echo "## 📋 Security Checks Status" >> security_report.md
+          echo "" >> security_report.md
+          echo "| Check | Status |" >> security_report.md
+          echo "|-------|--------|" >> security_report.md
+          echo "| Cargo Audit | ${{ needs.cargo-audit.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> security_report.md
+          echo "| License Check | ${{ needs.cargo-deny.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> security_report.md
+          echo "| Static Analysis | ${{ needs.semgrep.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> security_report.md
+          echo "| CodeQL | ${{ needs.codeql.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> security_report.md
+          echo "" >> security_report.md
+          
+          echo "## 🔒 Security Best Practices" >> security_report.md
+          echo "" >> security_report.md
+          echo "- ✅ Regular dependency auditing" >> security_report.md
+          echo "- ✅ Static code analysis" >> security_report.md
+          echo "- ✅ License compliance checking" >> security_report.md
+          echo "- ✅ Secret scanning" >> security_report.md
+          echo "- ✅ Supply chain verification" >> security_report.md
+          echo "" >> security_report.md
+          
+          cat security_report.md
+          
+      - name: 📋 Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security_report.md
+          retention-days: 30
