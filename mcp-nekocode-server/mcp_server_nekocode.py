@@ -216,9 +216,38 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
             path = path.replace("../test-workspace/", "../nekocode-cpp-github/test-workspace/")
         return path
     
+    def _count_project_files(self, path: str) -> int:
+        """🚨 大規模プロジェクト検出：ファイル数カウント（413エラー対策）"""
+        try:
+            from pathlib import Path
+            p = Path(path)
+            if not p.exists():
+                return 0
+            
+            # 対象ファイル拡張子（解析対象のみカウント）
+            extensions = {'.js', '.ts', '.tsx', '.jsx', '.py', '.cpp', '.c', '.h', '.hpp', '.cs', '.go', '.rs'}
+            
+            count = 0
+            for ext in extensions:
+                count += len(list(p.rglob(f'*{ext}')))
+            
+            return count
+        except Exception:
+            return 0  # エラー時は0を返してデフォルト動作
+    
     async def analyze_project(self, path: str, language: str = "auto", stats_only: bool = False) -> Dict:
-        """プロジェクト解析"""
+        """🚨 プロジェクト解析（413エラー対策済み）"""
         path = self._normalize_path(path)  # パス正規化
+        
+        # 🚨 大規模プロジェクト自動検出（デモ事故防止）
+        file_count = self._count_project_files(path)
+        auto_switched = False
+        
+        # しきい値：100ファイル以上で自動stats_onlyモード
+        if not stats_only and file_count > 100:
+            stats_only = True
+            auto_switched = True
+        
         args = ["analyze", path]
         
         # Rust版は言語を自動検出するため--langオプションなし
@@ -237,6 +266,15 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
                 "speed": "Python版の900倍高速",
                 "features": ["多言語対応", "UTF-8完全対応", "並列処理"]
             }
+            
+            # 🚨 自動切り替え警告メッセージ
+            if auto_switched:
+                result["safety_notice"] = {
+                    "warning": "🛡️ 大規模プロジェクト検出",
+                    "action": "自動でstats_onlyモードに切り替えました",
+                    "reason": f"{file_count}ファイル > 100ファイル（しきい値）",
+                    "benefit": "413エラーを防止し、高速なサマリー表示"
+                }
         
         return result
     
