@@ -144,6 +144,14 @@ enum Commands {
 
     /// Stop all active file watchers
     WatchStopAll,
+
+    // HIDDEN COMMANDS (not shown in help)
+    /// Internal daemon command for file watching
+    #[command(hide = true)]
+    WatchDaemon {
+        /// Session ID to watch
+        session_id: String,
+    },
     
     // DIRECT EDIT
     /// Preview a replacement operation
@@ -571,6 +579,15 @@ async fn async_main() -> Result<()> {
             use crate::commands::watch::handle_watch_stop_all;
             let result = handle_watch_stop_all()?;
             println!("{}", result);
+        }
+
+        Commands::WatchDaemon { session_id } => {
+            use crate::commands::watch::handle_watch_daemon;
+            // This is a background daemon process - don't print output to avoid noise
+            if let Err(e) = handle_watch_daemon(&session_id).await {
+                eprintln!("Watch daemon error: {}", e);
+                std::process::exit(1);
+            }
         }
         
         // DIRECT EDIT
