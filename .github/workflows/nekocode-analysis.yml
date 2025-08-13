@@ -3,7 +3,7 @@ name: NekoCode PR Impact Analysis
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, dev]
+    branches: [master]
 
 jobs:
   nekocode-analysis:
@@ -23,8 +23,15 @@ jobs:
       - name: Download NekoCode
         run: |
           mkdir -p bin
-          curl -L https://github.com/moe-charm/nekocode-rust/raw/main/releases/nekocode-rust -o bin/nekocode-rust
+          curl -L https://github.com/moe-charm/nekocode-rust/raw/master/releases/nekocode-rust -o bin/nekocode-rust
           chmod +x bin/nekocode-rust
+          
+          # バイナリダウンロード確認
+          if [ ! -x bin/nekocode-rust ]; then
+            echo "❌ Failed to download nekocode-rust binary!"
+            exit 1
+          fi
+          echo "✅ NekoCode binary downloaded successfully"
 
       - name: Analyze Current PR
         id: analyze-pr
