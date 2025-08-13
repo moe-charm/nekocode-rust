@@ -5,6 +5,7 @@
 
 pub mod core;
 pub mod analyzers;
+pub mod commands;
 
 pub use core::types::*;
 pub use core::session::AnalysisSession;
