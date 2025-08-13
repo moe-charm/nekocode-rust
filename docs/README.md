@@ -19,6 +19,7 @@ Complete system architecture, data flow, and component relationships
 - [**Include Analysis Guide**](INCLUDE_ANALYSIS_GUIDE.md) - C++ compile time optimization 
 - [**Performance Guide**](PERFORMANCE_GUIDE.md) - Optimization tips for large projects
 - [**Debug Guide**](DEBUG_GUIDE.md) - Troubleshooting and debugging
+- [**Token Limit Configuration**](TOKEN_LIMIT_CONFIGURATION.md) - 🆕 AST output size management
 
 ### 🤖 Claude Code Integration
 - [**Claude Code Index**](claude-code/INDEX.md) - Claude Code specific features
