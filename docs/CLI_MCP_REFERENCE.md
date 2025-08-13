@@ -2,7 +2,7 @@
 
 **CLI と MCP Server の完全ガイド** - 最新のDirect Mode対応版
 
-最終更新: 2025-08-07 | Version: 2.2 | 🆕 move-class機能追加
+最終更新: 2025-08-13 | Version: 2.3 | 🆕 トークン制限設定対応
 
 ---
 
@@ -14,8 +14,9 @@
 4. [セッション機能](#セッション機能)  
 5. [move-class機能](#move-class機能)
 6. [Memory System](#memory-system)
-7. [実用例](#実用例)
-8. [設定とトラブルシューティング](#設定とトラブルシューティング)
+7. [Token Limit Configuration](#token-limit-configuration)
+8. [実用例](#実用例)
+9. [設定とトラブルシューティング](#設定とトラブルシューティング)
 
 ---
 
@@ -496,10 +497,55 @@ mcp-nekocode-analyze(path: "simple-app/", stats_only: false)
 
 ---
 
+## 🎯 Token Limit Configuration
+
+### 大容量AST出力制御
+**新機能**: 85,161トークン問題を設定ファイルで解決
+
+```json
+// nekocode_config.json
+{
+  "token_limits": {
+    "ast_dump_max": 8000,        // AST出力制限（実用的な8000設定）
+    "summary_threshold": 1000,   // サイズ情報表示閾値
+    "allow_force_output": true   // 強制全出力許可
+  }
+}
+```
+
+### 使い方
+```python
+# 通常使用（8000トークン制限）
+mcp__nekocode__ast_dump(session_id="12345678")
+
+# 強制全出力（制限無視）
+mcp__nekocode__ast_dump(session_id="12345678", force=True)
+
+# 部分表示（50行制限）
+mcp__nekocode__ast_dump(session_id="12345678", limit=50)
+```
+
+### 制限超過時の自動警告
+```
+🚨 AST Dump トークン制限超過 (設定: 8,000 tokens)
+📊 推定トークン数: 21,543 tokens (2.7x超過)
+
+🚀 選択肢:
+1. ast_stats で統計サマリー表示（推奨）  
+2. force=True で強制全出力
+3. limit=50 で部分表示
+4. 設定ファイルで制限値調整
+```
+
+**📋 詳細**: [Token Limit Configuration Guide](TOKEN_LIMIT_CONFIGURATION.md)
+
+---
+
 ## 📚 関連ドキュメント
 
 - [USAGE.md](USAGE.md) - 基本的な使い方
 - [mcp-nekocode-server/README.md](../mcp-nekocode-server/README.md) - MCP詳細
+- [TOKEN_LIMIT_CONFIGURATION.md](TOKEN_LIMIT_CONFIGURATION.md) - 🆕 トークン制限設定
 - [ARCHITECTURE.md](ARCHITECTURE.md) - 内部設計
 - [CLAUDE.md](../CLAUDE.md) - プロジェクト概要
 
