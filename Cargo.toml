@@ -27,7 +27,7 @@ pest = "2.7"
 pest_derive = "2.7"
 
 # 🚀 Tree-sitter - Ultra-fast parsing (100x faster than PEST!)
-tree-sitter = "0.23"
+tree-sitter = "0.25"
 tree-sitter-javascript = "0.23"
 tree-sitter-typescript = "0.23"
 tree-sitter-python = "0.23"
