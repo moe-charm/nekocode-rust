@@ -95,6 +95,11 @@ class NekoCodeMCPServer:
                     "memory": {
                         "edit_history": {"max_size_mb": 10, "min_files_keep": 10},
                         "edit_previews": {"max_size_mb": 5}
+                    },
+                    "token_limits": {
+                        "ast_dump_max": 8000,
+                        "summary_threshold": 1000,
+                        "allow_force_output": True
                     }
                 }
         except Exception as e:
@@ -103,6 +108,11 @@ class NekoCodeMCPServer:
                 "memory": {
                     "edit_history": {"max_size_mb": 10, "min_files_keep": 10},
                     "edit_previews": {"max_size_mb": 5}
+                },
+                "token_limits": {
+                    "ast_dump_max": 8000,
+                    "summary_threshold": 1000,
+                    "allow_force_output": True
                 }
             }
     
@@ -315,12 +325,14 @@ class NekoCodeMCPServer:
             },
             {
                 "name": "ast_dump",
-                "description": "📊 AST構造ダンプ（形式指定）",
+                "description": "📊 AST構造ダンプ（形式指定・トークン制限対応）",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "session_id": {"type": "string", "description": "セッションID"},
-                        "format": {"type": "string", "description": "出力形式（tree/json/flat）", "default": "tree"}
+                        "format": {"type": "string", "description": "出力形式（tree/json/flat）", "default": "tree"},
+                        "force": {"type": "boolean", "description": "強制全出力（トークン制限無視）", "default": False},
+                        "limit": {"type": "integer", "description": "出力行数制限（省略可）"}
                     },
                     "required": ["session_id"]
                 }
@@ -1031,11 +1043,85 @@ class NekoCodeMCPServer:
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_ast_dump(self, args: Dict) -> Dict:
-        """AST構造をダンプ"""
+        """AST構造をダンプ（設定ファイル対応・トークン制限）"""
         session_id = args["session_id"]
         format_type = args.get("format", "tree")
+        force = args.get("force", False)
+        line_limit = args.get("limit")
+        
+        # 📋 設定ファイルからトークン制限を取得
+        token_config = self.config.get("token_limits", {})
+        token_limit = token_config.get("ast_dump_max", 8000)
+        summary_threshold = token_config.get("summary_threshold", 1000)
+        allow_force = token_config.get("allow_force_output", True)
+        
+        # 🚨 まずast-statsでサイズ確認
+        stats_result = await self._run_nekocode(["ast-stats", session_id])
+        
         result = await self._run_nekocode(["ast-dump", session_id, format_type])
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+        
+        # 🔥 トークン制限チェック
+        if isinstance(result, dict):
+            output_text = json.dumps(result, indent=2, ensure_ascii=False)
+        else:
+            output_text = str(result)
+        
+        # 行数制限適用（指定された場合）
+        if line_limit and not force:
+            lines = output_text.split('\n')
+            if len(lines) > line_limit:
+                output_text = '\n'.join(lines[:line_limit])
+                output_text += f"\n\n... ({len(lines) - line_limit} 行省略) ..."
+        
+        # トークン数推定（文字数 / 4 = 近似トークン数）
+        estimated_tokens = len(output_text) // 4
+        
+        # force=True または 設定で強制許可されていない場合は制限チェック
+        if not force and estimated_tokens > token_limit:
+            # 🚨 トークン制限超過 - 警告と代替案提示
+            force_cmd = f'mcp__nekocode__ast_dump(session_id="{session_id}", format="{format_type}", force=True)'
+            
+            warning_msg = f"""🚨 **AST Dump トークン制限超過** (設定: {token_limit:,} tokens)
+
+📊 **出力サイズ分析:**
+• 推定トークン数: **{estimated_tokens:,} tokens**
+• 設定制限: {token_limit:,} tokens  
+• 超過率: **{(estimated_tokens/token_limit):.1f}x**
+
+⚠️ **解析アプリとして使いやすさ重視で8000に設定済み**
+
+🚀 **選択肢:**
+1. **ast_stats**: 統計サマリーのみ（推奨）
+2. **強制出力**: `{force_cmd}`
+3. **行数制限**: limit=50 等で部分表示
+4. **設定変更**: nekocode_config.json で制限値調整
+
+📋 **AST統計サマリー:**
+{json.dumps(stats_result, indent=2, ensure_ascii=False) if isinstance(stats_result, dict) else str(stats_result)}
+
+---
+💡 **設定ファイル例** (nekocode_config.json):
+```json
+{{
+    "token_limits": {{
+        "ast_dump_max": 15000,
+        "summary_threshold": 2000
+    }}
+}}
+```"""
+            
+            return {"content": [{"type": "text", "text": warning_msg}]}
+        
+        # 強制出力または制限内の場合
+        if force and not allow_force:
+            return {"content": [{"type": "text", "text": "❌ 強制出力は設定で無効化されています"}]}
+        
+        # サイズ情報を付加（summary_threshold超過時）
+        if estimated_tokens > summary_threshold:
+            size_info = f"📊 出力サイズ: {estimated_tokens:,} tokens\n\n"
+            output_text = size_info + output_text
+        
+        return {"content": [{"type": "text", "text": output_text}]}
     
     # ========================================
     # 🔄 クラス移動ツール
@@ -1114,6 +1200,9 @@ class NekoCodeMCPServer:
         logger.info(f"📂 NekoCode binary: {self.nekocode_path}")
         logger.info(f"🔧 Config: History {self.config['memory']['edit_history']['max_size_mb']}MB, "
                    f"Preview {self.config['memory']['edit_previews']['max_size_mb']}MB")
+        token_config = self.config.get("token_limits", {})
+        logger.info(f"🎯 Token Limits: AST Dump {token_config.get('ast_dump_max', 8000)}, "
+                   f"Summary {token_config.get('summary_threshold', 1000)}")
         
         while True:
             try:

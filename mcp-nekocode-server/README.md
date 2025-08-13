@@ -44,6 +44,33 @@ python3 --version  # Python 3.8+ 必要
 
 **詳細な設定方法は `TEST_SETUP.md` を参照してください**
 
+### 4. 設定ファイル（オプション）
+NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配置することで動作をカスタマイズ可能：
+
+```json
+{
+  "memory": {
+    "edit_history": {
+      "max_size_mb": 10,
+      "min_files_keep": 10
+    },
+    "edit_previews": {
+      "max_size_mb": 5
+    }
+  },
+  "token_limits": {
+    "ast_dump_max": 8000,
+    "summary_threshold": 1000,
+    "allow_force_output": true
+  }
+}
+```
+
+**🎯 token_limits 設定:**
+- `ast_dump_max`: AST出力のトークン制限（デフォルト: 8000）
+- `summary_threshold`: サイズ情報表示の閾値（デフォルト: 1000）  
+- `allow_force_output`: 強制全出力の許可（デフォルト: true）
+
 ## 🛠️ 利用可能なツール
 
 ### 🎮 セッション機能（推奨！）
