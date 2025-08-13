@@ -234,6 +234,51 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
             return count
         except Exception:
             return 0  # エラー時は0を返してデフォルト動作
+
+    def _truncate_large_output(self, result: Dict) -> Dict:
+        """🛡️ 大容量出力の切り捨て（413エラー完全防止）"""
+        try:
+            # JSON文字列サイズチェック
+            json_str = json.dumps(result, ensure_ascii=False)
+            size_mb = len(json_str.encode('utf-8')) / (1024 * 1024)
+            
+            # サイズ制限: 1MB を超える場合は切り捨て
+            if size_mb > 1.0:
+                truncated_result = {
+                    "analysis_summary": {
+                        "warning": "🚨 大規模プロジェクト検出 - 出力を安全にサマリー化しました",
+                        "original_size_mb": round(size_mb, 2),
+                        "truncated": True,
+                        "reason": "Claude Code API制限対応（413エラー防止）"
+                    }
+                }
+                
+                # 重要な統計情報のみ保持
+                if "stats" in result:
+                    truncated_result["stats"] = result["stats"]
+                if "summary" in result:
+                    truncated_result["summary"] = result["summary"]
+                if "file_count" in result:
+                    truncated_result["file_count"] = result["file_count"]
+                if "language_breakdown" in result:
+                    truncated_result["language_breakdown"] = result["language_breakdown"]
+                
+                # メタ情報も保持
+                if "nekocode_info" in result:
+                    truncated_result["nekocode_info"] = result["nekocode_info"]
+                if "safety_notice" in result:
+                    truncated_result["safety_notice"] = result["safety_notice"]
+                
+                return truncated_result
+            
+            return result
+            
+        except Exception as e:
+            # エラー時は安全なフォールバック
+            return {
+                "error": f"出力処理中にエラー: {str(e)}",
+                "fallback": "安全のため最小限の出力に切り替えました"
+            }
     
     async def analyze_project(self, path: str, language: str = "auto", stats_only: bool = False) -> Dict:
         """🚨 プロジェクト解析（413エラー対策済み）"""
@@ -243,8 +288,8 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
         file_count = self._count_project_files(path)
         auto_switched = False
         
-        # しきい値：100ファイル以上で自動stats_onlyモード
-        if not stats_only and file_count > 100:
+        # しきい値：50ファイル以上で自動stats_onlyモード（より積極的なAPI制限対応）
+        if not stats_only and file_count > 50:
             stats_only = True
             auto_switched = True
         
@@ -272,9 +317,12 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
                 result["safety_notice"] = {
                     "warning": "🛡️ 大規模プロジェクト検出",
                     "action": "自動でstats_onlyモードに切り替えました",
-                    "reason": f"{file_count}ファイル > 100ファイル（しきい値）",
+                    "reason": f"{file_count}ファイル > 50ファイル（しきい値）",
                     "benefit": "413エラーを防止し、高速なサマリー表示"
                 }
+        
+        # 🛡️ 大容量出力の安全処理（413エラー完全防止）
+        result = self._truncate_large_output(result)
         
         return result
     
@@ -316,6 +364,9 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
                 "message": "📊 爆速統計取得完了 (3ms)!",
                 "session_id": session_id
             }
+        
+        # 🛡️ 大容量出力の安全処理（413エラー完全防止）
+        result = self._truncate_large_output(result)
         
         return result
     
