@@ -15,6 +15,7 @@ use crate::core::types::{
     AnalysisConfig, AnalysisResult, DirectoryAnalysis, FileInfo, Language,
 };
 use crate::core::ast::{ASTNode, ASTStatistics};
+use crate::core::incremental::{ChangeDetector, FileChange, IncrementalSummary};
 use crate::analyzers::javascript::{JavaScriptAnalyzer, TreeSitterJavaScriptAnalyzer};
 use crate::analyzers::traits::LanguageAnalyzer;
 
@@ -30,6 +31,9 @@ pub struct SessionInfo {
     // 🌳 AST data stored in session
     pub analysis_results: Vec<AnalysisResult>,
     pub combined_ast_stats: Option<ASTStatistics>,
+    
+    // 🚀 Incremental analysis data
+    pub change_detector: Option<ChangeDetector>,
 }
 
 /// Session directory management
@@ -129,6 +133,12 @@ impl SessionManager {
         // Calculate combined AST statistics
         let combined_ast_stats = Self::calculate_combined_ast_stats(&files);
         
+        // Initialize change detector for incremental analysis
+        let mut change_detector = ChangeDetector::new(path.to_path_buf());
+        if let Err(e) = change_detector.initialize() {
+            log::warn!("Failed to initialize change detector: {}", e);
+        }
+
         let session_info = SessionInfo {
             id: session_id.clone(),
             path: path.to_path_buf(),
@@ -137,6 +147,7 @@ impl SessionManager {
             metadata: HashMap::new(),
             analysis_results: files,
             combined_ast_stats,
+            change_detector: Some(change_detector),
         };
         
         // Save to disk
@@ -197,6 +208,113 @@ impl SessionManager {
     
     pub fn list_sessions(&self) -> Vec<&SessionInfo> {
         self.session_info.values().collect()
+    }
+    
+    /// Perform incremental update on a session
+    pub async fn update_session_incremental(&mut self, session_id: &str) -> Result<IncrementalSummary> {
+        let start_time = std::time::Instant::now();
+        
+        // Get the session info
+        let session_info = self.session_info.get_mut(session_id)
+            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+        
+        // Initialize change detector if it doesn't exist (for backward compatibility)
+        if session_info.change_detector.is_none() {
+            let mut change_detector = ChangeDetector::new(session_info.path.clone());
+            if let Err(e) = change_detector.initialize() {
+                return Err(anyhow::anyhow!("Failed to initialize change detector: {}", e));
+            }
+            session_info.change_detector = Some(change_detector);
+        }
+        
+        // Detect changes
+        let changes = if let Some(ref mut detector) = session_info.change_detector {
+            detector.detect_changes()?
+        } else {
+            return Err(anyhow::anyhow!("Change detector not available"));
+        };
+        
+        if changes.is_empty() {
+            let analysis_time = start_time.elapsed().as_millis() as u64;
+            return Ok(IncrementalSummary::new(
+                session_info.analysis_results.len(),
+                &changes,
+                analysis_time,
+                45000, // Assume 45s for full analysis
+            ));
+        }
+        
+        // Get the session for re-analysis
+        let session = self.sessions.get_mut(session_id)
+            .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+        
+        // Re-analyze only changed files
+        let mut updated_results = session_info.analysis_results.clone();
+        let mut files_processed = 0;
+        
+        for change in &changes {
+            let full_path = session_info.path.join(&change.path);
+            
+            match change.change_type {
+                crate::core::incremental::ChangeType::Added | 
+                crate::core::incremental::ChangeType::Modified => {
+                    if full_path.exists() {
+                        match session.analyze_file(&full_path).await {
+                            Ok(analysis_result) => {
+                                // Remove old result if it exists (compare relative paths)
+                                let session_path = &session_info.path;
+                                updated_results.retain(|r| {
+                                    if let Ok(relative_path) = r.file_info.path.strip_prefix(session_path) {
+                                        relative_path != change.path
+                                    } else {
+                                        true // Keep if can't make relative
+                                    }
+                                });
+                                // Add new result
+                                updated_results.push(analysis_result);
+                                files_processed += 1;
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to analyze file {}: {}", full_path.display(), e);
+                            }
+                        }
+                    }
+                }
+                crate::core::incremental::ChangeType::Deleted => {
+                    // Remove deleted file from results (compare relative paths)
+                    let session_path = &session_info.path;
+                    updated_results.retain(|r| {
+                        if let Ok(relative_path) = r.file_info.path.strip_prefix(session_path) {
+                            relative_path != change.path
+                        } else {
+                            true // Keep if can't make relative
+                        }
+                    });
+                    files_processed += 1;
+                }
+            }
+        }
+        
+        // Update session info
+        session_info.analysis_results = updated_results;
+        session_info.combined_ast_stats = Self::calculate_combined_ast_stats(&session_info.analysis_results);
+        session_info.last_accessed = Utc::now();
+        
+        // Clone session info for saving to avoid borrowing issues
+        let session_info_clone = session_info.clone();
+        
+        // Save updated session info
+        self.save_session_info(&session_info_clone)?;
+        
+        let analysis_time = start_time.elapsed().as_millis() as u64;
+        let total_files = session_info_clone.analysis_results.len();
+        
+        Ok(IncrementalSummary::new(
+            total_files,
+            &changes,
+            analysis_time,
+            45000, // Assume 45s for full analysis
+        ))
     }
     
     // 🌳 AST Revolution Command Implementations
@@ -1029,7 +1147,7 @@ impl AnalysisSession {
     }
     
     /// Analyze a specific file
-    async fn analyze_file(&self, file_path: &Path) -> Result<AnalysisResult> {
+    pub async fn analyze_file(&self, file_path: &Path) -> Result<AnalysisResult> {
         // Read file content
         let content = tokio::fs::read_to_string(file_path).await
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
