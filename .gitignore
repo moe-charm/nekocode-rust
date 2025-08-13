@@ -63,3 +63,16 @@ __pycache__/
 # IMPORTANT: Maximum file size check
 # Any file > 10MB should trigger a warning!
 .nekocode_sessions/
+
+# Development artifacts - DO NOT COMMIT
+.cargo/
+.github/
+README_NEW.md
+README_OLD.md
+build-and-update.sh
+build-smart.sh
+build.rs
+issue-incremental-analysis.md
+nekocode-pr-demo/
+pr-demo/
+docs/incremental-design-consultation.md
