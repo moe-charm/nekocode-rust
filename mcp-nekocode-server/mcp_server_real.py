@@ -44,7 +44,10 @@ class NekoCodeMCPServer:
             "../target/release/nekocode-rust",
             "./target/debug/nekocode-rust",
             "../target/debug/nekocode-rust",
-            # Legacy C++ paths
+            # 🚀 GitHub Actions / CI用 releases/ ディレクトリ
+            "./releases/nekocode-rust",
+            "../releases/nekocode-rust",
+            # Legacy C++ paths  
             "./bin/nekocode_ai",
             "../bin/nekocode_ai",
             "./build/nekocode_ai",
@@ -137,6 +140,19 @@ class NekoCodeMCPServer:
                     "type": "object",
                     "properties": {
                         "session_id": {"type": "string", "description": "セッションID"}
+                    },
+                    "required": ["session_id"]
+                }
+            },
+            {
+                "name": "session_update",
+                "description": "⚡ インクリメンタル解析 (超高速更新)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "verbose": {"type": "boolean", "description": "詳細JSON出力", "default": False},
+                        "dry_run": {"type": "boolean", "description": "変更プレビューのみ", "default": False}
                     },
                     "required": ["session_id"]
                 }
@@ -584,6 +600,8 @@ class NekoCodeMCPServer:
                 return await self._tool_session_create(arguments)
             elif tool_name == "session_stats":
                 return await self._tool_session_stats(arguments)
+            elif tool_name == "session_update":
+                return await self._tool_session_update(arguments)
             elif tool_name == "include_cycles":
                 return await self._tool_include_cycles(arguments)
             elif tool_name == "include_graph":
@@ -728,6 +746,58 @@ class NekoCodeMCPServer:
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
+        }
+    
+    async def _tool_session_update(self, args: Dict) -> Dict:
+        """⚡ インクリメンタル解析 (超高速更新)"""
+        session_id = args["session_id"]
+        verbose = args.get("verbose", False)
+        dry_run = args.get("dry_run", False)
+        
+        if session_id not in self.sessions:
+            return {
+                "content": [{"type": "text", "text": f"セッション {session_id} が見つかりません"}],
+                "isError": True
+            }
+        
+        # コマンド引数構築
+        cmd_args = ["session-update", session_id]
+        if verbose:
+            cmd_args.append("--verbose")
+        if dry_run:
+            cmd_args.append("--dry-run")
+        
+        result = await self._run_nekocode(cmd_args)
+        
+        # 結果の解析・フォーマット
+        if verbose and isinstance(result, dict) and not result.get("error"):
+            # verbose modeの場合、JSONレスポンスが期待される
+            content_text = json.dumps(result, indent=2, ensure_ascii=False)
+        elif dry_run and isinstance(result, dict) and "output" in result:
+            # dry-runの場合、プレーンテキスト出力
+            content_text = result["output"]
+        elif isinstance(result, dict) and "output" in result:
+            # 標準モードの場合
+            content_text = result["output"]
+        else:
+            # その他の場合はJSONとしてフォーマット
+            content_text = json.dumps(result, indent=2, ensure_ascii=False)
+        
+        # 性能情報の抽出・追加表示
+        if isinstance(result, dict) and not dry_run and not result.get("error"):
+            # 性能数値を抽出してハイライト表示
+            lines = content_text.split('\n')
+            speedup_info = []
+            
+            for line in lines:
+                if 'speedup' in line.lower() or 'faster' in line.lower():
+                    speedup_info.append(line)
+            
+            if speedup_info:
+                content_text += "\n\n🚀 **性能ハイライト:**\n" + "\n".join(f"  • {line}" for line in speedup_info)
+        
+        return {
+            "content": [{"type": "text", "text": content_text}]
         }
     
     async def _tool_include_cycles(self, args: Dict) -> Dict:
