@@ -51,10 +51,16 @@ jobs:
           echo "📊 Analysis Results:"
           cat pr_analysis.txt
           
-          # 🎯 結果抽出
-          FILES_COUNT=$(grep -E "found [0-9]+ files" pr_analysis.txt | grep -oE "[0-9]+" || echo "0")
-          ANALYSIS_TIME=$(grep -E "Total.*took: [0-9.]+s" pr_analysis.txt | grep -oE "[0-9.]+s" || echo "N/A")
-          LANGUAGES=$(grep -A 10 "言語別:" pr_analysis.txt | grep -E "• \w+:" | wc -l || echo "1")
+          # 🎯 結果抽出（Rust版の出力形式に対応）
+          FILES_COUNT=$(grep -E "📄 総ファイル数: [0-9]+" pr_analysis.txt | grep -oE "[0-9]+" || echo "0")
+          ANALYSIS_TIME=$(grep -E "🏁.*took: [0-9.]+s" pr_analysis.txt | grep -oE "[0-9.]+s" || echo "N/A")
+          LANGUAGES=$(grep -A 10 "🗂️ \*\*言語別:" pr_analysis.txt | grep -E "• \w+:" | wc -l || echo "1")
+          
+          # デバッグ情報  
+          echo "Extracted values:"
+          echo "FILES_COUNT=$FILES_COUNT"
+          echo "ANALYSIS_TIME=$ANALYSIS_TIME"
+          echo "LANGUAGES=$LANGUAGES"
           
           echo "files_analyzed=$FILES_COUNT" >> $GITHUB_OUTPUT
           echo "analysis_time=$ANALYSIS_TIME" >> $GITHUB_OUTPUT
