@@ -99,6 +99,13 @@ NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配
 - **デバウンス処理**: 500ms遅延で連続変更をまとめて処理
 - **設定カスタマイズ**: `nekocode_config.json`で拡張子・パターン調整可能
 
+**MCPツール:**
+- `mcp__nekocode__watch_start` - 🔍 ファイル監視開始（リアルタイム解析）
+- `mcp__nekocode__watch_status` - 📊 ファイル監視状態確認
+- `mcp__nekocode__watch_stop` - 🛑 ファイル監視停止
+- `mcp__nekocode__watch_stop_all` - 🛑 全ファイル監視停止
+- `mcp__nekocode__watch_config` - ⚙️ ファイル監視設定表示
+
 **使用方法（CLI）:**
 ```bash
 # ファイル監視開始

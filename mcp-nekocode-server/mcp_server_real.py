@@ -426,6 +426,54 @@ class NekoCodeMCPServer:
                     },
                     "required": ["key", "value"]
                 }
+            },
+            {
+                "name": "watch_start",
+                "description": "🔍 ファイル監視開始（リアルタイム解析）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "監視対象セッションID"}
+                    },
+                    "required": ["session_id"]
+                }
+            },
+            {
+                "name": "watch_status",
+                "description": "📊 ファイル監視状態確認",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID（省略時は全セッション）"}
+                    }
+                }
+            },
+            {
+                "name": "watch_stop",
+                "description": "🛑 ファイル監視停止",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "停止対象セッションID"}
+                    },
+                    "required": ["session_id"]
+                }
+            },
+            {
+                "name": "watch_stop_all",
+                "description": "🛑 全ファイル監視停止",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "watch_config",
+                "description": "⚙️ ファイル監視設定表示",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
             }
         ]
     
@@ -660,6 +708,16 @@ class NekoCodeMCPServer:
                 return await self._tool_config_show(arguments)
             elif tool_name == "config_set":
                 return await self._tool_config_set(arguments)
+            elif tool_name == "watch_start":
+                return await self._tool_watch_start(arguments)
+            elif tool_name == "watch_status":
+                return await self._tool_watch_status(arguments)
+            elif tool_name == "watch_stop":
+                return await self._tool_watch_stop(arguments)
+            elif tool_name == "watch_stop_all":
+                return await self._tool_watch_stop_all(arguments)
+            elif tool_name == "watch_config":
+                return await self._tool_watch_config(arguments)
             else:
                 return {
                     "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
@@ -1193,6 +1251,54 @@ class NekoCodeMCPServer:
         value = args["value"]
         result = await self._run_nekocode(["config", "set", key, value])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    # ========================================
+    # 🔍 ファイル監視ツール
+    # ========================================
+    
+    async def _tool_watch_start(self, args: Dict) -> Dict:
+        """ファイル監視開始"""
+        session_id = args["session_id"]
+        result = await self._run_nekocode(["watch-start", session_id])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_watch_status(self, args: Dict) -> Dict:
+        """ファイル監視状態確認"""
+        cmd_args = ["watch-status"]
+        if "session_id" in args and args["session_id"]:
+            cmd_args.append(args["session_id"])
+        result = await self._run_nekocode(cmd_args)
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_watch_stop(self, args: Dict) -> Dict:
+        """ファイル監視停止"""
+        session_id = args["session_id"]
+        result = await self._run_nekocode(["watch-stop", session_id])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_watch_stop_all(self, args: Dict) -> Dict:
+        """全ファイル監視停止"""
+        result = await self._run_nekocode(["watch-stop-all"])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_watch_config(self, args: Dict) -> Dict:
+        """ファイル監視設定表示"""
+        # 設定ファイルの file_watching セクションを直接表示
+        try:
+            watch_config = self.config.get("file_watching", {})
+            config_display = {
+                "file_watching": watch_config,
+                "説明": {
+                    "debounce_ms": "ファイル変更検知の遅延時間（ミリ秒）",
+                    "max_events_per_second": "1秒間の最大イベント処理数",
+                    "exclude_patterns": "監視除外パターン",
+                    "include_extensions": "監視対象ファイル拡張子",
+                    "include_important_files": "拡張子に関係なく監視する重要ファイル"
+                }
+            }
+            return {"content": [{"type": "text", "text": json.dumps(config_display, indent=2, ensure_ascii=False)}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"設定表示エラー: {str(e)}"}], "isError": True}
     
     async def run(self):
         """MCPサーバー実行"""
