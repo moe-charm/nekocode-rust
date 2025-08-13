@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         
       - name: 🔍 Check licenses and dependencies
-        uses: EmbarkStudios/cargo-deny-action@v1
+        uses: EmbarkStudios/cargo-deny-action@v2
         with:
           log-level: warn
           command: check
