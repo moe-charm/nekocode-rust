@@ -1,5 +1,6 @@
 mod core;
 mod analyzers;
+mod commands;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -117,6 +118,39 @@ enum Commands {
         /// Show what would be updated without making changes
         #[arg(long)]
         dry_run: bool,
+    },
+
+    // FILE WATCHING SYSTEM
+    /// Start file watching for a session
+    WatchStart {
+        /// Session ID to watch
+        #[arg(value_name = "SESSION_ID")]
+        session_id: String,
+    },
+
+    /// Show file watching status
+    WatchStatus {
+        /// Optional session ID (if not provided, shows all)
+        #[arg(value_name = "SESSION_ID")]
+        session_id: Option<String>,
+    },
+
+    /// Stop file watching for a session
+    WatchStop {
+        /// Session ID to stop watching
+        #[arg(value_name = "SESSION_ID")]
+        session_id: String,
+    },
+
+    /// Stop all active file watchers
+    WatchStopAll,
+
+    // HIDDEN COMMANDS (not shown in help)
+    /// Internal daemon command for file watching
+    #[command(hide = true)]
+    WatchDaemon {
+        /// Session ID to watch
+        session_id: String,
     },
     
     // DIRECT EDIT
@@ -520,6 +554,40 @@ async fn async_main() -> Result<()> {
             use nekocode_rust::commands::session_update::handle_session_update;
             let result = handle_session_update(&session_id, verbose, dry_run).await?;
             println!("{}", result);
+        }
+
+        // FILE WATCHING SYSTEM
+        Commands::WatchStart { session_id } => {
+            use crate::commands::watch::handle_watch_start;
+            let result = handle_watch_start(&session_id)?;
+            println!("{}", result);
+        }
+
+        Commands::WatchStatus { session_id } => {
+            use crate::commands::watch::handle_watch_status;
+            let result = handle_watch_status(session_id.as_deref())?;
+            println!("{}", result);
+        }
+
+        Commands::WatchStop { session_id } => {
+            use crate::commands::watch::handle_watch_stop;
+            let result = handle_watch_stop(&session_id)?;
+            println!("{}", result);
+        }
+
+        Commands::WatchStopAll => {
+            use crate::commands::watch::handle_watch_stop_all;
+            let result = handle_watch_stop_all()?;
+            println!("{}", result);
+        }
+
+        Commands::WatchDaemon { session_id } => {
+            use crate::commands::watch::handle_watch_daemon;
+            // This is a background daemon process - don't print output to avoid noise
+            if let Err(e) = handle_watch_daemon(&session_id).await {
+                eprintln!("Watch daemon error: {}", e);
+                std::process::exit(1);
+            }
         }
         
         // DIRECT EDIT
