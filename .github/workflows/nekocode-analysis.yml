@@ -1,0 +1,115 @@
+name: NekoCode PR Impact Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+
+jobs:
+  nekocode-analysis:
+    runs-on: ubuntu-latest
+    name: Code Impact Analysis
+    
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Download NekoCode
+        run: |
+          mkdir -p bin
+          curl -L https://github.com/moe-charm/nekocode-rust/raw/main/releases/nekocode-rust -o bin/nekocode-rust
+          chmod +x bin/nekocode-rust
+
+      - name: Analyze Current PR
+        id: analyze-pr
+        run: |
+          echo "🔍 Analyzing PR changes..."
+          
+          # 🎯 全ディレクトリを分析対象に
+          ./bin/nekocode-rust analyze . --stats-only > pr_analysis.txt 2>&1
+          
+          # 🎯 エラー処理
+          if [ $? -ne 0 ]; then
+            echo "❌ NekoCode analysis failed!"
+            cat pr_analysis.txt
+            exit 1
+          fi
+          
+          echo "📊 Analysis Results:"
+          cat pr_analysis.txt
+          
+          # 🎯 結果抽出
+          FILES_COUNT=$(grep -E "found [0-9]+ files" pr_analysis.txt | grep -oE "[0-9]+" || echo "0")
+          ANALYSIS_TIME=$(grep -E "Total.*took: [0-9.]+s" pr_analysis.txt | grep -oE "[0-9.]+s" || echo "N/A")
+          LANGUAGES=$(grep -A 10 "言語別:" pr_analysis.txt | grep -E "• \w+:" | wc -l || echo "1")
+          
+          echo "files_analyzed=$FILES_COUNT" >> $GITHUB_OUTPUT
+          echo "analysis_time=$ANALYSIS_TIME" >> $GITHUB_OUTPUT
+          echo "languages_detected=$LANGUAGES" >> $GITHUB_OUTPUT
+
+      - name: Generate Impact Report
+        run: |
+          PR_FILES=${{ steps.analyze-pr.outputs.files_analyzed }}
+          ANALYSIS_TIME=${{ steps.analyze-pr.outputs.analysis_time }}
+          LANGUAGES_COUNT=${{ steps.analyze-pr.outputs.languages_detected }}
+          
+          cat > impact_report.md << EOF
+          ## 🦀 NekoCode 分析レポート
+          
+          ### 📊 コードの影響の概要
+          
+          | メトリック | 価値 |
+          |-----------|------|
+          | **分析対象** | $(basename "$GITHUB_WORKSPACE") ディレクトリ全体 |
+          | **分析されたファイル** | ${PR_FILES} ファイル |
+          | **分析時間** | ${ANALYSIS_TIME} |
+          | **検出された言語** | ${LANGUAGES_COUNT}言語 |
+          
+          ### ✅ 分析ステータス
+          
+          - **コード品質**: NekoCode分析が正常完了
+          - **パフォーマンス**: 分析時間 ${ANALYSIS_TIME}
+          - **互換性**: 検出されたファイルがエラーなしで処理完了
+          
+          ---
+          *🚀 [NekoCode](https://github.com/moe-charm/nekocode-rust)による分析*
+          EOF
+
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('impact_report.md', 'utf8');
+            
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const nekocodeComment = comments.data.find(comment => 
+              comment.body.includes('🦀 NekoCode 分析レポート')
+            );
+            
+            if (nekocodeComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: nekocodeComment.id,
+                body: report
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: report
+              });
+            }

@@ -66,7 +66,7 @@ __pycache__/
 
 # Development artifacts - DO NOT COMMIT
 .cargo/
-.github/
+# .github/ - Allow GitHub Actions workflows
 README_NEW.md
 README_OLD.md
 build-and-update.sh
