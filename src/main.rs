@@ -104,6 +104,21 @@ enum Commands {
         args: Vec<String>,
     },
     
+    /// Update a session with incremental analysis
+    SessionUpdate {
+        /// Session ID to update
+        #[arg(value_name = "SESSION_ID")]
+        session_id: String,
+        
+        /// Show detailed output
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Show what would be updated without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+    
     // DIRECT EDIT
     /// Preview a replacement operation
     ReplacePreview {
@@ -498,6 +513,12 @@ async fn async_main() -> Result<()> {
         Commands::SessionCommand { session_id, command, args } => {
             let mut session_manager = SessionManager::new()?;
             let result = session_manager.execute_session_command(&session_id, &command, &args)?;
+            println!("{}", result);
+        }
+        
+        Commands::SessionUpdate { session_id, verbose, dry_run } => {
+            use nekocode_rust::commands::session_update::handle_session_update;
+            let result = handle_session_update(&session_id, verbose, dry_run).await?;
             println!("{}", result);
         }
         

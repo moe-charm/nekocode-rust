@@ -7,3 +7,4 @@ pub mod preview;
 pub mod ast;
 pub mod moveclass;
 pub mod impact;
+pub mod incremental;
