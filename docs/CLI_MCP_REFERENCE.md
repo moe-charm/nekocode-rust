@@ -423,6 +423,23 @@ cat memory/movelines_previews/movelines_*.json
 }
 ```
 
+### 📁 バイナリパス設定ガイド
+
+**開発環境（推奨）**:
+- `bin/nekocode_ai` - ローカル開発用
+- 自動でビルド時に更新される
+
+**CI/GitHub Actions環境**:
+- `releases/nekocode-rust` - CI/CD用
+- GitHub Actions等で利用
+
+**環境変数での指定**:
+```bash
+export NEKOCODE_BINARY_PATH="/path/to/releases/nekocode-rust"
+# または
+export NEKOCODE_BINARY_PATH="/path/to/bin/nekocode_ai"
+```
+
 ### よくある問題と解決策
 
 | 問題 | 原因 | 解決策 |
