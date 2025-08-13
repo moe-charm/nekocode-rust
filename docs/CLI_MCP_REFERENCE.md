@@ -464,6 +464,38 @@ export NEKOCODE_BINARY_PATH="/path/to/bin/nekocode_ai"
 
 ---
 
+## 🛡️ **API制限対応** (Claude Code 413エラー対策)
+
+### 自動安全保護機能
+
+NekoCodeは大規模プロジェクト解析時のAPI制限を自動的に回避します:
+
+```bash
+# 50ファイル以上 → 自動stats_onlyモード
+mcp-nekocode-analyze(path: "typescript/", stats_only: false)
+# → 自動的にstats_onlyに切り替わり、413エラーを防止
+
+# 出力1MB超過 → 自動切り捨て（重要統計は保持）
+# TypeScript Compilerのような大規模プロジェクトも安全
+```
+
+### 多重保護システム
+1. **ファイル数チェック**: 50+ファイルで自動stats_only化
+2. **出力サイズチェック**: 1MB超過で自動切り捨て  
+3. **重要情報保持**: 統計・サマリーは必ず保持
+4. **安全メッセージ**: 切り替え理由を明示
+
+### 手動制御
+```bash
+# 強制stats_onlyモード
+mcp-nekocode-analyze(path: "huge-project/", stats_only: true)
+
+# 小規模プロジェクトは通常通り  
+mcp-nekocode-analyze(path: "simple-app/", stats_only: false)
+```
+
+---
+
 ## 📚 関連ドキュメント
 
 - [USAGE.md](USAGE.md) - 基本的な使い方
