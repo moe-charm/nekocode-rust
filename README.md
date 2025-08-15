@@ -171,12 +171,31 @@ jobs:
 - **Change detection**: Detects modified files in < 1ms
 - **Proven results**: Production tested on real codebases
 
-### AST Queries  
+### 🌳 AST Revolution - Deep Syntax Analysis (ENHANCED!)
 ```bash
-# Deep syntax tree analysis
-./nekocode session-command <id> ast-stats
-./nekocode session-command <id> scope-analysis 42
+# AST statistics and structure analysis
+./nekocode session-command <id> ast-stats              # Node counts, complexity
+./nekocode session-command <id> ast-dump               # Full structure visualization
+./nekocode session-command <id> scope-analysis 42     # Analyze scope at line 42
+
+# AST queries (🔧 Under active development)
+./nekocode session-command <id> ast-query "MyClass"    # Search for classes/functions
+./nekocode session-command <id> ast-query "MyClass::myMethod"  # Method search
 ```
+
+**Recent AST Infrastructure Fixes (2025-08-13):**
+- ✅ **Fixed scope path construction** across all 6 languages (Python, JS, C++, C#, Go, Rust)
+- ✅ **Improved AST node hierarchy** using proper `add_child()` method
+- ✅ **Enhanced debugging capabilities** with detailed AST dump output
+- 🔧 **AST query search engine** currently under development
+
+**What works now:**
+- **ast-stats**: Complete statistics (nodes, depth, complexity)
+- **ast-dump**: Full tree visualization with proper scope paths
+- **scope-analysis**: Context-aware scope detection
+
+**Coming soon:**
+- **ast-query**: Full search functionality for classes/methods/functions
 
 ### 🛠️ Configuration System (NEW!)
 All settings are customizable via `nekocode_config.json`:
@@ -199,17 +218,57 @@ All settings are customizable via `nekocode_config.json`:
 }
 ```
 
-### 🤖 Claude Code Integration  
+### 🤖 Claude Code Integration (ENHANCED!)
 ```bash
 # MCP server for Claude Code (with token limits & config support)
 python mcp-nekocode-server/mcp_server_real.py
-
-# Available MCP commands:
-# - nekocode-analyze: Fast analysis with stats-only option
-# - nekocode-session-*: Session management
-# - nekocode-ast-*: AST queries and dumps
-# - nekocode-memory-*: Memory system access
 ```
+
+**Available MCP Tools (28 total):**
+
+**🔍 Core Analysis:**
+- `mcp__nekocode__analyze` - Fast project analysis with stats-only option
+- `mcp__nekocode__list_languages` - Show supported languages
+
+**🎮 Session Management:**
+- `mcp__nekocode__session_create` - Create persistent analysis sessions
+- `mcp__nekocode__session_stats` - Get session statistics (lightning fast)
+- `mcp__nekocode__session_update` - Incremental updates (918-1956x speedup)
+
+**🌳 AST Revolution:**
+- `mcp__nekocode__ast_stats` - AST node statistics and complexity
+- `mcp__nekocode__ast_query` - Search for classes/methods (🔧 under development)
+- `mcp__nekocode__ast_dump` - Full AST tree visualization
+- `mcp__nekocode__scope_analysis` - Context-aware scope analysis
+
+**🔍 File Watching System (NEW!):**
+- `mcp__nekocode__watch_start` - Start real-time file monitoring
+- `mcp__nekocode__watch_status` - Check monitoring status
+- `mcp__nekocode__watch_stop` - Stop watching specific session
+- `mcp__nekocode__watch_stop_all` - Stop all active watchers  
+- `mcp__nekocode__watch_config` - Display watch configuration
+
+**✏️ Code Editing & Refactoring:**
+- `mcp__nekocode__replace_preview` - Preview text replacements
+- `mcp__nekocode__replace_confirm` - Execute replacements
+- `mcp__nekocode__insert_preview` - Preview insertions
+- `mcp__nekocode__insert_confirm` - Execute insertions
+- `mcp__nekocode__movelines_preview` - Preview line movements
+- `mcp__nekocode__movelines_confirm` - Execute line movements
+- `mcp__nekocode__moveclass_preview` - Preview class movements
+- `mcp__nekocode__moveclass_confirm` - Execute class movements
+
+**📚 History & Memory:**
+- `mcp__nekocode__edit_history` - View editing history
+- `mcp__nekocode__edit_show` - Show specific edit details
+- `mcp__nekocode__memory_save` - Save analysis results/memos
+- `mcp__nekocode__memory_load` - Load saved memories
+- `mcp__nekocode__memory_list` - List all memories
+- `mcp__nekocode__memory_timeline` - Timeline view of memories
+
+**⚙️ Configuration:**
+- `mcp__nekocode__config_show` - Display current configuration
+- `mcp__nekocode__config_set` - Update configuration settings
 
 ## 📊 Performance Comparison
 
@@ -232,21 +291,34 @@ python mcp-nekocode-server/mcp_server_real.py
 
 ## 🎮 Examples & Use Cases
 
-### Use Case 1: Daily Development
+### Use Case 1: Daily Development  
 ```bash
-# Before committing - check what changed
-./nekocode analyze src/ --output json | jq '.functions | length'
+# Quick analysis for commit reviews
+./nekocode analyze src/ --stats-only
 # "Added 3 new functions, modified 2 existing"
 
 # 🚀 NEW: Lightning-fast iterative development  
 ./nekocode session-create src/                # One-time setup (267ms)
 ./nekocode watch-start abc123                 # Start file watching
-# Edit files... (auto-updates every 500ms)
+# Edit files... (auto-updates every 500ms with smart debouncing)
 ./nekocode session-command abc123 stats       # Get latest results instantly
 # "Changed 1 file, analyzed in 23ms (1956x speedup)"
 
 # Alternative: Manual updates
 ./nekocode session-update abc123 --verbose    # Manual incremental update
+./nekocode session-update abc123 --dry-run    # Preview what would change
+```
+
+**🎯 Claude Code Integration Example:**
+```python
+# In Claude Code, create session and start watching
+session = await mcp__nekocode__session_create("/path/to/project")
+await mcp__nekocode__watch_start(session["session_id"])
+
+# Real-time development feedback
+await mcp__nekocode__watch_status()           # Check monitoring status
+await mcp__nekocode__ast_stats(session_id)    # Get AST statistics
+await mcp__nekocode__memory_save("memo", "refactor_notes", "Fixed auth system")
 ```
 
 ### Use Case 2: PR Reviews
