@@ -325,58 +325,58 @@ impl ASTNode {
                 }
             }
             QueryPath::Hierarchical { parent, child } => {
-                // For hierarchical queries, prioritize exact scope path matches first
+                // For hierarchical queries, first try exact scope path matching
+                let mut exact_scope_match = false;
                 if let (Some(parent_name), Some(child_name)) = (parent, child) {
                     let expected_scope_path = format!("{}::{}", parent_name, child_name);
                     
-                    // Check for exact scope path match (highest priority)
+                    // Check for exact scope path match (this handles properly structured ASTs)
                     if self.scope_path == expected_scope_path {
                         result.push(self);
-                        // Continue search but don't duplicate results
-                        for child_node in &self.children {
-                            child_node.query_by_parsed_path(query, result);
-                        }
-                        return;
+                        exact_scope_match = true;
                     }
                 }
                 
-                // Traditional hierarchical search: find parent, then search children
-                if let Some(parent_name) = parent {
-                    // Looking for specific parent
-                    if self.matches_name(parent_name) {
-                        // Found parent, now search children
-                        if let Some(child_name) = child {
-                            // Looking for specific child
-                            self.find_child_by_name(child_name, result);
-                        } else {
-                            // Wildcard child - return all children
-                            for child_node in &self.children {
-                                result.push(child_node);
+                // If no exact scope match found, try traditional parent-child search
+                if !exact_scope_match {
+                    if let Some(parent_name) = parent {
+                        if self.matches_name(parent_name) {
+                            // Found parent, now search children
+                            if let Some(child_name) = child {
+                                // Look for specific child
+                                for child_node in &self.children {
+                                    if child_node.matches_name(child_name) {
+                                        result.push(child_node);
+                                    }
+                                }
+                            } else {
+                                // Wildcard child - return all children
+                                for child_node in &self.children {
+                                    result.push(child_node);
+                                }
                             }
                         }
-                    }
-                    
-                    // ENHANCED: Search for nodes that could belong to parent (for flattened structures)
-                    if let Some(child_name) = child {
-                        // Only search for fallback matches if no exact scope path was found
-                        if self.name == *child_name && self.could_belong_to_parent(parent_name) {
-                            // Check if this result is already in the list (avoid duplicates)
-                            if !result.iter().any(|node| std::ptr::eq(*node, self)) {
+                        
+                        // Enhanced fallback: search for flattened structures
+                        if let Some(child_name) = child {
+                            if self.name == *child_name && self.could_belong_to_parent(parent_name) {
+                                // Double-check we don't already have this result
+                                if !result.iter().any(|node| std::ptr::eq(*node, self)) {
+                                    result.push(self);
+                                }
+                            }
+                        }
+                    } else {
+                        // Wildcard parent - search all nodes for matching children
+                        if let Some(child_name) = child {
+                            if self.matches_name(child_name) {
                                 result.push(self);
                             }
                         }
                     }
-                } else {
-                    // Wildcard parent - search all nodes for matching children
-                    if let Some(child_name) = child {
-                        // For wildcard parent, find any node with the child name
-                        if self.matches_name(child_name) {
-                            result.push(self);
-                        }
-                    }
                 }
                 
-                // Continue recursive search
+                // Always continue recursive search (unless we found exact match and stopped)
                 for child_node in &self.children {
                     child_node.query_by_parsed_path(query, result);
                 }
