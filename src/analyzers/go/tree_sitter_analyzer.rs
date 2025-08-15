@@ -332,7 +332,7 @@ impl TreeSitterGoAnalyzer {
                 }
             }
             
-            parent.children.push(ast_node);
+            parent.add_child(ast_node);
         }
         
         // Recurse through children
