@@ -393,7 +393,6 @@ impl TreeSitterJavaScriptAnalyzer {
             let mut ast_node = ASTNode::new(ast_type, String::new());
             ast_node.start_line = node.start_position().row as u32 + 1;
             ast_node.end_line = node.end_position().row as u32 + 1;
-            ast_node.depth = depth as u32;
             
             // Try to get node name
             if let Some(name_field) = node.child_by_field_name("name") {
@@ -402,13 +401,21 @@ impl TreeSitterJavaScriptAnalyzer {
                 }
             }
             
-            parent.children.push(ast_node);
+            // Use add_child() to properly set scope_path and depth
+            parent.add_child(ast_node);
         }
+        
+        // Recurse through children - process them through the newly added child if it exists
+        let target_parent = if ast_type != ASTNodeType::Unknown && !parent.children.is_empty() {
+            parent.children.last_mut().unwrap()
+        } else {
+            parent
+        };
         
         // Recurse through children
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.build_ast_recursive(child, source, parent, depth + 1);
+            self.build_ast_recursive(child, source, target_parent, depth + 1);
         }
     }
 }

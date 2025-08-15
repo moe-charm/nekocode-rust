@@ -554,4 +554,26 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "myMethod");
     }
+    
+    #[test]
+    fn test_ast_scope_path_construction() {
+        // Test that scope paths are correctly constructed when using add_child()
+        let mut root = ASTNode::new(ASTNodeType::FileRoot, "".to_string());
+        let class_node = ASTNode::new(ASTNodeType::Class, "TestClass".to_string());
+        root.add_child(class_node);
+        
+        // Add method to the class
+        let method_node = ASTNode::new(ASTNodeType::Method, "testMethod".to_string());
+        root.children[0].add_child(method_node);
+        
+        // Verify scope paths are correctly set
+        assert_eq!(root.children[0].scope_path, "TestClass");
+        assert_eq!(root.children[0].children[0].scope_path, "TestClass::testMethod");
+        
+        // Test the query works
+        let results = root.query_by_path("TestClass::testMethod");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "testMethod");
+        assert_eq!(results[0].scope_path, "TestClass::testMethod");
+    }
 }
