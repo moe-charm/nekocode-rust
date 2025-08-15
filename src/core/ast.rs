@@ -719,6 +719,47 @@ mod tests {
     }
     
     #[test]
+    fn test_scope_path_construction() {
+        let mut builder = ASTBuilder::new();
+        builder.enter_scope(ASTNodeType::Class, "System".to_string(), 1);
+        builder.add_node(ASTNodeType::Method, "getAccessibleFileSystemEntries".to_string(), 2);
+        builder.exit_scope(10);
+        
+        let ast = builder.build();
+        let class_node = &ast.children[0];
+        let method_node = &class_node.children[0];
+        
+        // This should show the current behavior and what we expect
+        println!("Class scope_path: '{}'", class_node.scope_path);
+        println!("Method scope_path: '{}'", method_node.scope_path);
+        
+        // This test should pass once we fix the issue
+        assert_eq!(class_node.scope_path, "System");
+        assert_eq!(method_node.scope_path, "System::getAccessibleFileSystemEntries");
+    }
+    
+    #[test]
+    fn test_scope_path_with_enter_scope() {
+        let mut builder = ASTBuilder::new();
+        builder.enter_scope(ASTNodeType::Class, "System".to_string(), 1);
+        builder.enter_scope(ASTNodeType::Method, "getAccessibleFileSystemEntries".to_string(), 2);
+        builder.exit_scope(3);
+        builder.exit_scope(10);
+        
+        let ast = builder.build();
+        let class_node = &ast.children[0];
+        let method_node = &class_node.children[0];
+        
+        // This should show the current behavior and what we expect
+        println!("Class scope_path (enter_scope): '{}'", class_node.scope_path);
+        println!("Method scope_path (enter_scope): '{}'", method_node.scope_path);
+        
+        // This test should pass once we fix the issue
+        assert_eq!(class_node.scope_path, "System");
+        assert_eq!(method_node.scope_path, "System::getAccessibleFileSystemEntries");
+    }
+    
+    #[test]
     fn test_ast_query() {
         let mut root = ASTNode::new(ASTNodeType::FileRoot, "".to_string());
         let mut class_node = ASTNode::new(ASTNodeType::Class, "MyClass".to_string());
