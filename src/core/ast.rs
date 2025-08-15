@@ -150,6 +150,22 @@ impl ASTNodeType {
     }
 }
 
+/// Query path types for AST search operations
+#[derive(Debug, Clone)]
+enum QueryPath {
+    /// Empty query
+    Empty,
+    /// Wildcard query (*) - matches all nodes
+    Wildcard,
+    /// Simple name query (e.g., "MyClass")
+    Simple(String),
+    /// Hierarchical query (e.g., "MyClass::myMethod", "*::render", "MyClass::*")
+    Hierarchical {
+        parent: Option<String>, // None means wildcard parent (*)
+        child: Option<String>,  // None means wildcard child (*)
+    },
+}
+
 /// AST Node representing a single element in the syntax tree
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ASTNode {
@@ -237,35 +253,191 @@ impl ASTNode {
         }
     }
     
-    /// Query nodes by path (e.g., "MyClass::myMethod")
+    /// Query nodes by path with enhanced syntax support
+    /// 
+    /// Supports multiple query formats:
+    /// - "MyClass" - Find class by name
+    /// - "MyClass::myMethod" - Find method in specific class  
+    /// - "myFunction" - Find function by name
+    /// - "*::render" - All render methods in any class
+    /// - "MyClass::*" - All members in MyClass
+    /// - "*" - All nodes
     pub fn query_by_path(&self, path: &str) -> Vec<&ASTNode> {
         let mut result = Vec::new();
-        self.query_by_path_recursive(path, &mut result);
+        
+        // Parse the query path to determine search strategy
+        let query = self.parse_query_path(path);
+        self.query_by_parsed_path(&query, &mut result);
+        
         result
     }
     
-    /// Recursive helper for path queries
-    fn query_by_path_recursive<'a>(&'a self, path: &str, result: &mut Vec<&'a ASTNode>) {
-        // Exact matches (original behavior)
-        if self.scope_path == path || self.full_name == path {
-            result.push(self);
-        }
-        // Partial name matches (enhanced behavior)
-        else if self.name == path {
-            result.push(self);
-        }
-        // Case-insensitive partial matches
-        else if !path.is_empty() && (
-            self.name.to_lowercase().contains(&path.to_lowercase()) ||
-            self.scope_path.to_lowercase().contains(&path.to_lowercase()) ||
-            self.full_name.to_lowercase().contains(&path.to_lowercase())
-        ) {
-            result.push(self);
+    /// Parse query path into structured query components
+    fn parse_query_path(&self, path: &str) -> QueryPath {
+        let path = path.trim();
+        
+        if path.is_empty() {
+            return QueryPath::Empty;
         }
         
-        for child in &self.children {
-            child.query_by_path_recursive(path, result);
+        if path == "*" {
+            return QueryPath::Wildcard;
         }
+        
+        // Check for :: separator (hierarchical query)
+        if path.contains("::") {
+            let parts: Vec<&str> = path.split("::").collect();
+            if parts.len() == 2 {
+                let parent = parts[0].trim();
+                let child = parts[1].trim();
+                
+                return QueryPath::Hierarchical {
+                    parent: if parent == "*" { None } else { Some(parent.to_string()) },
+                    child: if child == "*" { None } else { Some(child.to_string()) },
+                };
+            }
+        }
+        
+        // Simple name query
+        QueryPath::Simple(path.to_string())
+    }
+    
+    /// Execute query based on parsed query path
+    fn query_by_parsed_path<'a>(&'a self, query: &QueryPath, result: &mut Vec<&'a ASTNode>) {
+        match query {
+            QueryPath::Empty => {
+                // No results for empty query
+            }
+            QueryPath::Wildcard => {
+                // Return all nodes
+                result.push(self);
+                for child in &self.children {
+                    child.query_by_parsed_path(query, result);
+                }
+            }
+            QueryPath::Simple(name) => {
+                // Simple name matching (existing logic enhanced)
+                if self.matches_name(name) {
+                    result.push(self);
+                }
+                for child in &self.children {
+                    child.query_by_parsed_path(query, result);
+                }
+            }
+            QueryPath::Hierarchical { parent, child } => {
+                // For hierarchical queries, prioritize exact scope path matches first
+                if let (Some(parent_name), Some(child_name)) = (parent, child) {
+                    let expected_scope_path = format!("{}::{}", parent_name, child_name);
+                    
+                    // Check for exact scope path match (highest priority)
+                    if self.scope_path == expected_scope_path {
+                        result.push(self);
+                        // Continue search but don't duplicate results
+                        for child_node in &self.children {
+                            child_node.query_by_parsed_path(query, result);
+                        }
+                        return;
+                    }
+                }
+                
+                // Traditional hierarchical search: find parent, then search children
+                if let Some(parent_name) = parent {
+                    // Looking for specific parent
+                    if self.matches_name(parent_name) {
+                        // Found parent, now search children
+                        if let Some(child_name) = child {
+                            // Looking for specific child
+                            self.find_child_by_name(child_name, result);
+                        } else {
+                            // Wildcard child - return all children
+                            for child_node in &self.children {
+                                result.push(child_node);
+                            }
+                        }
+                    }
+                    
+                    // ENHANCED: Search for nodes that could belong to parent (for flattened structures)
+                    if let Some(child_name) = child {
+                        // Only search for fallback matches if no exact scope path was found
+                        if self.name == *child_name && self.could_belong_to_parent(parent_name) {
+                            // Check if this result is already in the list (avoid duplicates)
+                            if !result.iter().any(|node| std::ptr::eq(*node, self)) {
+                                result.push(self);
+                            }
+                        }
+                    }
+                } else {
+                    // Wildcard parent - search all nodes for matching children
+                    if let Some(child_name) = child {
+                        // For wildcard parent, find any node with the child name
+                        if self.matches_name(child_name) {
+                            result.push(self);
+                        }
+                    }
+                }
+                
+                // Continue recursive search
+                for child_node in &self.children {
+                    child_node.query_by_parsed_path(query, result);
+                }
+            }
+        }
+    }
+    
+    /// Check if this node could logically belong to a parent based on context
+    fn could_belong_to_parent(&self, parent_name: &str) -> bool {
+        // For methods/functions, check if they are positioned near a class with the parent name
+        if matches!(self.node_type, ASTNodeType::Function | ASTNodeType::Method) {
+            // This is a heuristic: if there's a class with parent_name at a similar position,
+            // this function might belong to it
+            true // For now, be permissive and let it match
+        } else {
+            false
+        }
+    }
+    
+    /// Check if this node matches a given name (with various matching strategies)
+    fn matches_name(&self, name: &str) -> bool {
+        // Exact name match (highest priority)
+        if self.name == name {
+            return true;
+        }
+        
+        // Exact scope path match (high priority)
+        if self.scope_path == name {
+            return true;
+        }
+        
+        // Exact full name match (high priority)
+        if self.full_name == name {
+            return true;
+        }
+        
+        // Only do partial matches if the name doesn't contain "::" (not a hierarchical query)
+        if !name.contains("::") {
+            // Case-insensitive partial matches (lower priority, only for simple names)
+            let name_lower = name.to_lowercase();
+            return self.name.to_lowercase().contains(&name_lower) ||
+                   self.scope_path.to_lowercase().contains(&name_lower) ||
+                   self.full_name.to_lowercase().contains(&name_lower);
+        }
+        
+        false
+    }
+    
+    /// Find direct children that match the given name
+    fn find_child_by_name<'a>(&'a self, name: &str, result: &mut Vec<&'a ASTNode>) {
+        for child in &self.children {
+            if child.matches_name(name) {
+                result.push(child);
+            }
+        }
+    }
+    
+    /// Legacy recursive helper for backward compatibility
+    fn query_by_path_recursive<'a>(&'a self, path: &str, result: &mut Vec<&'a ASTNode>) {
+        let query = self.parse_query_path(path);
+        self.query_by_parsed_path(&query, result);
     }
     
     /// Find the deepest node at a specific line

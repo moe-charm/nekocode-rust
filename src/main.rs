@@ -258,13 +258,30 @@ enum Commands {
         session_id: String,
     },
     
-    /// Query AST structure
+    /// Query AST structure with enhanced search syntax
+    ///
+    /// Supports multiple query formats:
+    ///   "MyClass"              Search for class named MyClass
+    ///   "MyClass::myMethod"    Search for method myMethod in class MyClass  
+    ///   "myFunction"           Search for function named myFunction
+    ///   "*::render"            Search all render methods in any class
+    ///   "MyClass::*"           Search all members in MyClass
+    ///   "*"                    Search all nodes
+    ///   "test"                 Partial search for anything containing "test"
     AstQuery {
-        /// Session ID
+        /// Session ID from session-create
         #[arg(value_name = "SESSION_ID")]
         session_id: String,
         
-        /// Query path (e.g., "MyClass::myMethod")
+        /// Query path to search in AST
+        ///
+        /// Examples:
+        ///   "MyClass"              Find class by name
+        ///   "MyClass::myMethod"    Find method in specific class
+        ///   "myFunction"           Find function by name  
+        ///   "*::render"            All render methods in any class
+        ///   "MyClass::*"           All members in MyClass
+        ///   "test"                 Partial name matching
         #[arg(value_name = "PATH")]
         path: String,
     },
