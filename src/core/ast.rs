@@ -269,7 +269,15 @@ impl ASTNode {
         let query = self.parse_query_path(path);
         self.query_by_parsed_path(&query, &mut result);
         
-        result
+        // Deduplicate results by pointer address to ensure no duplicates
+        let mut unique_results: Vec<&ASTNode> = Vec::new();
+        for node in result {
+            if !unique_results.iter().any(|existing| std::ptr::eq(*existing, node)) {
+                unique_results.push(node);
+            }
+        }
+        
+        unique_results
     }
     
     /// Parse query path into structured query components
