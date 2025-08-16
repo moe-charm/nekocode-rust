@@ -204,7 +204,11 @@ impl ImpactAnalyzer {
         // Detect changes (either in specific files from git, or simulated for all files)
         let changed_symbols = if !changed_files_for_detection.is_empty() {
             // Git mode: detect actual deletions and changes using my improved implementation
-            self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection).await?
+            let symbols = self.detect_changed_symbols_in_files(&current_analysis, &changed_files_for_detection).await?;
+            if self.config.verbose {
+                println!("📊 Got {} changed symbols from git mode", symbols.len());
+            }
+            symbols
         } else {
             self.detect_changed_symbols(&current_analysis)?
         };
@@ -407,6 +411,7 @@ impl ImpactAnalyzer {
                 match self.analyze_file_at_git_ref(&file.file_info.path, compare_ref).await {
                     Ok(old_functions) => {
                         if self.config.verbose {
+                            println!("✅ Git analysis SUCCESS for {}", file.file_info.path.display());
                             println!("📄 Old version functions found: {}", old_functions.len());
                             for func in &old_functions {
                                 println!("  📍 Old: {}({})", func.name, func.parameters.join(", "));
@@ -425,7 +430,15 @@ impl ImpactAnalyzer {
                             .map(|f| f.name.clone())
                             .collect();
                         
+                        if self.config.verbose {
+                            println!("🔍 Current functions HashSet: {:?}", current_functions);
+                            println!("🔍 Old functions HashSet: {:?}", old_function_names);
+                        }
+                        
                         // Find deleted functions (in old but not in current)
+                        if self.config.verbose {
+                            println!("🔍 Checking for deletions: {} old functions vs {} current functions", old_functions.len(), current_functions.len());
+                        }
                         for old_func in &old_functions {
                             if !current_functions.contains(&old_func.name) {
                                 let usage_count = function_usage_count.get(&old_func.name).unwrap_or(&0);
@@ -447,10 +460,17 @@ impl ImpactAnalyzer {
                                     risk_level: RiskLevel::Low,
                                     breaking_change,
                                 });
+                                
+                                if self.config.verbose {
+                                    println!("🔥 DEBUG: Added deleted symbol to vector. Total symbols now: {}", changed_symbols.len());
+                                }
                             }
                         }
                         
                         // Find added functions (in current but not in old)
+                        if self.config.verbose {
+                            println!("🔍 Checking for additions: {} current functions vs {} old functions", file.functions.len(), old_function_names.len());
+                        }
                         for function in &file.functions {
                             if !old_function_names.contains(&function.name) {
                                 let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
@@ -500,12 +520,19 @@ impl ImpactAnalyzer {
                                             risk_level: RiskLevel::Low,
                                             breaking_change,
                                         });
+                                        
+                                        if self.config.verbose {
+                                            println!("🔥 DEBUG: Added signature change to vector. Total symbols now: {}", changed_symbols.len());
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        if self.config.verbose {
+                            println!("❌ Git analysis FAILED for {}: {}", file.file_info.path.display(), e);
+                        }
                         // Fallback to old behavior if git analysis fails
                         for function in &file.functions {
                             let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
@@ -570,6 +597,7 @@ impl ImpactAnalyzer {
                 let usage = function_usage_count.get(&symbol.name).unwrap_or(&0);
                 println!("  📍 {} '{}' (usage count: {})", symbol.symbol_type, symbol.name, usage);
             }
+            println!("🔄 RETURNING {} changed symbols from detect_changed_symbols_in_files", changed_symbols.len());
         }
         
         Ok(changed_symbols)
