@@ -719,6 +719,76 @@ mod tests {
     }
     
     #[test]
+    fn test_scope_path_construction() {
+        let mut builder = ASTBuilder::new();
+        builder.enter_scope(ASTNodeType::Class, "System".to_string(), 1);
+        builder.add_node(ASTNodeType::Method, "getAccessibleFileSystemEntries".to_string(), 2);
+        builder.exit_scope(10);
+        
+        let ast = builder.build();
+        let class_node = &ast.children[0];
+        let method_node = &class_node.children[0];
+        
+        // This should show the current behavior and what we expect
+        println!("Class scope_path: '{}'", class_node.scope_path);
+        println!("Method scope_path: '{}'", method_node.scope_path);
+        
+        // This test should pass once we fix the issue
+        assert_eq!(class_node.scope_path, "System");
+        assert_eq!(method_node.scope_path, "System::getAccessibleFileSystemEntries");
+    }
+    
+    #[test]
+    fn test_scope_path_with_enter_scope() {
+        let mut builder = ASTBuilder::new();
+        builder.enter_scope(ASTNodeType::Class, "System".to_string(), 1);
+        builder.enter_scope(ASTNodeType::Method, "getAccessibleFileSystemEntries".to_string(), 2);
+        builder.exit_scope(3);
+        builder.exit_scope(10);
+        
+        let ast = builder.build();
+        let class_node = &ast.children[0];
+        let method_node = &class_node.children[0];
+        
+        // This should show the current behavior and what we expect
+        println!("Class scope_path (enter_scope): '{}'", class_node.scope_path);
+        println!("Method scope_path (enter_scope): '{}'", method_node.scope_path);
+        
+        // This test should pass once we fix the issue
+        assert_eq!(class_node.scope_path, "System");
+        assert_eq!(method_node.scope_path, "System::getAccessibleFileSystemEntries");
+    }
+    
+    #[test]
+    fn test_hierarchical_scope_path_construction() {
+        // Test multiple levels of nesting to ensure the fix works for deep hierarchies
+        let mut builder = ASTBuilder::new();
+        
+        // Create namespace -> class -> method structure
+        builder.enter_scope(ASTNodeType::Namespace, "MyNamespace".to_string(), 1);
+        builder.enter_scope(ASTNodeType::Class, "MyClass".to_string(), 2);
+        builder.enter_scope(ASTNodeType::Method, "myMethod".to_string(), 3);
+        builder.exit_scope(4);
+        builder.exit_scope(5);
+        builder.exit_scope(6);
+        
+        let ast = builder.build();
+        let namespace_node = &ast.children[0];
+        let class_node = &namespace_node.children[0];
+        let method_node = &class_node.children[0];
+        
+        assert_eq!(namespace_node.scope_path, "MyNamespace");
+        assert_eq!(class_node.scope_path, "MyNamespace::MyClass");
+        assert_eq!(method_node.scope_path, "MyNamespace::MyClass::myMethod");
+        
+        // Test querying the deeply nested method
+        let results = ast.query_by_path("MyNamespace::MyClass::myMethod");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "myMethod");
+        assert_eq!(results[0].scope_path, "MyNamespace::MyClass::myMethod");
+    }
+    
+    #[test]
     fn test_ast_query() {
         let mut root = ASTNode::new(ASTNodeType::FileRoot, "".to_string());
         let mut class_node = ASTNode::new(ASTNodeType::Class, "MyClass".to_string());
