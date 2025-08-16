@@ -9,7 +9,7 @@ use nekocode_core::{
     types::{
         AnalysisResult, FileInfo, FunctionInfo, ClassInfo,
         ImportInfo, ExportInfo, Language, CodeMetrics,
-        SymbolInfo, SymbolType, Visibility
+        SymbolInfo, SymbolType, Visibility, ParameterInfo
     }
 };
 
@@ -319,6 +319,232 @@ impl PythonAnalyzer {
             config: AnalyzerConfig::default(),
         })
     }
+    
+    fn extract_functions(&self, tree: &Tree, source: &str) -> Result<Vec<FunctionInfo>> {
+        let mut functions = Vec::new();
+        
+        let query_str = r#"
+            [
+              (function_definition) @function
+              (lambda) @function
+            ]
+        "#;
+        
+        let query = Query::new(tree_sitter_python::language(), query_str)
+            .map_err(|e| NekocodeError::Analysis(format!("Failed to create query: {:?}", e)))?;
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        
+        for mat in matches {
+            for capture in mat.captures {
+                let func_node = capture.node;
+                let start_line = func_node.start_position().row as u32 + 1;
+                let end_line = func_node.end_position().row as u32 + 1;
+                
+                let mut func_name = String::new();
+                if func_node.kind() == "lambda" {
+                    func_name = "lambda".to_string();
+                } else {
+                    // Extract function name
+                    let mut node_cursor = func_node.walk();
+                    for child in func_node.children(&mut node_cursor) {
+                        if child.kind() == "identifier" && func_name.is_empty() {
+                            if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                                func_name = name.to_string();
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if func_name.is_empty() {
+                    func_name = "<anonymous>".to_string();
+                }
+                
+                // Create SymbolInfo
+                let symbol = SymbolInfo {
+                    id: format!("python_func_{}", func_name),
+                    name: func_name,
+                    symbol_type: SymbolType::Function,
+                    file_path: std::path::PathBuf::new(),  // Will be filled by caller
+                    line_start: start_line,
+                    line_end: end_line,
+                    column_start: func_node.start_position().column as u32,
+                    column_end: func_node.end_position().column as u32,
+                    language: Language::Python,
+                    visibility: Some(Visibility::Public),
+                    parent_id: None,
+                    metadata: std::collections::HashMap::new(),
+                };
+                
+                // Extract parameters
+                let mut parameters = Vec::new();
+                if let Some(params_node) = func_node.child_by_field_name("parameters") {
+                    let mut param_cursor = params_node.walk();
+                    for child in params_node.children(&mut param_cursor) {
+                        if child.kind() == "identifier" {
+                            if let Ok(param) = child.utf8_text(source.as_bytes()) {
+                                parameters.push(ParameterInfo {
+                                    name: param.to_string(),
+                                    param_type: None,
+                                    default_value: None,
+                                    is_optional: false,
+                                    is_variadic: false,
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                let func_info = FunctionInfo {
+                    symbol,
+                    parameters,
+                    return_type: None,
+                    is_async: false,
+                    is_static: false,
+                    is_generic: false,
+                    complexity: None,
+                };
+                
+                functions.push(func_info);
+            }
+        }
+        
+        Ok(functions)
+    }
+    
+    fn extract_classes(&self, tree: &Tree, source: &str) -> Result<Vec<ClassInfo>> {
+        let mut classes = Vec::new();
+        
+        let query_str = r#"
+            (class_definition) @class
+        "#;
+        
+        let query = Query::new(tree_sitter_python::language(), query_str)
+            .map_err(|e| NekocodeError::Analysis(format!("Failed to create query: {:?}", e)))?;
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        
+        for mat in matches {
+            for capture in mat.captures {
+                let class_node = capture.node;
+                let start_line = class_node.start_position().row as u32 + 1;
+                let end_line = class_node.end_position().row as u32 + 1;
+                
+                let mut class_name = String::new();
+                // Extract class name
+                let mut cursor = class_node.walk();
+                for child in class_node.children(&mut cursor) {
+                    if child.kind() == "identifier" && class_name.is_empty() {
+                        if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                            class_name = name.to_string();
+                        }
+                    }
+                }
+                
+                if class_name.is_empty() {
+                    class_name = "<anonymous>".to_string();
+                }
+                
+                // Create SymbolInfo
+                let symbol = SymbolInfo {
+                    id: format!("python_class_{}", class_name),
+                    name: class_name,
+                    symbol_type: SymbolType::Class,
+                    file_path: std::path::PathBuf::new(),  // Will be filled by caller
+                    line_start: start_line,
+                    line_end: end_line,
+                    column_start: class_node.start_position().column as u32,
+                    column_end: class_node.end_position().column as u32,
+                    language: Language::Python,
+                    visibility: Some(Visibility::Public),
+                    parent_id: None,
+                    metadata: std::collections::HashMap::new(),
+                };
+                
+                // Extract methods
+                let methods = self.extract_class_methods(class_node, source)?;
+                
+                let class_info = ClassInfo {
+                    symbol,
+                    base_classes: Vec::new(),
+                    interfaces: Vec::new(),
+                    methods,
+                    fields: Vec::new(),
+                    is_abstract: false,
+                    is_interface: false,
+                };
+                
+                classes.push(class_info);
+            }
+        }
+        
+        Ok(classes)
+    }
+    
+    fn extract_class_methods(&self, class_node: Node, source: &str) -> Result<Vec<String>> {
+        let mut methods = Vec::new();
+        
+        let mut cursor = class_node.walk();
+        for child in class_node.children(&mut cursor) {
+            if child.kind() == "block" {
+                let mut block_cursor = child.walk();
+                for stmt in child.children(&mut block_cursor) {
+                    if stmt.kind() == "function_definition" {
+                        let mut func_cursor = stmt.walk();
+                        for func_child in stmt.children(&mut func_cursor) {
+                            if func_child.kind() == "identifier" {
+                                if let Ok(name) = func_child.utf8_text(source.as_bytes()) {
+                                    methods.push(name.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(methods)
+    }
+    
+    fn extract_imports(&self, tree: &Tree, source: &str) -> Result<Vec<ImportInfo>> {
+        let mut imports = Vec::new();
+        
+        let query_str = r#"
+            [
+              (import_statement) @import
+              (import_from_statement) @from_import
+            ]
+        "#;
+        
+        let query = Query::new(tree_sitter_python::language(), query_str)
+            .map_err(|e| NekocodeError::Analysis(format!("Failed to create query: {:?}", e)))?;
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        
+        for mat in matches {
+            for capture in mat.captures {
+                let import_node = capture.node;
+                let line_number = import_node.start_position().row as u32 + 1;
+                
+                if let Ok(import_text) = import_node.utf8_text(source.as_bytes()) {
+                    let module_name = import_text.replace("import ", "").replace("from ", "");
+                    let import_info = ImportInfo {
+                        module: module_name,
+                        imported_names: Vec::new(),
+                        alias: None,
+                        is_default: false,
+                        is_namespace: false,
+                        line: line_number,
+                    };
+                    imports.push(import_info);
+                }
+            }
+        }
+        
+        Ok(imports)
+    }
 }
 
 #[async_trait]
@@ -342,6 +568,23 @@ impl Analyzer for PythonAnalyzer {
         // Update file info with content data
         result.file_info.size_bytes = content.len() as u64;
         result.file_info.total_lines = content.lines().count() as u32;
+        
+        // Extract functions, classes, and imports
+        if self.config.extract_functions {
+            result.functions = self.extract_functions(&tree, content)?;
+        }
+        
+        if self.config.extract_classes {
+            result.classes = self.extract_classes(&tree, content)?;
+        }
+        
+        if self.config.extract_imports {
+            result.imports = self.extract_imports(&tree, content)?;
+        }
+        
+        // Update metrics based on extracted information
+        result.metrics.lines_of_code = result.file_info.code_lines;
+        result.metrics.blank_lines = result.file_info.empty_lines;
         
         Ok(result)
     }
@@ -368,6 +611,146 @@ impl RustAnalyzer {
             config: AnalyzerConfig::default(),
         })
     }
+    
+    fn extract_functions(&self, tree: &Tree, source: &str) -> Result<Vec<FunctionInfo>> {
+        let mut functions = Vec::new();
+        
+        let query_str = r#"
+            [
+              (function_item
+                name: (identifier) @name) @function
+              (closure_expression) @closure
+            ]
+        "#;
+        
+        let query = Query::new(tree_sitter_rust::language(), query_str)
+            .map_err(|e| NekocodeError::Analysis(format!("Failed to create query: {:?}", e)))?;
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        
+        for mat in matches {
+            let mut func_name = String::new();
+            let mut func_node = None;
+            
+            for capture in mat.captures {
+                match query.capture_names()[capture.index as usize].as_ref() {
+                    "name" => {
+                        if let Ok(name) = capture.node.utf8_text(source.as_bytes()) {
+                            func_name = name.to_string();
+                        }
+                    }
+                    "function" | "closure" => {
+                        func_node = Some(capture.node);
+                        if capture.node.kind() == "closure_expression" && func_name.is_empty() {
+                            func_name = "closure".to_string();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            if let Some(node) = func_node {
+                let symbol = SymbolInfo {
+                    id: format!("rust_func_{}", func_name),
+                    name: func_name.clone(),
+                    symbol_type: SymbolType::Function,
+                    file_path: std::path::PathBuf::new(),
+                    line_start: node.start_position().row as u32 + 1,
+                    line_end: node.end_position().row as u32 + 1,
+                    column_start: node.start_position().column as u32,
+                    column_end: node.end_position().column as u32,
+                    language: Language::Rust,
+                    visibility: Some(Visibility::Public),
+                    parent_id: None,
+                    metadata: std::collections::HashMap::new(),
+                };
+                
+                let func_info = FunctionInfo {
+                    symbol,
+                    parameters: Vec::new(),
+                    return_type: None,
+                    is_async: false,
+                    is_static: false,
+                    is_generic: false,
+                    complexity: None,
+                };
+                
+                functions.push(func_info);
+            }
+        }
+        
+        Ok(functions)
+    }
+    
+    fn extract_classes(&self, tree: &Tree, source: &str) -> Result<Vec<ClassInfo>> {
+        let mut classes = Vec::new();
+        
+        let query_str = r#"
+            [
+              (struct_item
+                name: (type_identifier) @name) @struct
+              (enum_item
+                name: (type_identifier) @name) @enum
+              (trait_item
+                name: (type_identifier) @name) @trait
+            ]
+        "#;
+        
+        let query = Query::new(tree_sitter_rust::language(), query_str)
+            .map_err(|e| NekocodeError::Analysis(format!("Failed to create query: {:?}", e)))?;
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        
+        for mat in matches {
+            let mut class_name = String::new();
+            let mut class_node = None;
+            
+            for capture in mat.captures {
+                match query.capture_names()[capture.index as usize].as_ref() {
+                    "name" => {
+                        if let Ok(name) = capture.node.utf8_text(source.as_bytes()) {
+                            class_name = name.to_string();
+                        }
+                    }
+                    "struct" | "enum" | "trait" => {
+                        class_node = Some(capture.node);
+                    }
+                    _ => {}
+                }
+            }
+            
+            if let Some(node) = class_node {
+                let symbol = SymbolInfo {
+                    id: format!("rust_type_{}", class_name),
+                    name: class_name.clone(),
+                    symbol_type: SymbolType::Class,
+                    file_path: std::path::PathBuf::new(),
+                    line_start: node.start_position().row as u32 + 1,
+                    line_end: node.end_position().row as u32 + 1,
+                    column_start: node.start_position().column as u32,
+                    column_end: node.end_position().column as u32,
+                    language: Language::Rust,
+                    visibility: Some(Visibility::Public),
+                    parent_id: None,
+                    metadata: std::collections::HashMap::new(),
+                };
+                
+                let class_info = ClassInfo {
+                    symbol,
+                    base_classes: Vec::new(),
+                    interfaces: Vec::new(),
+                    methods: Vec::new(),
+                    fields: Vec::new(),
+                    is_abstract: false,
+                    is_interface: node.kind() == "trait_item",
+                };
+                
+                classes.push(class_info);
+            }
+        }
+        
+        Ok(classes)
+    }
 }
 
 #[async_trait]
@@ -391,6 +774,15 @@ impl Analyzer for RustAnalyzer {
         // Update file info with content data
         result.file_info.size_bytes = content.len() as u64;
         result.file_info.total_lines = content.lines().count() as u32;
+        
+        // Extract functions and classes
+        if self.config.extract_functions {
+            result.functions = self.extract_functions(&tree, content)?;
+        }
+        
+        if self.config.extract_classes {
+            result.classes = self.extract_classes(&tree, content)?;
+        }
         
         Ok(result)
     }
@@ -417,6 +809,114 @@ impl CppAnalyzer {
             config: AnalyzerConfig::default(),
         })
     }
+    
+    fn extract_simple(&self, tree: &Tree, source: &str) -> (Vec<FunctionInfo>, Vec<ClassInfo>) {
+        let mut functions = Vec::new();
+        let mut classes = Vec::new();
+        
+        // Recursive search for function_definition and class_specifier nodes
+        self.traverse_cpp_nodes(tree.root_node(), source, &mut functions, &mut classes);
+        
+        (functions, classes)
+    }
+    
+    fn traverse_cpp_nodes(&self, node: Node, source: &str, functions: &mut Vec<FunctionInfo>, classes: &mut Vec<ClassInfo>) {
+        // Check current node
+        if node.kind() == "function_definition" {
+            // Extract function name
+            let mut func_name = String::new();
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "function_declarator" {
+                    // Look deeper for identifier
+                    let mut decl_cursor = child.walk();
+                    for decl_child in child.children(&mut decl_cursor) {
+                        if decl_child.kind() == "identifier" {
+                            if let Ok(name) = decl_child.utf8_text(source.as_bytes()) {
+                                func_name = name.to_string();
+                                break;
+                            }
+                        }
+                    }
+                    if !func_name.is_empty() { break; }
+                }
+            }
+            
+            if func_name.is_empty() {
+                func_name = format!("function_{}", functions.len());
+            }
+            
+            let symbol = SymbolInfo {
+                id: format!("cpp_func_{}", func_name),
+                name: func_name,
+                symbol_type: SymbolType::Function,
+                file_path: std::path::PathBuf::new(),
+                line_start: node.start_position().row as u32 + 1,
+                line_end: node.end_position().row as u32 + 1,
+                column_start: node.start_position().column as u32,
+                column_end: node.end_position().column as u32,
+                language: Language::Cpp,
+                visibility: Some(Visibility::Public),
+                parent_id: None,
+                metadata: std::collections::HashMap::new(),
+            };
+            functions.push(FunctionInfo {
+                symbol,
+                parameters: Vec::new(),
+                return_type: None,
+                is_async: false,
+                is_static: false,
+                is_generic: false,
+                complexity: None,
+            });
+        } else if node.kind() == "class_specifier" || node.kind() == "struct_specifier" {
+            // Extract class name
+            let mut class_name = String::new();
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "type_identifier" {
+                    if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                        class_name = name.to_string();
+                        break;
+                    }
+                }
+            }
+            
+            if class_name.is_empty() {
+                class_name = format!("class_{}", classes.len());
+            }
+            
+            let symbol = SymbolInfo {
+                id: format!("cpp_class_{}", class_name),
+                name: class_name,
+                symbol_type: SymbolType::Class,
+                file_path: std::path::PathBuf::new(),
+                line_start: node.start_position().row as u32 + 1,
+                line_end: node.end_position().row as u32 + 1,
+                column_start: node.start_position().column as u32,
+                column_end: node.end_position().column as u32,
+                language: Language::Cpp,
+                visibility: Some(Visibility::Public),
+                parent_id: None,
+                metadata: std::collections::HashMap::new(),
+            };
+            classes.push(ClassInfo {
+                symbol,
+                base_classes: Vec::new(),
+                interfaces: Vec::new(),
+                methods: Vec::new(),
+                fields: Vec::new(),
+                is_abstract: false,
+                is_interface: false,
+            });
+        }
+        
+        // Recursively check children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.traverse_cpp_nodes(child, source, functions, classes);
+        }
+    }
 }
 
 #[async_trait]
@@ -440,6 +940,11 @@ impl Analyzer for CppAnalyzer {
         // Update file info with content data
         result.file_info.size_bytes = content.len() as u64;
         result.file_info.total_lines = content.lines().count() as u32;
+        
+        // Extract functions and classes
+        let (functions, classes) = self.extract_simple(&tree, content);
+        result.functions = functions;
+        result.classes = classes;
         
         Ok(result)
     }
@@ -466,6 +971,68 @@ impl GoAnalyzer {
             config: AnalyzerConfig::default(),
         })
     }
+    
+    fn extract_simple(&self, tree: &Tree, _source: &str) -> (Vec<FunctionInfo>, Vec<ClassInfo>) {
+        let mut functions = Vec::new();
+        let mut classes = Vec::new();
+        
+        let root = tree.root_node();
+        let mut cursor = root.walk();
+        
+        for node in root.children(&mut cursor) {
+            if node.kind() == "function_declaration" || node.kind() == "method_declaration" {
+                let symbol = SymbolInfo {
+                    id: format!("go_func_{}", functions.len()),
+                    name: format!("function_{}", functions.len()),
+                    symbol_type: SymbolType::Function,
+                    file_path: std::path::PathBuf::new(),
+                    line_start: node.start_position().row as u32 + 1,
+                    line_end: node.end_position().row as u32 + 1,
+                    column_start: node.start_position().column as u32,
+                    column_end: node.end_position().column as u32,
+                    language: Language::Go,
+                    visibility: Some(Visibility::Public),
+                    parent_id: None,
+                    metadata: std::collections::HashMap::new(),
+                };
+                functions.push(FunctionInfo {
+                    symbol,
+                    parameters: Vec::new(),
+                    return_type: None,
+                    is_async: false,
+                    is_static: false,
+                    is_generic: false,
+                    complexity: None,
+                });
+            } else if node.kind() == "type_declaration" {
+                let symbol = SymbolInfo {
+                    id: format!("go_type_{}", classes.len()),
+                    name: format!("type_{}", classes.len()),
+                    symbol_type: SymbolType::Class,
+                    file_path: std::path::PathBuf::new(),
+                    line_start: node.start_position().row as u32 + 1,
+                    line_end: node.end_position().row as u32 + 1,
+                    column_start: node.start_position().column as u32,
+                    column_end: node.end_position().column as u32,
+                    language: Language::Go,
+                    visibility: Some(Visibility::Public),
+                    parent_id: None,
+                    metadata: std::collections::HashMap::new(),
+                };
+                classes.push(ClassInfo {
+                    symbol,
+                    base_classes: Vec::new(),
+                    interfaces: Vec::new(),
+                    methods: Vec::new(),
+                    fields: Vec::new(),
+                    is_abstract: false,
+                    is_interface: false,
+                });
+            }
+        }
+        
+        (functions, classes)
+    }
 }
 
 #[async_trait]
@@ -489,6 +1056,11 @@ impl Analyzer for GoAnalyzer {
         // Update file info with content data
         result.file_info.size_bytes = content.len() as u64;
         result.file_info.total_lines = content.lines().count() as u32;
+        
+        // Extract functions and classes
+        let (functions, classes) = self.extract_simple(&tree, content);
+        result.functions = functions;
+        result.classes = classes;
         
         Ok(result)
     }
@@ -515,6 +1087,107 @@ impl CSharpAnalyzer {
             config: AnalyzerConfig::default(),
         })
     }
+    
+    fn extract_simple(&self, tree: &Tree, source: &str) -> (Vec<FunctionInfo>, Vec<ClassInfo>) {
+        let mut functions = Vec::new();
+        let mut classes = Vec::new();
+        
+        // Recursive search for C# nodes
+        self.traverse_csharp_nodes(tree.root_node(), source, &mut functions, &mut classes);
+        
+        (functions, classes)
+    }
+    
+    fn traverse_csharp_nodes(&self, node: Node, source: &str, functions: &mut Vec<FunctionInfo>, classes: &mut Vec<ClassInfo>) {
+        // Check current node
+        if node.kind() == "method_declaration" {
+            // Extract method name
+            let mut func_name = String::new();
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "identifier" {
+                    if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                        func_name = name.to_string();
+                        break;
+                    }
+                }
+            }
+            
+            if func_name.is_empty() {
+                func_name = format!("method_{}", functions.len());
+            }
+            
+            let symbol = SymbolInfo {
+                id: format!("csharp_func_{}", func_name),
+                name: func_name,
+                symbol_type: SymbolType::Function,
+                file_path: std::path::PathBuf::new(),
+                line_start: node.start_position().row as u32 + 1,
+                line_end: node.end_position().row as u32 + 1,
+                column_start: node.start_position().column as u32,
+                column_end: node.end_position().column as u32,
+                language: Language::CSharp,
+                visibility: Some(Visibility::Public),
+                parent_id: None,
+                metadata: std::collections::HashMap::new(),
+            };
+            functions.push(FunctionInfo {
+                symbol,
+                parameters: Vec::new(),
+                return_type: None,
+                is_async: false,
+                is_static: false,
+                is_generic: false,
+                complexity: None,
+            });
+        } else if node.kind() == "class_declaration" || node.kind() == "interface_declaration" {
+            // Extract class name
+            let mut class_name = String::new();
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "identifier" {
+                    if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                        class_name = name.to_string();
+                        break;
+                    }
+                }
+            }
+            
+            if class_name.is_empty() {
+                class_name = format!("class_{}", classes.len());
+            }
+            
+            let symbol = SymbolInfo {
+                id: format!("csharp_class_{}", class_name),
+                name: class_name,
+                symbol_type: SymbolType::Class,
+                file_path: std::path::PathBuf::new(),
+                line_start: node.start_position().row as u32 + 1,
+                line_end: node.end_position().row as u32 + 1,
+                column_start: node.start_position().column as u32,
+                column_end: node.end_position().column as u32,
+                language: Language::CSharp,
+                visibility: Some(Visibility::Public),
+                parent_id: None,
+                metadata: std::collections::HashMap::new(),
+            };
+            classes.push(ClassInfo {
+                symbol,
+                base_classes: Vec::new(),
+                interfaces: Vec::new(),
+                methods: Vec::new(),
+                fields: Vec::new(),
+                is_abstract: false,
+                is_interface: node.kind() == "interface_declaration",
+            });
+        }
+        
+        // Recursively check children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.traverse_csharp_nodes(child, source, functions, classes);
+        }
+    }
 }
 
 #[async_trait]
@@ -538,6 +1211,11 @@ impl Analyzer for CSharpAnalyzer {
         // Update file info with content data
         result.file_info.size_bytes = content.len() as u64;
         result.file_info.total_lines = content.lines().count() as u32;
+        
+        // Extract functions and classes
+        let (functions, classes) = self.extract_simple(&tree, content);
+        result.functions = functions;
+        result.classes = classes;
         
         Ok(result)
     }
