@@ -403,12 +403,22 @@ impl TreeSitterRustAnalyzer {
             }
             
             parent.add_child(ast_node);
-        }
-        
-        // Recurse through children
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.build_ast_recursive(child, source, parent, depth + 1);
+            
+            // Use the newly created node as parent for its children
+            let parent_index = parent.children.len() - 1;
+            let new_parent = &mut parent.children[parent_index];
+            
+            // Recurse through children with the new node as parent
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.build_ast_recursive(child, source, new_parent, depth + 1);
+            }
+        } else {
+            // For unknown nodes, just recurse through children with the same parent
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                self.build_ast_recursive(child, source, parent, depth + 1);
+            }
         }
     }
 }
