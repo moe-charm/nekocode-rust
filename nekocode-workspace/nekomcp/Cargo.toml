@@ -1,0 +1,32 @@
+[package]
+name = "nekomcp"
+version = "0.1.0"
+edition = "2021"
+description = "MCP (Model Context Protocol) server for NekoCode"
+authors = ["NekoCode Team"]
+
+[[bin]]
+name = "nekomcp"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+nekocode-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+clap = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+async-trait = { workspace = true }
+
+# MCP-specific dependencies
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+hyper = { version = "1.0", features = ["full"] }
+futures = "0.3"
