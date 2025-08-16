@@ -406,6 +406,17 @@ impl ImpactAnalyzer {
             if let Some(ref compare_ref) = self.config.compare_ref {
                 match self.analyze_file_at_git_ref(&file.file_info.path, compare_ref).await {
                     Ok(old_functions) => {
+                        if self.config.verbose {
+                            println!("📄 Old version functions found: {}", old_functions.len());
+                            for func in &old_functions {
+                                println!("  📍 Old: {}({})", func.name, func.parameters.join(", "));
+                            }
+                            println!("📄 Current version functions found: {}", file.functions.len());
+                            for func in &file.functions {
+                                println!("  📍 Current: {}({})", func.name, func.parameters.join(", "));
+                            }
+                        }
+                        
                         // Compare old vs new functions to detect changes
                         let current_functions: HashSet<String> = file.functions.iter()
                             .map(|f| f.name.clone())
@@ -421,9 +432,7 @@ impl ImpactAnalyzer {
                                 let breaking_change = *usage_count > 0; // Any usage makes deletion breaking
                                 
                                 if self.config.verbose {
-                                    println!("📄 Found {} functions, {} classes in old version", old_functions.len(), 0);
-                                    println!("📄 File {} was deleted: {} functions, {} classes removed", 
-                                            file.file_info.path.display(), old_functions.len(), 0);
+                                    println!("❌ DELETED function: {}({})", old_func.name, old_func.parameters.join(", "));
                                 }
                                 
                                 changed_symbols.push(ChangedSymbol {
@@ -465,9 +474,19 @@ impl ImpactAnalyzer {
                                     let old_sig = self.format_function_signature(old_func);
                                     let new_sig = self.format_function_signature(function);
                                     
+                                    if self.config.verbose {
+                                        println!("🔍 Comparing signatures for {}:", function.name);
+                                        println!("  📍 Old: {}", old_sig);
+                                        println!("  📍 New: {}", new_sig);
+                                    }
+                                    
                                     if old_sig != new_sig {
                                         let usage_count = function_usage_count.get(&function.name).unwrap_or(&0);
                                         let breaking_change = *usage_count > 0; // Usage makes changes potentially breaking
+                                        
+                                        if self.config.verbose {
+                                            println!("🔄 SIGNATURE CHANGED: {} -> {}", old_sig, new_sig);
+                                        }
                                         
                                         changed_symbols.push(ChangedSymbol {
                                             name: function.name.clone(),
@@ -989,27 +1008,55 @@ impl ImpactAnalyzer {
         use std::process::Command;
         use crate::core::session::AnalysisSession;
         
-        // Get the relative path from the file_path
-        let relative_path = if let Some(parent) = file_path.parent() {
-            file_path.strip_prefix(parent).unwrap_or(file_path)
+        // Find git root directory
+        let git_root = {
+            let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let mut current = if file_path.is_absolute() {
+                file_path.parent().unwrap_or(file_path)
+            } else {
+                current_dir.as_path()
+            };
+            
+            loop {
+                if current.join(".git").exists() {
+                    break current.to_path_buf();
+                }
+                if let Some(parent) = current.parent() {
+                    current = parent;
+                } else {
+                    break current_dir;
+                }
+            }
+        };
+        
+        // Get relative path from git root
+        let relative_path = if file_path.is_absolute() {
+            file_path.strip_prefix(&git_root).unwrap_or(file_path)
         } else {
             file_path
         };
         
         if self.config.verbose {
-            println!("📄 Getting file content: {}:{}", git_ref, relative_path.display());
+            println!("📄 Getting file content: {}:{} (git_root: {})", git_ref, relative_path.display(), git_root.display());
         }
         
         // Get file content from git
         let output = Command::new("git")
             .arg("show")
             .arg(format!("{}:{}", git_ref, relative_path.display()))
-            .current_dir(file_path.parent().unwrap_or_else(|| Path::new(".")))
+            .current_dir(&git_root)
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to run git show command: {}", e))?;
             
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
+            if self.config.verbose {
+                println!("⚠️ Git show failed for {}:{} - {}", git_ref, relative_path.display(), error);
+            }
+            // If file doesn't exist at this ref, return empty vec
+            if error.contains("does not exist") || error.contains("exists on disk, but not in") {
+                return Ok(Vec::new());
+            }
             anyhow::bail!("Git show failed: {}", error);
         }
         
