@@ -1,0 +1,21 @@
+[package]
+name = "nekoinc"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "nekoinc"
+path = "src/main.rs"
+
+[dependencies]
+nekocode-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+chrono = { workspace = true }
+env_logger = { workspace = true }
+notify = { workspace = true }
+walkdir = { workspace = true }
+log = { workspace = true }

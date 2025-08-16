@@ -1,280 +1,252 @@
-# 🚀 NekoCode Rust - 開発完了＆運用フェーズ
+# 🚀 NekoCode エコシステム分離計画
 
-**最終更新**: 2025-08-13 19:00:00  
-**ステータス**: 📚 **docs大幅更新完了・次はMCPセッション自動管理テスト**  
-**優先度**: 🧪 **MCPセッション自動管理システムのテスト**
+## 📋 現在の状況 (2025-08-16)
 
-## 🎉 **大成功：Copilot先生がインクリメンタル解析完全実装！**
+### 🎯 解決すべき問題
+- **NekoCodeが機能詰め込みすぎ**でモノリシック化
+- リファクタリング機能追加でさらに複雑化の懸念
+- バイナリサイズが大きく起動が遅い（15MB）
+- 各機能が密結合で独立して進化できない
 
-### 🚀 **最新実証結果 (2025-08-13)**
-**nyashプロジェクト (85ファイル) での実証テスト完了！**
-- **初回解析**: 267ms (ベースライン)
-- **インクリメンタル更新**: 23-49ms (**918-1956倍高速化！**)
-- **変更検出**: < 1ms (**45000倍高速化！**)
-- **すべての機能**: dry-run、verbose、複数ファイル変更検出、すべて完璧動作
+### 💡 解決策：Unix哲学に基づく分離
+「1つのことをうまくやる」ツール群に分割
 
-### 📊 現在の実装状況
-```rust
-// SessionInfo構造体（既存）
-pub struct SessionInfo {
-    pub last_accessed: DateTime<Utc>,        // ✅ 既存
-    pub analysis_results: Vec<AnalysisResult>, // ✅ 既存
-    // ファイル解析時間も記録済み！
-}
+## 🎯 実行ファイル構成（5種類）
 
-// AnalysisResult構造体（既存）
-pub struct AnalysisResult {
-    pub file_info: FileInfo {
-        pub analyzed_at: DateTime<Utc>,  // ✅ 既存！
-    }
-}
+### 1. **nekocode** - コア解析エンジン
+- **役割**: プロジェクト解析とセッション管理
+- **主要機能**:
+  - `session-create`: プロジェクト全体を解析してセッション作成
+  - `session-update`: インクリメンタル更新
+  - `analyze`: 単発解析（セッションなし）
+  - `ast-dump`, `ast-query`, `ast-stats`: AST操作
+- **依存**: Tree-sitter全言語パーサー（重い）
+- **サイズ目標**: 15MB
+
+### 2. **nekorefactor** - リファクタリング専用
+- **役割**: コードの構造的な変更
+- **主要機能**:
+  - `move-function`: 関数を別ファイルに移動
+  - `move-struct`: 構造体と実装を移動
+  - `extract-module`: モジュール抽出
+  - `split-file`: ファイル分割
+- **依存**: nekocodeのセッションを読むだけ（軽い）
+- **サイズ目標**: 3MB
+
+### 3. **nekoimpact** - 影響分析専用
+- **役割**: 変更の影響範囲分析
+- **主要機能**:
+  - `analyze`: 影響分析実行
+  - `--compare-ref`: Git履歴との比較
+  - `--format`: 出力形式（plain/json/github-comment）
+  - 循環依存検出、複雑度変化測定
+- **依存**: Git連携、セッション読み込み
+- **サイズ目標**: 2MB
+
+### 4. **nekowatch** - ファイル監視専用
+- **役割**: リアルタイム変更検出
+- **主要機能**:
+  - `start`: 監視開始
+  - `stop`: 監視停止
+  - `--trigger-update`: 変更時にsession-update実行
+- **依存**: notify-rs（ファイルシステム監視）
+- **サイズ目標**: 1MB
+
+### 5. **nekomcp** - MCP統合ゲートウェイ
+- **役割**: Claude Code統合
+- **主要機能**:
+  - 全ツールへの統一インターフェース
+  - MCPプロトコル実装
+  - 各バイナリをサブプロセスで実行
+- **依存**: 各ツールをコマンドラインで呼び出し
+- **サイズ目標**: 1MB
+
+## 📁 ディレクトリ構造
+
+```
+nekocode-rust/
+├── Cargo.toml                 # ワークスペース定義
+├── nekocode-core/             # 共通ライブラリ
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs
+│       ├── session.rs         # セッション管理
+│       ├── ast.rs             # AST構造体定義
+│       ├── types.rs           # 共通型定義
+│       └── config.rs          # 設定管理
+│
+├── nekocode/                  # 解析エンジン
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs
+│       ├── analyzers/         # 各言語アナライザー
+│       │   ├── javascript/
+│       │   ├── rust/
+│       │   ├── python/
+│       │   └── ...
+│       ├── commands/
+│       └── core/
+│
+├── nekorefactor/              # リファクタリング
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs
+│       ├── move_function.rs
+│       ├── move_struct.rs
+│       ├── extract_module.rs
+│       └── build_verify.rs   # ビルド確認
+│
+├── nekoimpact/                # 影響分析
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs
+│       ├── git_integration.rs
+│       ├── impact_analyzer.rs
+│       └── risk_assessment.rs
+│
+├── nekowatch/                 # ファイル監視
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs
+│       └── watcher.rs
+│
+└── nekomcp/                   # MCP統合
+    ├── Cargo.toml
+    └── src/
+        ├── main.rs
+        └── server.rs
 ```
 
-### 🎯 実際に必要な作業（想定の1/10）
-**元の想定**: 2-3週間の大規模実装  
-**実際**: 1-2日の軽微な追加のみ
+## 🔄 実装計画
 
-### ⚡ 期待される成果（変更なし）
+### Phase 1: 基盤構築（✅ 完了 2025-08-16）
+- [x] 詳細設計完了（Task先生による分析）
+- [x] nekocode-workspace/ディレクトリ作成
+- [x] Workspace Cargo.toml作成
+- [x] nekocode-core/Cargo.toml作成
+- [x] nekocode-core/src/lib.rs基本構造
+- [x] nekocode-core/src/types.rs（共通型定義）
+- [x] nekocode-core/src/error.rs（エラー型統一）
+- [x] nekocode-core/src/session.rs（セッション管理）
+- [x] nekocode-core/src/config.rs（設定管理）
+- [x] nekocode-core/src/io.rs（ファイルI/O）
+- [x] nekocode-core/src/memory.rs（メモリ管理）
+- [x] nekocode-core/src/traits.rs（共通トレイト）
+- [x] 全バイナリのスタブ作成とビルド成功
+
+### Phase 2: 個別バイナリ実装（実施中 2025-08-16）
+- [x] nekoimpact実装完了（影響分析ツール）
+  - impact.rs: 影響分析コア機能
+  - analyzer.rs: 分析オプション
+  - cli.rs: CLIインターフェース
+  - main.rs: メインエントリポイント
+  - ビルド成功確認済み
+- [x] nekorefactor実装完了（リファクタリングツール）
+  - preview.rs: プレビュー管理システム
+  - replace.rs: テキスト置換機能
+  - moveclass.rs: クラス/関数移動機能
+  - cli.rs: 豊富なCLIコマンド
+  - main.rs: 統合エントリポイント
+  - ビルド成功確認済み
+- [x] nekoinc実装完了（インクリメンタル解析・Watch機能）
+  - incremental.rs: 変更検出エンジン
+  - watch.rs: ファイル監視システム（tokio::sync::Mutex使用）
+  - cli.rs: 多機能CLIコマンド
+  - main.rs: 統合エントリポイント
+  - ビルド成功確認済み
+- [ ] nekocode実装（Tree-sitter解析）
+- [ ] 依存関係解析
+- [ ] use文自動生成
+- [ ] ビルド検証機能
+
+### Phase 3: 既存機能の移行（1週間）
+- [ ] analyze-impact → nekoimpact
+- [ ] watch機能 → nekowatch
+- [ ] 各機能のテスト
+
+### Phase 4: MCP統合（3日）
+- [ ] nekomcp実装
+- [ ] 統一インターフェース
+- [ ] Claude Code設定更新
+
+### Phase 5: 最適化（3日）
+- [ ] バイナリサイズ最適化
+- [ ] 起動速度改善
+- [ ] ドキュメント更新
+
+## 🎯 成功基準
+
+### 機能面
+- [ ] 各ツールが独立して動作
+- [ ] セッション共有が正常に機能
+- [ ] nekorefactorでmove-functionが動作
+- [ ] ビルド成功を保証
+
+### パフォーマンス
+- [ ] nekorefactor起動時間 < 100ms
+- [ ] move-function実行 < 1秒
+- [ ] バイナリサイズ合計 < 25MB（現在の15MBから分離）
+
+### 開発効率
+- [ ] 各ツールを独立してテスト可能
+- [ ] 機能追加が他ツールに影響しない
+- [ ] 新規開発者が理解しやすい
+
+## 📝 使用例
+
 ```bash
-# 現在の解析速度
-./nekocode_ai session-create large-project/  # 45秒
+# Step 1: 解析してセッション作成
+$ nekocode session-create ./my-rust-project
+Session created: abc123
 
-# インクリメンタル対応後
-./nekocode_ai session-update session_abc     # 1-3秒！
-# → 45秒 → 3秒 = 15倍高速化達成
+# Step 2: リファクタリング実行
+$ nekorefactor move-function abc123 process_data src/lib.rs src/processors/data.rs
+✅ Moved function 'process_data'
+✅ Added necessary imports
+✅ Build successful!
+
+# Step 3: 影響分析
+$ nekoimpact analyze abc123 --compare-ref main
+⚠️ 3 breaking changes detected
+
+# Step 4: 監視開始
+$ nekowatch start abc123 --trigger-update
+👀 Watching for changes...
 ```
 
-## 🔍 技術分析結果（エージェント相談完了）
+## 🚀 期待される効果
 
-### ✅ **実現可能性: 95%**
-- 既存のRust+Tree-sitter基盤が理想的
-- セッション管理システムが完璧な基盤
-- メモリ効率とパフォーマンスでRustが有利
+1. **保守性向上**: 各ツールが単一責任
+2. **パフォーマンス改善**: 必要な機能だけロード
+3. **開発速度向上**: 並行開発可能
+4. **ユーザビリティ**: 必要なツールだけインストール
+5. **拡張性**: 新ツール追加が容易
 
-### 🏗️ **核心技術**
-1. **ファイル変更検出**: mtime + ハッシュベース
-2. **依存関係追跡**: import/include解析
-3. **連鎖更新**: 影響範囲の自動計算
-4. **Tree-sitter最適化**: AST部分更新
+## ⚠️ 注意事項
 
-## 🛠️ **実際の実装計画（シンプル版）**
-
-### ✅ **既に実装済み**
-- [x] セッション永続化（JSON）
-- [x] ファイル解析結果の保存
-- [x] タイムスタンプ記録（`analyzed_at`, `last_accessed`）
-- [x] セッション管理システム
-
-### 🔧 **実際に追加が必要な項目（1-2日）**
-- [ ] ファイル変更時間（mtime）チェック機能
-- [ ] `session-update` コマンド（main.rsに追加）
-- [ ] 変更されたファイルのみ再解析するロジック
-
-#### 成功基準（変更なし）
-- ✅ 45秒→3秒以内の更新時間短縮（15倍高速化）
-- ✅ 基本的な変更検出が正確に動作
-- ✅ 既存機能への影響なし
-
-#### UI設計
-```bash
-# メインコマンド
-./nekocode_ai session-update <session_id>
-
-# 更新結果表示
-{
-  "update_summary": {
-    "total_time_ms": 1250,
-    "files_changed": 3,
-    "files_analyzed": 7,
-    "speedup": "36x faster than full rebuild"
-  }
-}
-```
-
-### 🔄 **Phase 2: 依存関係対応 (3-4週間)**
-**目標**: import/include連鎖更新
-
-#### 実装項目
-- [ ] `DependencyGraph` 構造体実装
-- [ ] import/include解析強化
-- [ ] 連鎖更新ロジック
-- [ ] 影響範囲表示UI
-- [ ] 循環依存検出
-
-#### 成功基準
-- ✅ 依存関係変更の正確な検出
-- ✅ A変更→B自動更新の連鎖処理
-- ✅ 影響範囲の可視化
-
-### 🚀 **Phase 3: 高度機能 (4-5週間)**
-**目標**: 本格運用対応
-
-#### 実装項目
-- [ ] リアルタイムファイル監視
-- [ ] マルチセッション競合制御
-- [ ] メモリ使用量最適化
-- [ ] パフォーマンス・ベンチマーク
-- [ ] エラー処理強化
-
-#### 成功基準
-- ✅ 1秒以内の更新時間達成
-- ✅ 1000+ファイルプロジェクト対応
-- ✅ 安定した長時間稼働
-
-## 🛠️ 技術設計
-
-### 核心構造体
-```rust
-// 新規: ファイル変更検出
-pub struct ChangeDetector {
-    file_hashes: HashMap<PathBuf, u64>,
-    file_mtimes: HashMap<PathBuf, SystemTime>,
-}
-
-// 新規: 依存関係グラフ
-pub struct DependencyGraph {
-    dependencies: HashMap<PathBuf, Vec<PathBuf>>,
-    dependents: HashMap<PathBuf, Vec<PathBuf>>,
-}
-
-// 拡張: セッション情報
-pub struct SessionInfo {
-    // 既存フィールド...
-    pub file_metadata: HashMap<PathBuf, FileMetadata>,
-    pub dependency_info: DependencyGraph,
-    pub last_incremental_update: DateTime<Utc>,
-}
-```
-
-### アルゴリズム概要
-1. **高速変更検出**: mtime → ハッシュ → 変更確定
-2. **影響範囲計算**: 依存関係グラフで連鎖更新対象決定
-3. **並列再解析**: 変更ファイルのみTree-sitter解析
-4. **結果マージ**: 既存セッションと新規結果を統合
-
-## ⚠️ リスク管理
-
-### 🔴 高リスク
-- **メモリ使用量増大** → LRUキャッシュで軽減
-- **依存関係の複雑性** → 循環依存検出・深度制限
-
-### 🟡 中リスク  
-- **競合状態** → セッションロック機構
-- **ファイル監視性能** → ポーリング間隔調整
-
-### 軽減策
-```rust
-// メモリ管理
-struct SessionCache {
-    max_sessions: usize,
-    cache: lru::LruCache<String, SessionInfo>,
-}
-
-// 原子的更新
-async fn atomic_update(&mut self, session_id: &str) -> Result<()> {
-    let backup = self.create_backup(session_id)?;
-    // 更新処理...
-}
-```
-
-## 🧪 **次のアクション: MCPセッション自動管理システムのテスト**
-
-### 📚 **docs更新完了項目**
-- [x] README.md大幅更新 - File Watching/Memory/Configuration追加
-- [x] MCP README更新 - 統合設定システム・最新機能反映
-- [x] docs/CONFIGURATION_UPDATE.md作成 - 技術仕様詳細
-- [x] GitHub push完了 - 全ドキュメント最新化
-
-### 🎯 **次の優先タスク: MCPセッション自動管理テスト**
-
-#### 🔍 **テスト対象機能**
-1. **セッション自動作成** - MCPからの初回アクセス時
-2. **セッション自動復元** - 既存セッション検出・再利用
-3. **インクリメンタル更新** - session_update連携テスト
-4. **ファイル監視統合** - watch-start自動化
-5. **メモリ永続化** - analysis結果の自動保存
-
-#### 🧪 **テスト計画**
-1. **Claude Codeからのアクセステスト**
-   - 初回プロジェクト解析でセッション自動作成
-   - 2回目以降のアクセスでセッション再利用確認
-   
-2. **MCP統合動作テスト**  
-   - `mcp__nekocode__session_create`の自動管理
-   - `mcp__nekocode__session_stats`の高速化確認
-   - トークン制限の適切な動作
-   
-3. **設定ファイル連携テスト**
-   - `nekocode_config.json`の自動読み込み
-   - file_watching設定の反映確認
-
-### 🎪 **テスト成功基準**
-- ✅ Claude CodeからシームレスなMCPアクセス
-- ✅ セッション管理の透明性（ユーザー操作不要）
-- ✅ 初回以降の3ms高速レスポンス
-- ✅ 拡張子なしファイル（Makefile等）の適切な監視
-
-## 💡 期待される革命
-
-### 🚀 **開発体験**
-```bash
-# 従来: 毎回45秒待機
-vim src/app.js        # 編集
-./nekocode_ai analyze # 45秒... ☕
-
-# 革命後: ほぼリアルタイム
-vim src/app.js                    # 編集  
-./nekocode_ai session-update abc  # 2秒！⚡
-```
-
-### 🤖 **Claude Code統合**
-- 巨大プロジェクトでも瞬時解析
-- リアルタイム・コード理解
-- AI支援開発の新次元
+- セッションフォーマットの後方互換性維持
+- 既存のMCP設定との互換性確保
+- ドキュメント・READMEの全面更新必要
 
 ---
+**更新日時**: 2025-08-16 13:15:00  
+**現在の焦点**: Phase 2実施中 - 個別バイナリ実装  
+**ステータス**: 🚀 **3/5バイナリ完成！残り2つ実装中**
 
-## 📚 **技術相談記録**
-
-### 🤖 **専門エージェント分析結果**
-- **実現可能性**: 95% (非常に高い)
-- **実装難易度**: 中程度 (段階的実装で軽減)
-- **性能向上**: 15-45倍高速化が技術的に実現可能
-- **リスク**: 低〜中程度 (適切な軽減策あり)
-
-### 💡 **主要な技術的洞察**
-1. **既存基盤の完成度**: セッション管理、Tree-sitter統合が理想的
-2. **Rust性能優位性**: ファイルI/O、並列処理で大幅な性能向上
-3. **Tree-sitter適合性**: インクリメンタル更新に最適な設計
-4. **段階的実装**: リスクを最小化しながら価値を早期提供
-
-### 🎯 **推奨アプローチ**
-- **MVP優先**: 基本機能から段階的に拡張
-- **既存活用**: 現在のアーキテクチャを最大限活用
-- **性能重視**: 15倍高速化を第一目標に設定
-
----
-
----
-
-## 🎉 **結論：ユーザーの直感が正しかった！**
-
-### 📝 **調査結果**
-- **基本的なファイル追跡機能**: ✅ **既に90%実装済み**
-- **必要な追加作業**: 想定の1/10以下（数時間〜1日）
-- **GitHub Issue #16**: 過度に複雑化していた
-
-### 🚀 **実装可能性**
-```bash
-# 現実的なタイムライン
-今日中: session-updateコマンド完成
-明日: 基本的なインクリメンタル解析動作
-来週: 完全な動作確認・テスト
-
-# 当初想定: 2-3週間
-# 実際: 1-2日
-```
-
-**🐱 基本機能は既にあった！軽微な追加で15倍高速化達成可能！** ⚡
-
-**ユーザーの「まさかとは思うが、それを忘れているなんて」→ 正解でした！** 💡
+## 🎉 達成事項
+- **nekocode-core共通ライブラリ** 完成
+- **5つのバイナリ構造** 確立
+- **nekoimpact** 完全実装・ビルド成功
+  - 影響分析機能
+  - セッション比較
+  - 3つの出力形式（plain/json/github-comment）
+- **nekorefactor** 完全実装・ビルド成功
+  - プレビュー管理システム
+  - テキスト置換（regex対応）
+  - クラス/関数移動
+  - 行移動・ファイル分割機能
+- **nekoinc** 完全実装・ビルド成功
+  - インクリメンタル変更検出
+  - ファイルWatch機能（notify使用）
+  - 比較・エクスポート機能
+  - 非同期処理対応（tokio::sync::Mutex）
