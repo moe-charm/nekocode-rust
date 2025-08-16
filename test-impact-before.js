@@ -1,10 +1,11 @@
-// テスト用ファイル - 変更後のバージョン（破壊的変更）
-// getUserByIdのシグネチャ変更
-function getUserById(id, options) {
-    return database.get(id, options);
+// テスト用ファイル - 変更前のバージョン（オリジナル）
+function getUserById(id) {
+    return database.get(id);
 }
 
-// deleteUser関数を削除！（破壊的変更）
+function deleteUser(id) {
+    return database.delete(id);
+}
 
 function updateUser(id, data) {
     return database.update(id, data);
