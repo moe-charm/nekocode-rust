@@ -4,7 +4,8 @@ members = [
     "nekocode",
     "nekorefactor",
     "nekoimpact",
-    "nekoinc"
+    "nekoinc",
+    "nekomcp"
 ]
 resolver = "2"
 
