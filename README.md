@@ -120,6 +120,55 @@ jobs:
 
 ## 🔧 Advanced Features
 
+### 🆕 5-Binary Unix Toolchain (New Architecture!)
+
+NekoCode now follows Unix philosophy with 5 specialized tools:
+
+#### **1. nekocode** - Core Analysis Engine (67.8MB)
+```bash
+# Project analysis and session management
+./nekocode analyze src/
+./nekocode session-create src/
+./nekocode ast-query SESSION_ID "MyClass::myMethod"
+```
+
+#### **2. nekorefactor** - Safe Code Refactoring (51.4MB) ⭐ NEW!
+```bash
+# 🆕 Create files with templates
+./nekorefactor create-file todo.py --template python-cli
+./nekorefactor create-file lib.rs --template rust-lib
+
+# 🆕 Smart semantic positioning (immediate by default, Git as safety net)
+./nekorefactor insert file.py "def helper(): pass" --after-function main
+./nekorefactor insert file.py "import json" --in-imports
+./nekorefactor insert file.cpp "private:" --after-class MyClass
+
+# Text replacement (immediate by default)
+./nekorefactor replace file.js "oldName" "newName"
+
+# Optional preview mode for safety checks
+./nekorefactor replace file.js "oldName" "newName" --preview
+./nekorefactor insert file.py "def helper(): pass" --after-function main --preview
+```
+
+#### **3. nekoimpact** - Change Impact Analysis (51.2MB)
+```bash
+# Impact analysis for PR reviews
+./nekoimpact analyze SESSION_ID --format github-comment
+./nekoimpact compare --base SESSION1 --head SESSION2
+```
+
+#### **4. nekoinc** - Incremental Analysis (57.8MB)
+```bash
+# High-speed incremental updates
+./nekoinc update SESSION_ID --verbose
+./nekoinc watch SESSION_ID --debounce 500
+./nekoinc export SESSION_ID -o changes.json
+```
+
+#### **5. nekomcp** - MCP Integration Gateway
+Claude Code integration via Model Context Protocol (existing implementation).
+
 ### Session Management & Incremental Analysis ⚡
 ```bash
 # Create persistent analysis session

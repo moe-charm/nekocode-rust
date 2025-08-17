@@ -763,9 +763,144 @@ nekorefactor smart-insert --code "def new_func(): pass" --after main
 **改善後**: 上記3点だけでも劇的に使いやすくなる！
 
 ---
-**更新日時**: 2025-08-16 14:30:00  
-**現在の焦点**: AI編集改善計画策定・smart-insert設計
-**ステータス**: 🎯 **計画策定完了・実装準備中**
+
+# 🎉 **MCP統合完了・動作テスト** (2025-08-16 15:30)
+
+## ✅ **完了事項**
+
+### **1. 5分割版MCP統合**
+```bash
+# セットアップスクリプト作成
+nekocode-workspace/setup.py         # カラフル表示・詳細説明
+nekocode-workspace/mcp_wrapper_5binary.py  # 5バイナリ統合ラッパー
+```
+
+### **2. モノリシック版MCP設定**
+```bash
+# 実行済みコマンド
+claude mcp add nekocode \
+  -e NEKOCODE_BINARY_PATH=/mnt/workdisk/public_share/nyacore-workspace/tools/nekocode-rust/releases/nekocode-rust \
+  -- python3 /mnt/workdisk/public_share/nyacore-workspace/tools/nekocode-rust/mcp-nekocode-server/mcp_server_real.py
+
+# 結果
+✅ Added stdio MCP server nekocode
+✅ File modified: /home/tomoaki/.claude.json
+✅ Project: /mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github
+```
+
+## 🧪 **MCPテスト予定**
+
+### **テスト項目**
+1. **基本動作確認**
+   ```
+   mcp__nekocode__list_languages
+   mcp__nekocode__analyze(path: ".", stats_only: true)
+   ```
+
+2. **編集機能テスト**
+   ```
+   mcp__nekocode__insert_preview
+   mcp__nekocode__replace_preview
+   mcp__nekocode__create_file (5分割版のみ)
+   ```
+
+3. **セッション機能**
+   ```
+   mcp__nekocode__session_create
+   mcp__nekocode__session_stats
+   ```
+
+## ⚠️ **注意事項**
+- **再起動必要**: `mcp_server_real.py`に変更したため
+- **プロジェクトローカル設定**: このプロジェクトでのみ有効
+- **2つのバージョン**: モノリシック版（安定）と5分割版（新機能）
+
+---
+**更新日時**: 2025-08-16 15:30:00  
+**現在の焦点**: MCP動作テスト・Claude Code再起動待ち
+**ステータス**: 🚀 **MCP設定完了・テスト準備中**
+
+## 🧪 **MCP縛りTODOアプリ作成実験** (2025-08-16 22:00)
+
+### **言語選択: Python 🐍**
+
+**選定理由（深い検討の結果）:**
+1. **ビルド不要・即実行** - `python todo.py`で即フィードバック
+2. **インデント構造** - MCP編集で位置指定しやすい（行番号が明確）
+3. **標準ライブラリ充実** - json, argparse, datetimeだけで完結
+4. **エラーが親切** - デバッグしやすい
+5. **MCPツールとの相性** - Pythonのシンプルな構文は編集しやすい
+
+**他言語を選ばなかった理由:**
+- Rust: cargo build遅い、所有権でMCP編集が複雑化
+- JS: ブレース記法でインデント崩れやすい
+- Go: go build必要、エラー処理冗長
+- C++/C#: コンパイル必要、環境構築複雑
+
+### **実装計画**
+
+1. **基本構造作成** (MCP only)
+   - todo.py作成
+   - データ構造定義
+   - 基本関数実装
+
+2. **CRUD機能** (MCP only)
+   - add_todo(task)
+   - list_todos()
+   - complete_todo(id)
+   - delete_todo(id)
+
+3. **永続化** (MCP only)
+   - JSONファイル保存
+   - 起動時読み込み
+
+4. **CLI化** (MCP only)
+   - argparse追加
+   - コマンド実装
+
+### **成功基準**
+- ✅ MCPツールのみで完成
+- ✅ Edit/Write一切使わない
+- ✅ 動作するTODOアプリ完成
+
+### **発見した問題と解決**
+- memory_load バグ修正済み（IDと名前両方で検索可能に）
+- MCPサーバーキャッシュ問題確認
+
+
+### **実験結果** ✅ 大成功！→ 🚀 **さらに改良実施中！**
+
+**達成事項:**
+1. ✅ **新機能実装完了** (2025-08-17 05:30)
+   - `create-file`: テンプレート付きファイル作成
+   - セマンティック位置指定: `--after-function`, `--in-imports`等
+   - MCPツールのみでTODOアプリ完成
+
+2. 🔧 **新設計: 即適用デフォルト化** (実装中)
+   - **問題**: preview → confirm の2段階が面倒
+   - **洞察**: Git時代はプレビュー不要（git diffが真のプレビュー）
+   - **解決**: デフォルト即適用、`--preview`オプションで確認モード
+
+### **🎯 新しいコマンド体系（実装中）**
+
+**Before（現在・面倒）:**
+```bash
+nekorefactor insert-preview file.py "code" --after-function main
+nekorefactor insert-confirm PREVIEW_ID
+```
+
+**After（新設計・シンプル）:**
+```bash
+nekorefactor insert file.py "code" --after-function main        # 即適用（デフォルト）
+nekorefactor insert file.py "code" --after-function main --preview  # プレビューのみ
+```
+
+**統一設計原則:**
+- 即適用がデフォルト（9割のユースケース）
+- `--preview`オプションでプレビューモード
+- `--dry-run`エイリアスも提供
+- 全コマンド（insert, replace, movelines, moveclass）で統一
+---
 
 ## 🎉 達成事項
 - **nekocode-core共通ライブラリ** 完成

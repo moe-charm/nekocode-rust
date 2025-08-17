@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     
     // Execute command
     match cli.command {
-        Commands::ReplacePreview { file, pattern, replacement, regex, ignore_case, whole_word } => {
+        Commands::Replace { file, pattern, replacement, regex, ignore_case, whole_word, preview } => {
             let options = ReplaceOptions {
                 use_regex: regex,
                 case_sensitive: !ignore_case,
@@ -39,19 +39,42 @@ async fn main() -> Result<()> {
             let preview_op = engine.create_preview(file, pattern, replacement)?;
             let preview_id = preview_manager.add_preview(preview_op)?;
             
-            let preview = preview_manager.get_preview(&preview_id).unwrap();
-            println!("{}", preview.preview_text);
-            println!("\n✨ Preview ID: {}", preview_id);
-            println!("Use 'nekorefactor replace-confirm {}' to apply changes", preview_id);
+            if preview {
+                // Preview mode
+                let preview = preview_manager.get_preview(&preview_id).unwrap();
+                println!("{}", preview.preview_text);
+                println!("\n✨ Preview ID: {}", preview_id);
+            } else {
+                // Apply immediately
+                preview_manager.confirm_preview(&preview_id)?;
+                preview_manager.apply_preview(&preview_id)?;
+                println!("✅ Replacement applied successfully");
+            }
         }
         
-        Commands::ReplaceConfirm { preview_id } => {
-            preview_manager.confirm_preview(&preview_id)?;
-            preview_manager.apply_preview(&preview_id)?;
-            println!("✅ Preview {} applied successfully", preview_id);
+        Commands::CreateFile { file, template, force } => {
+            // Check if file exists
+            if file.exists() && !force {
+                eprintln!("❌ File already exists: {:?}", file);
+                eprintln!("Use --force to overwrite");
+                std::process::exit(1);
+            }
+            
+            // Get template content
+            let content = get_template_content(template.as_deref(), &file)?;
+            
+            // Write file
+            std::fs::write(&file, content)
+                .map_err(|e| NekocodeError::Io(e))?;
+            
+            println!("✅ Created file: {:?}", file);
+            
+            if let Some(tpl) = template {
+                println!("📝 Using template: {}", tpl);
+            }
         }
         
-        Commands::InsertPreview { file, position, content } => {
+        Commands::Insert { file, content, position, after_function, before_function, in_imports, after_class, preview } => {
             let insert_content = if content == "-" {
                 // Read from stdin
                 let mut buffer = String::new();
@@ -62,7 +85,20 @@ async fn main() -> Result<()> {
                 content
             };
             
-            let insert_pos = parse_insert_position(&position)?;
+            // Determine position based on semantic options or position string
+            let insert_pos = if let Some(func_name) = after_function {
+                find_semantic_position(&file, SemanticPosition::AfterFunction(func_name))?
+            } else if let Some(func_name) = before_function {
+                find_semantic_position(&file, SemanticPosition::BeforeFunction(func_name))?
+            } else if in_imports {
+                find_semantic_position(&file, SemanticPosition::InImports)?
+            } else if let Some(class_name) = after_class {
+                find_semantic_position(&file, SemanticPosition::AfterClass(class_name))?
+            } else if let Some(pos) = position {
+                parse_insert_position(&pos)?
+            } else {
+                return Err(NekocodeError::Config("No position specified".to_string()));
+            };
             
             let preview_op = preview::PreviewOperation::Insert {
                 file,
@@ -71,13 +107,21 @@ async fn main() -> Result<()> {
             };
             
             let preview_id = preview_manager.add_preview(preview_op)?;
-            let preview = preview_manager.get_preview(&preview_id).unwrap();
             
-            println!("{}", preview.preview_text);
-            println!("\n✨ Preview ID: {}", preview_id);
+            if preview {
+                // Preview mode
+                let preview = preview_manager.get_preview(&preview_id).unwrap();
+                println!("{}", preview.preview_text);
+                println!("\n✨ Preview ID: {}", preview_id);
+            } else {
+                // Apply immediately
+                preview_manager.confirm_preview(&preview_id)?;
+                preview_manager.apply_preview(&preview_id)?;
+                println!("✅ Content inserted successfully");
+            }
         }
         
-        Commands::MoveLinesPreview { source, start_line, line_count, destination, insert_line } => {
+        Commands::MoveLines { source, start_line, line_count, destination, insert_line, preview } => {
             // Read lines to move
             let source_content = std::fs::read_to_string(&source)
                 .map_err(|e| NekocodeError::Io(e))?;
@@ -107,60 +151,61 @@ async fn main() -> Result<()> {
             };
             
             let preview_id = preview_manager.add_preview(preview_op)?;
-            let preview = preview_manager.get_preview(&preview_id).unwrap();
             
-            println!("{}", preview.preview_text);
-            println!("\n✨ Preview ID: {}", preview_id);
-        }
-        
-        Commands::MoveClassPreview { session_id, symbol_id, target, update_imports } => {
-            let options = MoveOptions {
-                update_imports,
-                ..Default::default()
-            };
-            
-            let mut engine = MoveClassEngine::new(options)?;
-            
-            // Create preview (dry run)
-            let mut dry_run_engine = MoveClassEngine::new(MoveOptions {
-                dry_run: true,
-                ..Default::default()
-            })?;
-            
-            let result = dry_run_engine.move_symbol(&session_id, &symbol_id, &target).await?;
-            
-            println!("🏗️ Move Class Preview");
-            println!("Symbol: {}", result.symbol_name);
-            println!("Type: {}", result.symbol_type);
-            println!("From: {}", result.source_file.display());
-            println!("To: {}", result.target_file.display());
-            println!("Lines: {}", result.lines_moved);
-            
-            if update_imports {
-                println!("📦 Will update imports automatically");
+            if preview {
+                // Preview mode
+                let preview = preview_manager.get_preview(&preview_id).unwrap();
+                println!("{}", preview.preview_text);
+                println!("\n✨ Preview ID: {}", preview_id);
+            } else {
+                // Apply immediately
+                preview_manager.confirm_preview(&preview_id)?;
+                preview_manager.apply_preview(&preview_id)?;
+                println!("✅ Lines moved successfully");
             }
-            
-            // Create preview operation for confirmation
-            let preview_op = preview::PreviewOperation::MoveClass {
-                session_id: session_id.clone(),
-                symbol_id: symbol_id.clone(),
-                source_file: result.source_file,
-                target_file: result.target_file,
-                class_content: String::new(), // Will be filled during actual move
-            };
-            
-            let preview_id = preview_manager.add_preview(preview_op)?;
-            println!("\n✨ Preview ID: {}", preview_id);
-            println!("Use 'nekorefactor moveclass-confirm {}' to apply", preview_id);
         }
         
-        Commands::MoveClassConfirm { preview_id } => {
-            let preview = preview_manager.get_preview(&preview_id)
-                .ok_or_else(|| NekocodeError::Preview(format!("Preview not found: {}", preview_id)))?;
-            
-            if let preview::PreviewOperation::MoveClass { session_id, symbol_id, target_file, .. } = &preview.operation {
-                let mut engine = MoveClassEngine::default()?;
-                let result = engine.move_symbol(session_id, symbol_id, target_file).await?;
+        Commands::MoveClass { session_id, symbol_id, target, update_imports, preview } => {
+            if preview {
+                // Preview mode - dry run only
+                let mut dry_run_engine = MoveClassEngine::new(MoveOptions {
+                    dry_run: true,
+                    update_imports,
+                    ..Default::default()
+                })?;
+                
+                let result = dry_run_engine.move_symbol(&session_id, &symbol_id, &target).await?;
+                
+                println!("🏗️ Move Class Preview");
+                println!("Symbol: {}", result.symbol_name);
+                println!("Type: {}", result.symbol_type);
+                println!("From: {}", result.source_file.display());
+                println!("To: {}", result.target_file.display());
+                println!("Lines: {}", result.lines_moved);
+                
+                if update_imports {
+                    println!("📦 Will update imports automatically");
+                }
+                
+                // Create preview operation for potential later confirmation
+                let preview_op = preview::PreviewOperation::MoveClass {
+                    session_id: session_id.clone(),
+                    symbol_id: symbol_id.clone(),
+                    source_file: result.source_file,
+                    target_file: result.target_file,
+                    class_content: String::new(),
+                };
+                
+                let preview_id = preview_manager.add_preview(preview_op)?;
+                println!("\n✨ Preview ID: {}", preview_id);
+            } else {
+                // Apply immediately
+                let mut engine = MoveClassEngine::new(MoveOptions {
+                    update_imports,
+                    ..Default::default()
+                })?;
+                
+                let result = engine.move_symbol(&session_id, &symbol_id, &target).await?;
                 
                 if result.success {
                     println!("✅ Successfully moved {}", result.symbol_name);
@@ -171,8 +216,6 @@ async fn main() -> Result<()> {
                 } else {
                     println!("❌ Move operation failed");
                 }
-            } else {
-                return Err(NekocodeError::Preview("Invalid preview type for moveclass-confirm".to_string()));
             }
         }
         
@@ -273,6 +316,166 @@ fn parse_insert_position(pos: &str) -> Result<InsertPosition> {
                 Ok(InsertPosition::BeforeLine(line))
             } else {
                 Err(NekocodeError::Config(format!("Invalid position: {}", pos)))
+            }
+        }
+    }
+}
+
+/// Semantic position types
+enum SemanticPosition {
+    AfterFunction(String),
+    BeforeFunction(String),
+    InImports,
+    AfterClass(String),
+}
+
+/// Find semantic position in file
+fn find_semantic_position(file: &std::path::PathBuf, position: SemanticPosition) -> Result<InsertPosition> {
+    let content = std::fs::read_to_string(file)
+        .map_err(|e| NekocodeError::Io(e))?;
+    
+    let lines: Vec<&str> = content.lines().collect();
+    
+    match position {
+        SemanticPosition::AfterFunction(func_name) => {
+            // Find function definition
+            for (i, line) in lines.iter().enumerate() {
+                if line.contains(&format!("def {}", func_name)) || 
+                   line.contains(&format!("fn {}", func_name)) ||
+                   line.contains(&format!("function {}", func_name)) {
+                    // Find end of function (next function or end of file)
+                    for j in i+1..lines.len() {
+                        if lines[j].starts_with("def ") || 
+                           lines[j].starts_with("fn ") ||
+                           lines[j].starts_with("function ") ||
+                           lines[j].starts_with("class ") ||
+                           (!lines[j].starts_with(" ") && !lines[j].starts_with("\t") && !lines[j].is_empty()) {
+                            return Ok(InsertPosition::Line(j as u32 + 1));
+                        }
+                    }
+                    return Ok(InsertPosition::End);
+                }
+            }
+            Err(NekocodeError::Refactoring(format!("Function '{}' not found", func_name)))
+        }
+        SemanticPosition::BeforeFunction(func_name) => {
+            for (i, line) in lines.iter().enumerate() {
+                if line.contains(&format!("def {}", func_name)) || 
+                   line.contains(&format!("fn {}", func_name)) ||
+                   line.contains(&format!("function {}", func_name)) {
+                    return Ok(InsertPosition::Line(i as u32 + 1));
+                }
+            }
+            Err(NekocodeError::Refactoring(format!("Function '{}' not found", func_name)))
+        }
+        SemanticPosition::InImports => {
+            // Find last import statement
+            let mut last_import = 0;
+            for (i, line) in lines.iter().enumerate() {
+                if line.starts_with("import ") || 
+                   line.starts_with("from ") ||
+                   line.starts_with("use ") ||
+                   line.starts_with("#include") {
+                    last_import = i;
+                }
+            }
+            if last_import > 0 {
+                Ok(InsertPosition::AfterLine(last_import as u32 + 1))
+            } else {
+                Ok(InsertPosition::Start)
+            }
+        }
+        SemanticPosition::AfterClass(class_name) => {
+            for (i, line) in lines.iter().enumerate() {
+                if line.contains(&format!("class {}", class_name)) || 
+                   line.contains(&format!("struct {}", class_name)) {
+                    // Find end of class
+                    let mut brace_count = 0;
+                    for j in i..lines.len() {
+                        brace_count += lines[j].chars().filter(|&c| c == '{').count() as i32;
+                        brace_count -= lines[j].chars().filter(|&c| c == '}').count() as i32;
+                        if brace_count == 0 && j > i {
+                            return Ok(InsertPosition::AfterLine(j as u32 + 1));
+                        }
+                    }
+                }
+            }
+            Err(NekocodeError::Refactoring(format!("Class '{}' not found", class_name)))
+        }
+    }
+}
+
+/// Get template content based on template name
+fn get_template_content(template: Option<&str>, file: &std::path::PathBuf) -> Result<String> {
+    match template {
+        Some("python-cli") => Ok(r#"#!/usr/bin/env python3
+"""
+CLI application template
+"""
+
+import argparse
+import sys
+
+def main():
+    parser = argparse.ArgumentParser(description='TODO: Add description')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    args = parser.parse_args()
+    
+    print("Hello from Python CLI!")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+"#.to_string()),
+        
+        Some("rust-lib") => Ok(r#"//! Library module
+
+use std::error::Error;
+
+/// Main library function
+pub fn process() -> Result<(), Box<dyn Error>> {
+    println!("Hello from Rust library!");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process() {
+        assert!(process().is_ok());
+    }
+}
+"#.to_string()),
+        
+        Some("js-module") => Ok(r#"/**
+ * JavaScript module template
+ */
+
+export function hello() {
+    console.log("Hello from JS module!");
+}
+
+export default {
+    hello
+};
+"#.to_string()),
+        
+        Some(t) => Err(NekocodeError::Config(format!("Unknown template: {}", t))),
+        
+        None => {
+            // Detect by file extension
+            let ext = file.extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+                
+            match ext {
+                "py" => Ok("#!/usr/bin/env python3\n\n".to_string()),
+                "rs" => Ok("//! Module\n\n".to_string()),
+                "js" | "mjs" => Ok("// JavaScript file\n\n".to_string()),
+                "ts" => Ok("// TypeScript file\n\n".to_string()),
+                _ => Ok("".to_string()),
             }
         }
     }

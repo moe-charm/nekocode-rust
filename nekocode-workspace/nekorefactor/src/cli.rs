@@ -18,8 +18,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Preview text replacement
-    ReplacePreview {
+    /// Replace text in file
+    Replace {
         /// File to process
         file: PathBuf,
         
@@ -40,28 +40,63 @@ pub enum Commands {
         /// Match whole words only
         #[arg(short = 'w', long)]
         whole_word: bool,
+        
+        /// Preview only, don't apply changes
+        #[arg(long, alias = "dry-run")]
+        preview: bool,
     },
     
-    /// Confirm and apply a preview
-    ReplaceConfirm {
-        /// Preview ID to confirm
-        preview_id: String,
+    
+    /// Create a new file with template
+    CreateFile {
+        /// File path to create
+        file: PathBuf,
+        
+        /// Template to use (python-cli, rust-lib, js-module, etc.)
+        #[arg(long)]
+        template: Option<String>,
+        
+        /// Force overwrite if file exists
+        #[arg(long)]
+        force: bool,
     },
     
-    /// Preview inserting content
-    InsertPreview {
+    /// Insert content into file
+    Insert {
         /// File to modify
         file: PathBuf,
         
-        /// Position (start, end, or line number)
-        position: String,
-        
         /// Content to insert (or - for stdin)
         content: String,
+        
+        /// Position (start, end, or line number) - optional if using semantic options
+        #[arg(required_unless_present_any = ["after_function", "before_function", "in_imports", "after_class"])]
+        position: Option<String>,
+        
+        /// Insert after a specific function
+        #[arg(long)]
+        after_function: Option<String>,
+        
+        /// Insert before a specific function
+        #[arg(long)]
+        before_function: Option<String>,
+        
+        /// Insert in imports section
+        #[arg(long)]
+        in_imports: bool,
+        
+        /// Insert after a specific class
+        #[arg(long)]
+        after_class: Option<String>,
+        
+        /// Preview only, don't apply changes
+        #[arg(long, alias = "dry-run")]
+        preview: bool,
     },
     
-    /// Preview moving lines
-    MoveLinesPreview {
+    
+    /// Move lines between files
+    MoveLines {
         /// Source file
         source: PathBuf,
         
@@ -76,10 +111,14 @@ pub enum Commands {
         
         /// Line to insert at
         insert_line: u32,
+        
+        /// Preview only, don't apply changes
+        #[arg(long, alias = "dry-run")]
+        preview: bool,
     },
     
-    /// Preview moving a class/function
-    MoveClassPreview {
+    /// Move a class or function to another file
+    MoveClass {
         /// Session ID
         session_id: String,
         
@@ -92,12 +131,10 @@ pub enum Commands {
         /// Update imports automatically
         #[arg(long)]
         update_imports: bool,
-    },
-    
-    /// Confirm and apply a move class preview
-    MoveClassConfirm {
-        /// Preview ID to confirm
-        preview_id: String,
+        
+        /// Preview only, don't apply changes
+        #[arg(long, alias = "dry-run")]
+        preview: bool,
     },
     
     /// List all previews

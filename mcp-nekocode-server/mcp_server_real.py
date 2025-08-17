@@ -219,16 +219,33 @@ class NekoCodeMCPServer:
                 }
             },
             {
+                "name": "create_file",
+                "description": "📄 新規ファイル作成（テンプレート対応）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "作成するファイルパス"},
+                        "template": {"type": "string", "description": "テンプレート（python-cli/rust-lib/js-module等）"},
+                        "force": {"type": "boolean", "description": "既存ファイルを上書き", "default": False}
+                    },
+                    "required": ["file_path"]
+                }
+            },
+            {
                 "name": "insert_preview",
-                "description": "📝 挿入プレビュー（セッション不要・start/end/行番号）",
+                "description": "📝 挿入プレビュー（セマンティック位置対応）",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "file_path": {"type": "string", "description": "ファイルパス"},
+                        "content": {"type": "string", "description": "挿入内容"},
                         "position": {"type": "string", "description": "挿入位置（start/end/行番号）"},
-                        "content": {"type": "string", "description": "挿入内容"}
+                        "after_function": {"type": "string", "description": "指定関数の後に挿入"},
+                        "before_function": {"type": "string", "description": "指定関数の前に挿入"},
+                        "in_imports": {"type": "boolean", "description": "インポートセクションに挿入"},
+                        "after_class": {"type": "string", "description": "指定クラスの後に挿入"}
                     },
-                    "required": ["file_path", "position", "content"]
+                    "required": ["file_path", "content"]
                 }
             },
             {
@@ -672,6 +689,8 @@ class NekoCodeMCPServer:
                 return await self._tool_replace_preview(arguments)
             elif tool_name == "replace_confirm":
                 return await self._tool_replace_confirm(arguments)
+            elif tool_name == "create_file":
+                return await self._tool_create_file(arguments)
             elif tool_name == "insert_preview":
                 return await self._tool_insert_preview(arguments)
             elif tool_name == "insert_confirm":
@@ -922,32 +941,71 @@ class NekoCodeMCPServer:
         pattern = args["pattern"]
         replacement = args["replacement"]
         
-        # 直接コマンド実行（セッション不要）
-        result = await self._run_nekocode(["replace-preview", file_path, pattern, replacement])
+        # 新コマンド構造: replace --preview
+        result = await self._run_nekocode(["replace", file_path, pattern, replacement, "--preview"])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
         }
     
     async def _tool_replace_confirm(self, args: Dict) -> Dict:
-        """置換実行（セッション不要）"""
-        preview_id = args["preview_id"]
+        """置換実行（直接実行）"""
+        # 新設計: replace_confirmは使わず、replaceを直接実行
+        file_path = args.get("file_path")
+        pattern = args.get("pattern") 
+        replacement = args.get("replacement")
         
-        # 直接コマンド実行（セッション不要）
-        result = await self._run_nekocode(["replace-confirm", preview_id])
+        if not all([file_path, pattern, replacement]):
+            # 後方互換性のため preview_id も受け付けるが、実際は直接実行を推奨
+            return {
+                "content": [{"type": "text", "text": "新設計では replace コマンドを直接実行してください（preview_id は廃止）"}],
+                "isError": True
+            }
+        
+        # 直接実行（デフォルト）
+        result = await self._run_nekocode(["replace", file_path, pattern, replacement])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
         }
     
-    async def _tool_insert_preview(self, args: Dict) -> Dict:
-        """挿入プレビュー（セッション不要）"""
+    async def _tool_create_file(self, args: Dict) -> Dict:
+        """新規ファイル作成"""
         file_path = args["file_path"]
-        position = args["position"]
+        cmd_args = ["create-file", file_path]
+        
+        if "template" in args:
+            cmd_args.extend(["--template", args["template"]])
+        if args.get("force", False):
+            cmd_args.append("--force")
+            
+        result = await self._run_nekocode(cmd_args)
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_insert_preview(self, args: Dict) -> Dict:
+        """挿入プレビュー（セマンティック位置対応）"""
+        file_path = args["file_path"]
         content = args["content"]
         
-        # 直接コマンド実行（セッション不要）
-        result = await self._run_nekocode(["insert-preview", file_path, position, content])
+        # Build command with semantic options
+        cmd_args = ["insert", file_path, content]
+        
+        if "after_function" in args:
+            cmd_args.extend(["--after-function", args["after_function"]])
+        elif "before_function" in args:
+            cmd_args.extend(["--before-function", args["before_function"]])
+        elif args.get("in_imports", False):
+            cmd_args.append("--in-imports")
+        elif "after_class" in args:
+            cmd_args.extend(["--after-class", args["after_class"]])
+        elif "position" in args:
+            # Only add position if no semantic option is used
+            cmd_args.append(args["position"])
+        
+        # プレビューモード追加
+        cmd_args.append("--preview")
+        
+        result = await self._run_nekocode(cmd_args)
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -955,10 +1013,33 @@ class NekoCodeMCPServer:
     
     async def _tool_insert_confirm(self, args: Dict) -> Dict:
         """挿入実行（直接実行）"""
-        preview_id = args["preview_id"]
+        # 新設計: insert_confirmは使わず、insertを直接実行
+        file_path = args.get("file_path")
+        content = args.get("content")
         
-        # 直接コマンド実行（セッション不要）
-        result = await self._run_nekocode(["insert-confirm", preview_id])
+        if not all([file_path, content]):
+            # 後方互換性のため preview_id も受け付けるが、実際は直接実行を推奨
+            return {
+                "content": [{"type": "text", "text": "新設計では insert コマンドを直接実行してください（preview_id は廃止）"}],
+                "isError": True
+            }
+        
+        # Build command with semantic options
+        cmd_args = ["insert", file_path, content]
+        
+        if "after_function" in args:
+            cmd_args.extend(["--after-function", args["after_function"]])
+        elif "before_function" in args:
+            cmd_args.extend(["--before-function", args["before_function"]])
+        elif args.get("in_imports", False):
+            cmd_args.append("--in-imports")
+        elif "after_class" in args:
+            cmd_args.extend(["--after-class", args["after_class"]])
+        elif "position" in args:
+            cmd_args.append(args["position"])
+        
+        # 直接実行（プレビューなし）
+        result = await self._run_nekocode(cmd_args)
         
         return {
             "content": [{"type": "text", "text": json.dumps(result.get("output", result), indent=2, ensure_ascii=False)}]
@@ -972,9 +1053,9 @@ class NekoCodeMCPServer:
         dstfile = args["dstfile"]
         insert_line = str(args["insert_line"])
         
-        # 直接コマンド実行（セッション不要）
+        # 新コマンド構造: move-lines --preview
         result = await self._run_nekocode([
-            "movelines-preview", srcfile, start_line, line_count, dstfile, insert_line
+            "move-lines", srcfile, start_line, line_count, dstfile, insert_line, "--preview"
         ])
         
         return {
@@ -982,11 +1063,24 @@ class NekoCodeMCPServer:
         }
     
     async def _tool_movelines_confirm(self, args: Dict) -> Dict:
-        """行移動実行（プレビューID指定）"""
-        preview_id = args["preview_id"]
+        """行移動実行（直接実行）"""
+        # 新設計: movelines_confirmは使わず、move-linesを直接実行
+        srcfile = args.get("srcfile")
+        start_line = args.get("start_line")
+        line_count = args.get("line_count")
+        dstfile = args.get("dstfile")
+        insert_line = args.get("insert_line")
         
-        # 直接コマンド実行（セッション不要）
-        result = await self._run_nekocode(["movelines-confirm", preview_id])
+        if not all([srcfile, start_line, line_count, dstfile, insert_line]):
+            return {
+                "content": [{"type": "text", "text": "新設計では move-lines コマンドを直接実行してください（preview_id は廃止）"}],
+                "isError": True
+            }
+        
+        # 直接実行（デフォルト）
+        result = await self._run_nekocode([
+            "move-lines", srcfile, str(start_line), str(line_count), dstfile, str(insert_line)
+        ])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1190,13 +1284,25 @@ class NekoCodeMCPServer:
         session_id = args["session_id"]
         symbol_id = args["symbol_id"]
         target = args["target"]
-        result = await self._run_nekocode(["moveclass-preview", session_id, symbol_id, target])
+        # 新コマンド構造: move-class --preview
+        result = await self._run_nekocode(["move-class", session_id, symbol_id, target, "--preview"])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_moveclass_confirm(self, args: Dict) -> Dict:
         """クラス移動を実行"""
-        preview_id = args["preview_id"]
-        result = await self._run_nekocode(["moveclass-confirm", preview_id])
+        # 新設計: moveclass_confirmは使わず、move-classを直接実行
+        session_id = args.get("session_id")
+        symbol_id = args.get("symbol_id")
+        target = args.get("target")
+        
+        if not all([session_id, symbol_id, target]):
+            return {
+                "content": [{"type": "text", "text": "新設計では move-class コマンドを直接実行してください（preview_id は廃止）"}],
+                "isError": True
+            }
+        
+        # 直接実行（デフォルト）
+        result = await self._run_nekocode(["move-class", session_id, symbol_id, target])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     # ========================================
