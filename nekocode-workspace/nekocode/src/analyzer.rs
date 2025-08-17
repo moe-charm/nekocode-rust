@@ -550,8 +550,12 @@ impl PythonAnalyzer {
 #[async_trait]
 impl Analyzer for PythonAnalyzer {
     async fn analyze(&mut self, path: &Path, content: &str) -> Result<AnalysisResult> {
+        // Parse the Python source code with Tree-sitter
         let tree = self.parser.parse(content, None)
             .ok_or_else(|| NekocodeError::Analysis("Failed to parse Python".to_string()))?;
+        
+        // Ensure parser state is properly initialized
+        let _ = tree.root_node().kind(); // Force evaluation to avoid lazy optimization issues
         
         let mut result = AnalysisResult {
             file_info: FileInfo::new(path.to_path_buf()),
