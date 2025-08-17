@@ -1,6 +1,13 @@
 # ✅ Completed Tasks Archive
 
 ## 2025-08-17
+- ✅ Smart Refactoring基盤実装
+  - `nekorefactor smart` サブコマンド追加
+  - Tree-sitter AST連携用インターフェース構築
+  - 7言語対応ルールシステム実装（Python/JS/TS/Rust/Go/C++/C#）
+  - セッションベースの正確な位置特定機能
+  - 言語別インデント・構文ルール対応
+  
 - ✅ nekorefactor即適用デフォルト化
   - preview-confirm パターンを廃止
   - --preview オプションで確認モード

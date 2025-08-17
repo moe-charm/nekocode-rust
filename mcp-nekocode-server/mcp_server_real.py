@@ -27,6 +27,7 @@ class NekoCodeMCPServer:
     
     def __init__(self):
         self.nekocode_path = self._find_nekocode_binary()
+        self.nekorefactor_path = self._find_nekorefactor_binary()
         self.sessions = {}
         self.tools = self._define_tools()
         self.config = self._load_config()
@@ -73,6 +74,39 @@ class NekoCodeMCPServer:
         
         # デフォルト（Rust版を優先）
         return "./target/release/nekocode-rust"
+    
+    def _find_nekorefactor_binary(self) -> str:
+        """nekorefactor バイナリの場所を特定"""
+        # 環境変数から取得を優先
+        env_path = os.environ.get('NEKOREFACTOR_BINARY_PATH')
+        if env_path and os.path.exists(env_path):
+            return os.path.abspath(env_path)
+        
+        possible_paths = [
+            # nekocode-workspace内のnekorefactor（debugを優先）
+            "./nekocode-workspace/target/debug/nekorefactor",
+            "../nekocode-workspace/target/debug/nekorefactor",
+            "./nekocode-workspace/target/release/nekorefactor",
+            "../nekocode-workspace/target/release/nekorefactor",
+            # 相対パス（debugを優先）
+            "./target/debug/nekorefactor",
+            "../target/debug/nekorefactor",
+            "./target/release/nekorefactor", 
+            "../target/release/nekorefactor",
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                return os.path.abspath(path)
+        
+        # PATHから検索
+        import shutil
+        nekorefactor_binary = shutil.which("nekorefactor")
+        if nekorefactor_binary:
+            return nekorefactor_binary
+        
+        # デフォルト
+        return "./nekocode-workspace/target/debug/nekorefactor"
     
     def _load_config(self) -> Dict:
         """nekocode_config.json を読み込み（あれば）"""
@@ -445,6 +479,58 @@ class NekoCodeMCPServer:
                 }
             },
             {
+                "name": "smart_insert",
+                "description": "🌟 Smart Insert（AST活用・セマンティック位置指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "file_path": {"type": "string", "description": "ファイルパス"},
+                        "content": {"type": "string", "description": "挿入内容"},
+                        "after_function": {"type": "string", "description": "指定関数の後に挿入"},
+                        "before_function": {"type": "string", "description": "指定関数の前に挿入"},
+                        "in_class": {"type": "string", "description": "指定クラス内に挿入"},
+                        "in_imports": {"type": "boolean", "description": "インポートセクションに挿入"},
+                        "line": {"type": "integer", "description": "行番号（フォールバック）"},
+                        "preview": {"type": "boolean", "description": "プレビューモード", "default": False}
+                    },
+                    "required": ["session_id", "file_path", "content"]
+                }
+            },
+            {
+                "name": "smart_replace",
+                "description": "🌟 Smart Replace（AST活用・スコープ限定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "file_path": {"type": "string", "description": "ファイルパス"},
+                        "pattern": {"type": "string", "description": "検索パターン"},
+                        "replacement": {"type": "string", "description": "置換文字列"},
+                        "in_class": {"type": "string", "description": "指定クラス内のみ置換"},
+                        "in_function": {"type": "string", "description": "指定関数内のみ置換"},
+                        "regex": {"type": "boolean", "description": "正規表現モード", "default": False},
+                        "preview": {"type": "boolean", "description": "プレビューモード", "default": False}
+                    },
+                    "required": ["session_id", "file_path", "pattern", "replacement"]
+                }
+            },
+            {
+                "name": "smart_move",
+                "description": "🌟 Smart Move（AST活用・シンボル移動）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "symbol": {"type": "string", "description": "シンボルパス（例：MyClass::method）"},
+                        "target_file": {"type": "string", "description": "移動先ファイル"},
+                        "update_imports": {"type": "boolean", "description": "インポート自動更新", "default": True},
+                        "preview": {"type": "boolean", "description": "プレビューモード", "default": False}
+                    },
+                    "required": ["session_id", "symbol", "target_file"]
+                }
+            },
+            {
                 "name": "watch_start",
                 "description": "🔍 ファイル監視開始（リアルタイム解析）",
                 "inputSchema": {
@@ -604,6 +690,30 @@ class NekoCodeMCPServer:
             return {"error": f"NekoCodeバイナリが見つかりません: {self.nekocode_path}"}
         except Exception as e:
             return {"error": f"予期しないエラー: {str(e)}"}
+
+    async def _run_nekorefactor(self, args: List[str]) -> Dict:
+        """NekoRefactor実行"""
+        try:
+            cmd = [self.nekorefactor_path] + args
+            logger.info(f"Executing nekorefactor: {' '.join(cmd)}")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode != 0 and "--help" not in args:
+                return {"error": f"NekoRefactor実行エラー: {result.stderr}", "stdout": result.stdout}
+            
+            # nekorefactorの出力処理
+            output = result.stdout if result.stdout.strip() else result.stderr
+            
+            # Smart機能の出力は主にテキスト形式
+            return {"result": output, "success": True}
+            
+        except subprocess.TimeoutExpired:
+            return {"error": "コマンド実行がタイムアウトしました"}
+        except FileNotFoundError:
+            return {"error": f"NekoRefactorバイナリが見つかりません: {self.nekorefactor_path}"}
+        except Exception as e:
+            return {"error": f"予期しないエラー: {str(e)}"}
     
     # ========================================
     # MCPプロトコル実装
@@ -727,6 +837,12 @@ class NekoCodeMCPServer:
                 return await self._tool_config_show(arguments)
             elif tool_name == "config_set":
                 return await self._tool_config_set(arguments)
+            elif tool_name == "smart_insert":
+                return await self._tool_smart_insert(arguments)
+            elif tool_name == "smart_replace":
+                return await self._tool_smart_replace(arguments)
+            elif tool_name == "smart_move":
+                return await self._tool_smart_move(arguments)
             elif tool_name == "watch_start":
                 return await self._tool_watch_start(arguments)
             elif tool_name == "watch_status":
@@ -1357,6 +1473,110 @@ class NekoCodeMCPServer:
         value = args["value"]
         result = await self._run_nekocode(["config", "set", key, value])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    # ========================================
+    # 🌟 Smart Refactoring ツール
+    # ========================================
+    
+    async def _tool_smart_insert(self, args: Dict) -> Dict:
+        """Smart Insert（AST活用・セマンティック位置指定）"""
+        session_id = args["session_id"]
+        file_path = args["file_path"]
+        content = args["content"]
+        preview = args.get("preview", False)
+        
+        # Build command
+        cmd_args = ["smart", "insert", session_id, file_path, content]
+        
+        # セマンティック位置オプション
+        if "after_function" in args:
+            cmd_args.extend(["--after-function", args["after_function"]])
+        elif "before_function" in args:
+            cmd_args.extend(["--before-function", args["before_function"]])
+        elif "in_class" in args:
+            cmd_args.extend(["--in-class", args["in_class"]])
+        elif args.get("in_imports", False):
+            cmd_args.append("--in-imports")
+        elif "line" in args:
+            cmd_args.extend(["--line", str(args["line"])])
+        
+        # プレビューモード
+        if preview:
+            cmd_args.append("--preview")
+        
+        result = await self._run_nekorefactor(cmd_args)
+        
+        if "error" in result:
+            return {
+                "content": [{"type": "text", "text": f"❌ Smart Insert エラー: {result['error']}"}],
+                "isError": True
+            }
+        
+        return {"content": [{"type": "text", "text": f"🌟 Smart Insert 実行完了:\n{result['result']}"}]}
+    
+    async def _tool_smart_replace(self, args: Dict) -> Dict:
+        """Smart Replace（AST活用・スコープ限定）"""
+        session_id = args["session_id"]
+        file_path = args["file_path"]
+        pattern = args["pattern"]
+        replacement = args["replacement"]
+        preview = args.get("preview", False)
+        
+        # Build command
+        cmd_args = ["smart", "replace", session_id, file_path, pattern, replacement]
+        
+        # スコープ制限オプション
+        if "in_class" in args:
+            cmd_args.extend(["--in-class", args["in_class"]])
+        elif "in_function" in args:
+            cmd_args.extend(["--in-function", args["in_function"]])
+        
+        # 正規表現モード
+        if args.get("regex", False):
+            cmd_args.append("--regex")
+        
+        # プレビューモード
+        if preview:
+            cmd_args.append("--preview")
+        
+        result = await self._run_nekorefactor(cmd_args)
+        
+        if "error" in result:
+            return {
+                "content": [{"type": "text", "text": f"❌ Smart Replace エラー: {result['error']}"}],
+                "isError": True
+            }
+        
+        return {"content": [{"type": "text", "text": f"🌟 Smart Replace 実行完了:\n{result['result']}"}]}
+    
+    async def _tool_smart_move(self, args: Dict) -> Dict:
+        """Smart Move（AST活用・シンボル移動）"""
+        session_id = args["session_id"]
+        symbol = args["symbol"]
+        target_file = args["target_file"]
+        update_imports = args.get("update_imports", True)
+        preview = args.get("preview", False)
+        
+        # Build command
+        cmd_args = ["smart", "move", session_id, symbol, target_file]
+        
+        # インポート更新
+        if update_imports:
+            cmd_args.append("--update-imports")
+        
+        # プレビューモード
+        if preview:
+            cmd_args.append("--preview")
+        
+        result = await self._run_nekorefactor(cmd_args)
+        
+        if "error" in result:
+            return {
+                "content": [{"type": "text", "text": f"❌ Smart Move エラー: {result['error']}"}],
+                "isError": True
+            }
+        
+        return {"content": [{"type": "text", "text": f"🌟 Smart Move 実行完了:\n{result['result']}"}]}
     
     # ========================================
     # 🔍 ファイル監視ツール

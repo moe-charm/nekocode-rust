@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use std::fs;
 
-use crate::types::{AnalysisResult, Language};
+use crate::types::{AnalysisResult, Language, SymbolInfo};
 use crate::error::{NekocodeError, Result};
 
 /// Session information stored in .nekocode_sessions/
@@ -200,6 +200,16 @@ impl Session {
         self.info.analysis_results.clear();
         self.info.file_hashes.clear();
         self.info.update_stats();
+    }
+    
+    /// Find a symbol by name
+    pub fn find_symbol(&self, name: &str) -> Result<&SymbolInfo> {
+        for result in &self.info.analysis_results {
+            if let Some(symbol) = result.symbols.iter().find(|s| s.name == name) {
+                return Ok(symbol);
+            }
+        }
+        Err(NekocodeError::Refactoring(format!("Symbol '{}' not found in session", name)))
     }
 }
 

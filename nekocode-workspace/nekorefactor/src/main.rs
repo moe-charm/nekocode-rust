@@ -4,15 +4,17 @@ mod preview;
 mod replace;
 mod moveclass;
 mod cli;
+mod smart;
 
 use clap::Parser;
 use std::io::{self, Read};
 
 use nekocode_core::{Result, NekocodeError};
-use crate::cli::{Cli, Commands};
+use crate::cli::{Cli, Commands, SmartCommands};
 use crate::preview::{PreviewManager, InsertPosition};
 use crate::replace::{ReplaceEngine, ReplaceOptions};
 use crate::moveclass::{MoveClassEngine, MoveOptions};
+use crate::smart::{SmartRefactor, SmartPosition, Scope};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -291,6 +293,79 @@ async fn main() -> Result<()> {
             println!("Split by: {}", by);
             if let Some(output) = output {
                 println!("Output: {}", output.display());
+            }
+        }
+        
+        Commands::Smart { command } => {
+            match command {
+                SmartCommands::Insert { session_id, file, content, after_function, before_function, in_class, in_imports, line, preview } => {
+                    // Create smart refactor instance
+                    let smart = SmartRefactor::from_session_id(&session_id).await?;
+                    
+                    // Determine position
+                    let position = if let Some(func) = after_function {
+                        SmartPosition::AfterFunction(func)
+                    } else if let Some(func) = before_function {
+                        SmartPosition::BeforeFunction(func)
+                    } else if let Some(class) = in_class {
+                        SmartPosition::InClass(class)
+                    } else if in_imports {
+                        SmartPosition::InImports
+                    } else if let Some(line_num) = line {
+                        SmartPosition::Line(line_num)
+                    } else {
+                        return Err(NekocodeError::Config("No position specified for smart insert".to_string()));
+                    };
+                    
+                    // Execute smart insert
+                    let result = smart.smart_insert(&file, &content, position, preview).await?;
+                    
+                    if preview {
+                        println!("🔍 Smart Insert Preview");
+                        println!("{}", result.preview_text);
+                    } else {
+                        println!("✅ Smart insert completed at {}", result.position);
+                    }
+                }
+                
+                SmartCommands::Replace { session_id, file, pattern, replacement, in_class, in_function, regex, preview } => {
+                    // Create smart refactor instance
+                    let smart = SmartRefactor::from_session_id(&session_id).await?;
+                    
+                    // Determine scope
+                    let scope = if let Some(class) = in_class {
+                        Some(Scope::InClass(class))
+                    } else if let Some(func) = in_function {
+                        Some(Scope::InFunction(func))
+                    } else {
+                        None
+                    };
+                    
+                    // Execute smart replace
+                    let result = smart.smart_replace(&file, &pattern, &replacement, scope, regex, preview).await?;
+                    
+                    if preview {
+                        println!("🔍 Smart Replace Preview");
+                        println!("{}", result.preview_text);
+                    } else {
+                        println!("✅ Smart replace completed: {}", result.position);
+                    }
+                }
+                
+                SmartCommands::Move { session_id, symbol, target, update_imports, preview } => {
+                    // Create smart refactor instance
+                    let smart = SmartRefactor::from_session_id(&session_id).await?;
+                    
+                    // Execute smart move
+                    let result = smart.smart_move(&symbol, &target, update_imports, preview).await?;
+                    
+                    if preview {
+                        println!("🔍 Smart Move Preview");
+                        println!("{}", result.preview_text);
+                    } else {
+                        println!("✅ Smart move completed: {}", result.position);
+                    }
+                }
             }
         }
     }

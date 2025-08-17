@@ -177,4 +177,100 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    
+    /// Smart refactoring with Tree-sitter AST
+    Smart {
+        #[command(subcommand)]
+        command: SmartCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SmartCommands {
+    /// Smart insert using AST for precise positioning
+    Insert {
+        /// Session ID from nekocode
+        session_id: String,
+        
+        /// File to modify
+        file: PathBuf,
+        
+        /// Content to insert
+        content: String,
+        
+        /// Insert after a specific function
+        #[arg(long, conflicts_with_all = &["before_function", "in_class", "in_imports", "line"])]
+        after_function: Option<String>,
+        
+        /// Insert before a specific function
+        #[arg(long, conflicts_with_all = &["after_function", "in_class", "in_imports", "line"])]
+        before_function: Option<String>,
+        
+        /// Insert inside a specific class
+        #[arg(long, conflicts_with_all = &["after_function", "before_function", "in_imports", "line"])]
+        in_class: Option<String>,
+        
+        /// Insert in imports section
+        #[arg(long, conflicts_with_all = &["after_function", "before_function", "in_class", "line"])]
+        in_imports: bool,
+        
+        /// Line number (fallback when no semantic position)
+        #[arg(long, conflicts_with_all = &["after_function", "before_function", "in_class", "in_imports"])]
+        line: Option<u32>,
+        
+        /// Preview mode
+        #[arg(long)]
+        preview: bool,
+    },
+    
+    /// Smart replace with scope awareness
+    Replace {
+        /// Session ID from nekocode
+        session_id: String,
+        
+        /// File to process
+        file: PathBuf,
+        
+        /// Pattern to search for
+        pattern: String,
+        
+        /// Replacement text
+        replacement: String,
+        
+        /// Limit to specific class
+        #[arg(long)]
+        in_class: Option<String>,
+        
+        /// Limit to specific function
+        #[arg(long)]
+        in_function: Option<String>,
+        
+        /// Use regex
+        #[arg(long)]
+        regex: bool,
+        
+        /// Preview mode
+        #[arg(long)]
+        preview: bool,
+    },
+    
+    /// Move symbol to another file using AST
+    Move {
+        /// Session ID from nekocode
+        session_id: String,
+        
+        /// Symbol path (e.g., "MyClass::method" or "function_name")
+        symbol: String,
+        
+        /// Target file
+        target: PathBuf,
+        
+        /// Update imports automatically
+        #[arg(long)]
+        update_imports: bool,
+        
+        /// Preview mode
+        #[arg(long)]
+        preview: bool,
+    },
 }
