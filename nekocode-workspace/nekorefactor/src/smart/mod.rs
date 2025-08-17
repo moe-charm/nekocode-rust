@@ -185,26 +185,44 @@ impl SmartRefactor {
     
     // Helper methods
     
-    async fn get_ast_info(&self, _session: &Session, _file: &Path) -> Result<AstInfo> {
-        // TODO: This would call nekocode to get AST
-        // For now, return mock data for testing
+    async fn get_ast_info(&self, session: &Session, file: &Path) -> Result<AstInfo> {
+        // Find analysis result for this file in session
+        let analysis_result = session.info.analysis_results
+            .iter()
+            .find(|result| result.file_info.path == file)
+            .ok_or_else(|| NekocodeError::Session(
+                format!("No analysis result found for file: {}", file.display())
+            ))?;
+
+        // Convert from core types to Smart refactoring types
+        let functions = analysis_result.functions
+            .iter()
+            .map(|func| FunctionInfo {
+                name: func.symbol.name.clone(),
+                start_line: func.symbol.line_start,
+                end_line: func.symbol.line_end,
+            })
+            .collect();
+
+        let classes = analysis_result.classes
+            .iter()
+            .map(|class| ClassInfo {
+                name: class.symbol.name.clone(),
+                start_line: class.symbol.line_start,
+                end_line: class.symbol.line_end,
+            })
+            .collect();
+
+        let imports = analysis_result.imports
+            .iter()
+            .map(|import| import.module.clone())
+            .collect();
+
         Ok(AstInfo {
-            language: Language::Python,
-            functions: vec![
-                FunctionInfo {
-                    name: "main".to_string(),
-                    start_line: 7,
-                    end_line: 9,
-                },
-            ],
-            classes: vec![
-                ClassInfo {
-                    name: "TestClass".to_string(),
-                    start_line: 11,
-                    end_line: 16,
-                },
-            ],
-            imports: vec!["os".to_string(), "sys".to_string()],
+            language: analysis_result.file_info.language,
+            functions,
+            classes,
+            imports,
         })
     }
     
