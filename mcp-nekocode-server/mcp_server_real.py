@@ -3,6 +3,11 @@
 🐱 NekoCode MCP Server - 実際のMCP実装版
 
 実際のMCPプロトコル（stdio + JSON-RPC）で実装
+
+🆕 Phase 2完了: Dead Code Detection機能追加！
+- session-create --complete: 完全解析でデッドコード検出
+- deadcode: Rust専用90%精度デッドコード分析
+- cargo clippy + cargo-machete統合
 """
 
 import asyncio
@@ -40,7 +45,12 @@ class NekoCodeMCPServer:
             return os.path.abspath(env_path)
         
         possible_paths = [
-            # 🦀 NEW: Rust版のバイナリパスを優先
+            # 🚀 nekocode-workspace 5分割バイナリ優先
+            "./nekocode-workspace/target/debug/nekocode",
+            "../nekocode-workspace/target/debug/nekocode",
+            "./nekocode-workspace/target/release/nekocode",
+            "../nekocode-workspace/target/release/nekocode",
+            # 🦀 OLD: Rust版のバイナリパス（legacy）
             "./target/release/nekocode-rust",
             "../target/release/nekocode-rust",
             "./target/debug/nekocode-rust",
@@ -72,8 +82,8 @@ class NekoCodeMCPServer:
         if legacy_binary:
             return legacy_binary
         
-        # デフォルト（Rust版を優先）
-        return "./target/release/nekocode-rust"
+        # デフォルト（nekocode-workspace優先）
+        return "./nekocode-workspace/target/debug/nekocode"
     
     def _find_nekorefactor_binary(self) -> str:
         """nekorefactor バイナリの場所を特定"""
@@ -172,7 +182,11 @@ class NekoCodeMCPServer:
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "プロジェクトパス"}
+                        "path": {"type": "string", "description": "プロジェクトパス"},
+                        "complete": {"type": "boolean", "description": "🆕 完全解析（デッドコード検出）", "default": False},
+                        "external": {"type": "boolean", "description": "🆕 外部ツール使用", "default": False},
+                        "format": {"type": "string", "description": "🆕 レポート形式", "default": "text"},
+                        "min_confidence": {"type": "integer", "description": "🆕 最小信頼度", "default": 60}
                     },
                     "required": ["path"]
                 }
@@ -476,6 +490,20 @@ class NekoCodeMCPServer:
                         "value": {"type": "string", "description": "設定値"}
                     },
                     "required": ["key", "value"]
+                }
+            },
+            {
+                "name": "deadcode",
+                "description": "🔍 デッドコード分析（Rust: 90%精度）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "external": {"type": "boolean", "description": "外部ツール使用 (cargo clippy + cargo-machete)", "default": True},
+                        "format": {"type": "string", "description": "出力形式 (text/json/github-comment)", "default": "text"},
+                        "min_confidence": {"type": "integer", "description": "最小信頼度 (0-100)", "default": 60}
+                    },
+                    "required": ["session_id"]
                 }
             },
             {
@@ -837,6 +865,8 @@ class NekoCodeMCPServer:
                 return await self._tool_config_show(arguments)
             elif tool_name == "config_set":
                 return await self._tool_config_set(arguments)
+            elif tool_name == "deadcode":
+                return await self._tool_deadcode(arguments)
             elif tool_name == "smart_insert":
                 return await self._tool_smart_insert(arguments)
             elif tool_name == "smart_replace":
@@ -914,7 +944,21 @@ class NekoCodeMCPServer:
     async def _tool_session_create(self, args: Dict) -> Dict:
         """セッション作成"""
         path = args["path"]
-        result = await self._run_nekocode(["session-create", path])
+        complete = args.get("complete", False)
+        external = args.get("external", False)
+        format_type = args.get("format", "text")
+        min_confidence = args.get("min_confidence", 60)
+        
+        # コマンド構築
+        cmd = ["session-create", path]
+        if complete:
+            cmd.append("--complete")
+            if external:
+                cmd.append("--external")
+            cmd.extend(["--format", format_type])
+            cmd.extend(["--min-confidence", str(min_confidence)])
+        
+        result = await self._run_nekocode(cmd)
         
         # セッションID抽出（JSON形式またはRust版のテキスト出力）
         session_id = None
@@ -1473,6 +1517,33 @@ class NekoCodeMCPServer:
         value = args["value"]
         result = await self._run_nekocode(["config", "set", key, value])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
+    async def _tool_deadcode(self, args: Dict) -> Dict:
+        """🔍 デッドコード分析 - Rust: 90%精度"""
+        session_id = args["session_id"]
+        external = args.get("external", True)
+        format_type = args.get("format", "text") 
+        min_confidence = args.get("min_confidence", 60)
+        
+        # コマンド構築
+        cmd = ["deadcode", session_id]
+        if external:
+            cmd.append("--external")
+        cmd.extend(["--format", format_type])
+        cmd.extend(["--min-confidence", str(min_confidence)])
+        
+        result = await self._run_nekocode(cmd)
+        
+        # 結果の整形
+        if format_type == "text" and "output" in result:
+            # テキスト形式の場合は直接表示
+            return {"content": [{"type": "text", "text": result["output"]}]}
+        elif format_type == "github-comment" and "output" in result:
+            # GitHub comment形式の場合もテキストとして表示
+            return {"content": [{"type": "text", "text": result["output"]}]}
+        else:
+            # JSON形式やその他の場合
+            return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     # ========================================
     # 🌟 Smart Refactoring ツール

@@ -38,6 +38,14 @@ pub enum Commands {
     },
     
     /// Create a new analysis session
+    /// 
+    /// Examples:
+    /// 
+    ///   nekocode session-create /my/project
+    /// 
+    ///   nekocode session-create /my/project --complete --external
+    /// 
+    ///   nekocode session-create /my/project --complete --format github-comment
     SessionCreate {
         /// Path to the project directory
         path: PathBuf,
@@ -45,6 +53,26 @@ pub enum Commands {
         /// Session name (optional)
         #[arg(short, long)]
         name: Option<String>,
+        
+        /// Run complete analysis with dead code detection
+        #[arg(long)]
+        complete: bool,
+        
+        /// Output format for complete analysis (text, json, github-comment, csv, summary)
+        #[arg(long, default_value = "text")]
+        format: String,
+        
+        /// Save complete analysis report to file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        
+        /// Minimum confidence threshold for dead code detection (0-100)
+        #[arg(long, default_value = "60")]
+        min_confidence: u8,
+        
+        /// Use external tools for dead code analysis
+        #[arg(long)]
+        external: bool,
     },
     
     /// Update an existing session
@@ -141,4 +169,33 @@ pub enum Commands {
         #[arg(short, long)]
         session_id: Option<String>,
     },
+    
+    /// Detect dead code in a session
+    /// 
+    /// Examples:
+    /// 
+    ///   nekocode deadcode abc123 --external
+    /// 
+    ///   nekocode deadcode abc123 --format github-comment --min-confidence 90
+    Deadcode {
+        /// Session ID to analyze
+        session_id: String,
+        
+        /// Use external tools for analysis
+        #[arg(long)]
+        external: bool,
+        
+        /// Output format (text, json, github-comment, csv, summary)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+        
+        /// Minimum confidence threshold (0-100)
+        #[arg(long, default_value = "60")]
+        min_confidence: u8,
+        
+        /// Save report to file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    
 }

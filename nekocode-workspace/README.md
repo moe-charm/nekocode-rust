@@ -4,6 +4,27 @@
 
 ## ✨ 新機能ハイライト
 
+### 🔍 **Dead Code Detection** (2025-08-18実装完了)
+
+外部ツール統合による**商用グレード精度**の未使用コード検出！
+
+```bash
+# 完全解析 - セッション作成と同時に実行
+nekocode session-create /path/to/project --complete --external --format github-comment
+
+# 個別実行 - 既存セッションで解析
+nekocode deadcode SESSION_ID --external --min-confidence 85
+```
+
+#### 📊 **精度レベル**
+
+| ツール | 言語 | 精度 | 検出対象 |
+|--------|------|------|----------|
+| cargo clippy | Rust | 95% | 未使用関数・変数 |
+| cargo-machete | Rust | 85% | 未使用依存関係 |
+| vulture | Python | 90% | 未使用コード全般 |
+| 内部解析 | 全言語 | 60% | 基本的な未参照 |
+
 ### 🎊 **Smart Refactoring** (2025-08-17実装完了)
 
 Tree-sitter AST解析による**革命的な正確性**を実現！

@@ -1,13 +1,12 @@
 //! Session management and commands
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs;
 use walkdir::WalkDir;
 
 use nekocode_core::{
-    Result, NekocodeError,
-    session::{SessionManager, SessionInfo},
-    types::{AnalysisResult, Language}
+    Result,
+    session::SessionManager
 };
 
 use crate::analyzer::{
@@ -15,7 +14,6 @@ use crate::analyzer::{
     PythonAnalyzer, RustAnalyzer, CppAnalyzer,
     GoAnalyzer, CSharpAnalyzer
 };
-use crate::ast::{ASTBuilder, ASTStatistics};
 
 /// Session commands for AST operations
 pub struct SessionCommands {
@@ -33,10 +31,10 @@ impl SessionCommands {
     pub async fn ast_stats(&mut self, session_id: &str) -> Result<String> {
         let session = self.session_manager.get_session_mut(session_id)?;
         
-        let mut total_nodes = 0;
+        let total_nodes = 0;
         let mut total_functions = 0;
         let mut total_classes = 0;
-        let mut max_depth = 0;
+        let max_depth = 0;
         
         for result in &session.info.analysis_results {
             total_functions += result.functions.len();
@@ -143,6 +141,7 @@ impl SessionUpdater {
         // Update session with results
         let session = self.session_manager.get_session_mut(&session_id)?;
         session.info.analysis_results = analysis_results;
+        session.info.update_stats();  // Update file_count and other statistics
         session.save()?;
         
         println!("✅ Created session {} with {} files analyzed", 
@@ -189,6 +188,7 @@ impl SessionUpdater {
         // Update session
         let session = self.session_manager.get_session_mut(session_id)?;
         session.info.analysis_results = analysis_results;
+        session.info.update_stats();  // Update file_count and other statistics
         session.save()?;
         
         println!("✅ Updated session {} with {} files", 

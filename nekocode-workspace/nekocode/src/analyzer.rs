@@ -8,7 +8,7 @@ use nekocode_core::{
     Result, NekocodeError,
     types::{
         AnalysisResult, FileInfo, FunctionInfo, ClassInfo,
-        ImportInfo, ExportInfo, Language, CodeMetrics,
+        ImportInfo, Language, CodeMetrics,
         SymbolInfo, SymbolType, Visibility, ParameterInfo
     }
 };

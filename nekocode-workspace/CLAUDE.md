@@ -1,5 +1,22 @@
 # 🚀 NekoCode Workspace - 5分割Unix哲学ツールチェーン
 
+## 🚨 **【最重要】安全なテストフォルダ**
+
+```bash
+# ✅ テストは必ずこのフォルダで実行！Git管理外で安全！
+cd /mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github/test-workspace
+
+# このフォルダの特徴:
+# - .gitignoreで完全除外済み（871MB）
+# - GitHubに絶対アップロードされない
+# - 実プロジェクトのテストデータ配置済み
+# - 自由にファイル作成・削除可能
+```
+
+**❌ 絶対NGな場所:**
+- nekocode-rust-clean/内でのテスト（Git管理下）
+- nekocode-workspace/内でのテスト（Git管理下）
+
 ## 📁 **アーキテクチャ概要** 
 
 ```

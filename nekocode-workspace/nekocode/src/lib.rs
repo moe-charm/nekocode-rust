@@ -3,6 +3,7 @@
 pub mod analyzer;
 pub mod ast;
 pub mod cli;
+pub mod deadcode;
 pub mod session;
 
 pub use analyzer::{
@@ -13,5 +14,6 @@ pub use analyzer::{
 };
 
 pub use ast::{ASTBuilder, ASTNode, ASTNodeType, ASTStatistics};
+pub use deadcode::{DeadCodeAnalyzer, DeadCodeReport, DeadItem, SymbolType};
 pub use session::{SessionCommands, SessionUpdater};
 pub use cli::Cli;
