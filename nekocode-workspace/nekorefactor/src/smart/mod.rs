@@ -1,9 +1,9 @@
 //! Smart refactoring with Tree-sitter AST integration
 
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use nekocode_core::{Result, NekocodeError, Session, Language};
 use serde::{Serialize, Deserialize};
+use regex::Regex;
 
 pub mod languages;
 
@@ -352,9 +352,51 @@ impl SmartRefactor {
     }
     
     fn find_matches(&self, file: &Path, pattern: &str, range: Option<Range>, use_regex: bool) -> Result<Vec<Match>> {
-        // Find all matches in file within optional range
-        // Placeholder implementation
-        Ok(vec![])
+        // Read file content
+        let content = std::fs::read_to_string(file)
+            .map_err(|e| NekocodeError::Io(e))?;
+        
+        let mut matches = Vec::new();
+        let lines: Vec<&str> = content.lines().collect();
+        
+        for (idx, line) in lines.iter().enumerate() {
+            let line_num = (idx + 1) as u32;
+            
+            // Check if line is within range
+            if let Some(ref r) = range {
+                if line_num < r.start_line || line_num > r.end_line {
+                    continue;
+                }
+            }
+            
+            // Find matches in this line
+            if use_regex {
+                // Regex matching
+                if let Ok(re) = Regex::new(pattern) {
+                    for mat in re.find_iter(line) {
+                        matches.push(Match {
+                            line: line_num,
+                            column: mat.start() as u32,
+                            text: mat.as_str().to_string(),
+                        });
+                    }
+                }
+            } else {
+                // Literal string matching
+                let mut start = 0;
+                while let Some(pos) = line[start..].find(pattern) {
+                    let col = start + pos;
+                    matches.push(Match {
+                        line: line_num,
+                        column: col as u32,
+                        text: pattern.to_string(),
+                    });
+                    start = col + pattern.len();
+                }
+            }
+        }
+        
+        Ok(matches)
     }
     
     fn generate_replace_preview(&self, matches: &[Match], pattern: &str, replacement: &str) -> Result<String> {
@@ -367,8 +409,43 @@ impl SmartRefactor {
     }
     
     fn apply_replacements(&self, file: &Path, matches: &[Match], replacement: &str) -> Result<()> {
-        // Apply all replacements
-        // Placeholder implementation
+        // Read file content
+        let content = std::fs::read_to_string(file)
+            .map_err(|e| NekocodeError::Io(e))?;
+        
+        let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        
+        // Apply replacements from last to first to maintain positions
+        let mut sorted_matches = matches.to_vec();
+        sorted_matches.sort_by(|a, b| {
+            b.line.cmp(&a.line)
+                .then(b.column.cmp(&a.column))
+        });
+        
+        for mat in sorted_matches {
+            let line_idx = (mat.line - 1) as usize;
+            if line_idx < lines.len() {
+                let line = &lines[line_idx];
+                let start = mat.column as usize;
+                let end = start + mat.text.len();
+                
+                if end <= line.len() {
+                    let new_line = format!(
+                        "{}{}{}",
+                        &line[..start],
+                        replacement,
+                        &line[end..]
+                    );
+                    lines[line_idx] = new_line;
+                }
+            }
+        }
+        
+        // Write back to file
+        let new_content = lines.join("\n");
+        std::fs::write(file, new_content)
+            .map_err(|e| NekocodeError::Io(e))?;
+        
         Ok(())
     }
     
@@ -384,14 +461,76 @@ impl SmartRefactor {
     }
     
     fn extract_symbol_code(&self, symbol_info: &nekocode_core::SymbolInfo) -> Result<String> {
-        // Extract code for the symbol
-        // Placeholder implementation
-        Ok("// Symbol code here".to_string())
+        // Read file containing the symbol
+        let content = std::fs::read_to_string(&symbol_info.file_path)
+            .map_err(|e| NekocodeError::Io(e))?;
+        
+        let lines: Vec<&str> = content.lines().collect();
+        
+        // Extract lines from start to end of symbol
+        let start_idx = (symbol_info.line_start - 1) as usize;
+        let end_idx = symbol_info.line_end as usize;
+        
+        if start_idx >= lines.len() || end_idx > lines.len() {
+            return Err(NekocodeError::Refactoring(
+                format!("Line range {}-{} out of bounds", symbol_info.line_start, symbol_info.line_end)
+            ));
+        }
+        
+        // Extract the symbol code
+        let symbol_lines = &lines[start_idx..end_idx];
+        let code = symbol_lines.join("\n");
+        
+        Ok(code)
     }
     
     fn apply_move(&self, symbol_info: &nekocode_core::SymbolInfo, target: &Path, code: &str, update_imports: bool) -> Result<()> {
-        // Apply the move operation
-        // Placeholder implementation
+        // Step 1: Remove the symbol from source file
+        let source_content = std::fs::read_to_string(&symbol_info.file_path)
+            .map_err(|e| NekocodeError::Io(e))?;
+        
+        let mut source_lines: Vec<String> = source_content.lines().map(|s| s.to_string()).collect();
+        
+        // Remove the symbol lines (in reverse to maintain indices)
+        let start_idx = (symbol_info.line_start - 1) as usize;
+        let end_idx = symbol_info.line_end as usize;
+        
+        if start_idx < source_lines.len() && end_idx <= source_lines.len() {
+            // Remove lines from end to start
+            for _ in start_idx..end_idx {
+                source_lines.remove(start_idx);
+            }
+        }
+        
+        // Write back source file
+        let new_source = source_lines.join("\n");
+        std::fs::write(&symbol_info.file_path, new_source)
+            .map_err(|e| NekocodeError::Io(e))?;
+        
+        // Step 2: Add the symbol to target file
+        if target.exists() {
+            // Append to existing file
+            let target_content = std::fs::read_to_string(target)
+                .map_err(|e| NekocodeError::Io(e))?;
+            
+            let new_target = format!("{}\n\n{}", target_content, code);
+            std::fs::write(target, new_target)
+                .map_err(|e| NekocodeError::Io(e))?;
+        } else {
+            // Create new file with the symbol
+            std::fs::write(target, code)
+                .map_err(|e| NekocodeError::Io(e))?;
+        }
+        
+        // Step 3: Update imports if requested
+        if update_imports {
+            // TODO: Implement import updates based on language
+            // This would require language-specific logic to:
+            // 1. Add import in target file if needed
+            // 2. Update imports in source file if needed
+            // 3. Update other files that import this symbol
+        }
+        
         Ok(())
     }
 }
@@ -470,7 +609,7 @@ struct Range {
 }
 
 /// Match found in file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Match {
     line: u32,
     column: u32,

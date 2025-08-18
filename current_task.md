@@ -1,41 +1,34 @@
-# 🎊 COMPLETED: Smart Refactoring with Tree-sitter
+# 🔧 Smart Refactoring 未実装メソッド完成
 
 **Date**: 2025-08-17  
 **Priority**: High  
-**Status**: ✅ IMPLEMENTATION COMPLETE
+**Status**: 🚧 IN PROGRESS
 
-## 📋 問題定義
+## 📋 タスク概要
 
-### 現在の問題
-nekorefactorのセマンティック位置指定が**文字列マッチング**で不正確：
-- `--after-function main` → main関数の定義行直後に挿入（❌構文エラー）
-- インデント無視 → Python/YAMLで致命的
-- 言語別ルール無視 → 各言語の慣習に従わない
+### 現在の状況
+Smart Refactoringの基盤は完成したが、重要なメソッドが未実装：
 
-### 根本原因
-- nekorefactorは**スタンドアロン設計**
-- nekocodeのTree-sitter ASTを活用してない
-- セッション連携がない
+**✅ 完了済み:**
+- `smart_insert()` - AST位置指定での挿入
+- `get_ast_info()` - Real Tree-sitter AST統合済み
+- 言語別ルール（7言語対応）
 
-## 🎯 解決策: `smart` サブコマンド
+**❌ 未実装（TODO状態）:**
+1. `find_matches()` - パターン検索（正規表現/リテラル）
+2. `apply_replacements()` - 複数マッチへの一括置換
+3. `extract_symbol_code()` - シンボルコード抽出
+4. `apply_move()` - シンボル移動と依存関係更新
+5. `parse_symbol_path()` - シンボルパス解析
 
-### 設計方針
-```
-通常版: 文字列ベース（現状維持・高速・シンプル）
-Smart版: ASTベース（新規・正確・言語対応）
-```
+## 🎯 実装計画
 
-### コマンド体系
-```bash
-# 通常版（セッション不要）
-nekorefactor insert file.py "code" --line 42
-nekorefactor replace file.py "old" "new"
-
-# Smart版（セッション必須・AST活用）
-nekorefactor smart insert SESSION_ID file.py "code" --after-function main
-nekorefactor smart replace SESSION_ID file.py "old" "new" --in-class MyClass
-nekorefactor smart move SESSION_ID "MyClass::method" target.py
-```
+### 優先順位
+1. **find_matches()** - Smart replaceの基盤（最重要）
+2. **apply_replacements()** - replaceコマンド完成に必須
+3. **parse_symbol_path()** - moveコマンドの前提
+4. **extract_symbol_code()** - シンボル移動に必要
+5. **apply_move()** - 最終的な移動機能
 
 ## 🔧 実装設計
 
@@ -151,23 +144,25 @@ def helper():  # ← 正しい位置・インデント
 - [x] Smart サブコマンド追加
 - [x] SmartCommands enum定義
 - [x] smart/mod.rs作成
+- [x] Real Tree-sitter AST統合
 
 ### Phase 2: 言語ルール（✅完了）
 - [x] languages/mod.rs作成
-- [x] Python言語ルール実装
-- [x] JavaScript/TypeScript言語ルール
-- [x] Rust/Go/C++/C#言語ルール
+- [x] 7言語対応ルール実装
 
-### Phase 3: main.rs統合（✅完了）
-- [x] Smart コマンドハンドリング
-- [x] Session::find_symbol追加
-- [x] ビルド成功確認
+### Phase 3: コア機能（🚧進行中）
+- [x] smart_insert実装
+- [x] get_ast_info Real AST統合
+- [ ] find_matches実装
+- [ ] apply_replacements実装
+- [ ] parse_symbol_path実装
+- [ ] extract_symbol_code実装
+- [ ] apply_move実装
 
-### Phase 4: 完了確認（✅完了）
-- [x] **Mock AST実装**: テスト用AST情報生成
-- [x] **動作検証**: Smart insert/replace機能確認  
-- [x] **比較テスト**: 通常版との精度比較完了
-- [x] **ドキュメント更新**: CLAUDE.md/README.md作成
+### Phase 4: テスト・統合
+- [ ] Smart replace動作確認
+- [ ] Smart move動作確認
+- [ ] MCP統合テスト
 
 ## 🎊 **実装完了サマリー**
 
