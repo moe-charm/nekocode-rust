@@ -10,8 +10,8 @@ project_root = os.path.dirname(current_dir)
 
 # NekoCodeバイナリパスを決定（優先順位順）
 possible_paths = [
-    os.path.join(project_root, "releases", "nekocode-rust"),  # releases/nekocode-rust (新・最優先)
-    os.path.join(project_root, "target", "release", "nekocode-rust"),  # target/release/nekocode-rust (開発用)
+    os.path.join(project_root, "releases", "nekocode"),  # releases/nekocode (5分割版・最優先)
+    os.path.join(project_root, "target", "release", "nekocode"),  # target/release/nekocode (開発用)
     os.path.join(current_dir, "nekocode_ai"),  # bin/nekocode_ai (レガシー)
 ]
 
