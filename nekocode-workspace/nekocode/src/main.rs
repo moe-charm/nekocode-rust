@@ -27,6 +27,29 @@ async fn main() -> Result<()> {
     // Execute command
     match cli.command {
         Commands::Analyze { path, output, stats_only, language, ast: _ } => {
+            // Check if path is a directory
+            if path.is_dir() {
+                eprintln!("❌ Error: 'analyze' command expects a file, but got a directory: {}", path.display());
+                eprintln!("💡 Hint: For directory analysis, use 'session-create' command instead:");
+                eprintln!("         nekocode session-create {}", path.display());
+                if stats_only {
+                    eprintln!("         Or for stats only: nekocode session-create {} --stats-only", path.display());
+                }
+                return Err(NekocodeError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Directory provided to analyze command. Use 'session-create' for directories.")
+                )));
+            }
+            
+            // Check if file exists
+            if !path.exists() {
+                eprintln!("❌ Error: File not found: {}", path.display());
+                return Err(NekocodeError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("File not found: {}", path.display())
+                )));
+            }
+            
             // Create appropriate analyzer
             let mut analyzer = create_analyzer_for_path(&path, language.as_deref())?;
             
@@ -237,13 +260,27 @@ fn create_analyzer_for_path(path: &std::path::Path, language: Option<&str>) -> R
             "cpp" | "c++" | "cxx" => Ok(Box::new(CppAnalyzer::new()?)),
             "go" => Ok(Box::new(GoAnalyzer::new()?)),
             "csharp" | "cs" => Ok(Box::new(CSharpAnalyzer::new()?)),
-            _ => Err(NekocodeError::LanguageNotSupported(lang.to_string()))
+            _ => Err(NekocodeError::LanguageNotSupported(format!(
+                "Language '{}' is not supported. Supported: javascript, typescript, python, rust, cpp, go, csharp",
+                lang
+            )))
         }
     } else {
         // Auto-detect from file extension
         let ext = path.extension()
             .and_then(|e| e.to_str())
-            .ok_or_else(|| NekocodeError::LanguageNotSupported("Unknown file extension".to_string()))?;
+            .ok_or_else(|| {
+                if path.is_dir() {
+                    NekocodeError::LanguageNotSupported(
+                        "Cannot auto-detect language for directory. Use 'session-create' for directories.".to_string()
+                    )
+                } else {
+                    NekocodeError::LanguageNotSupported(format!(
+                        "Cannot detect language for file '{}'. Specify with --language option.",
+                        path.display()
+                    ))
+                }
+            })?;
         
         match ext {
             "js" | "jsx" | "mjs" | "cjs" => Ok(Box::new(JavaScriptAnalyzer::new()?)),
@@ -253,7 +290,10 @@ fn create_analyzer_for_path(path: &std::path::Path, language: Option<&str>) -> R
             "cpp" | "cxx" | "cc" | "hpp" | "hxx" | "hh" | "c" | "h" => Ok(Box::new(CppAnalyzer::new()?)),
             "go" => Ok(Box::new(GoAnalyzer::new()?)),
             "cs" => Ok(Box::new(CSharpAnalyzer::new()?)),
-            _ => Err(NekocodeError::LanguageNotSupported(ext.to_string()))
+            _ => Err(NekocodeError::LanguageNotSupported(format!(
+                "File extension '{}' is not supported. Supported extensions: js, ts, py, rs, cpp, go, cs. Use --language to specify explicitly.",
+                ext
+            )))
         }
     }
 }
