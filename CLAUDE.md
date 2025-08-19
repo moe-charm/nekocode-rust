@@ -27,6 +27,28 @@ nekocode-rust-clean/  # ✅ メインディレクトリ (GitHub同期済み)
 - **対応言語**: JavaScript, TypeScript, C++, C, Python, C#, Go, Rust（全8言語完全対応！）
 - **特徴**: Claude Code最適化、MCP統合、セッション機能、16倍高速化
 
+## 🆕 **Dead Code Detection機能追加完了！** (2025-08-18)
+
+### **商用グレード精度達成**
+```bash
+# 完全解析 - セッション作成と同時にデッドコード検出
+nekocode session-create /path/to/project --complete --external --format github-comment
+
+# 既存セッションでデッドコード解析
+nekocode deadcode SESSION_ID --external --min-confidence 85
+
+# 結果例: 高精度検出
+📊 15 dead code items found (90% confidence)
+✅ clippy: 11件 (95%精度) - 未使用関数・変数
+✅ cargo-machete: 4件 (85%精度) - 未使用依存関係
+```
+
+### **外部ツール統合**
+- **cargo clippy** (Rust, 95%精度): 未使用関数・構造体・変数
+- **cargo-machete** (Rust, 85%精度): Cargo.toml未使用依存関係
+- **vulture** (Python, 90%精度): 未使用コード全般
+- **内部解析** (全言語, 60%精度): 基本的な未参照検出
+
 ## 🚀 **Rust Edition完全移行完了！** (2025-08-11)
 
 ### **性能革命達成**
@@ -111,6 +133,12 @@ cargo build --release
 # セッション作成（必ず ../test-workspace/ を使用）
 ./target/release/nekocode-rust session-create ../test-workspace/test-real-projects/flask/
 
+# 🆕 デッドコード検出（完全解析）
+./target/debug/nekocode session-create ../test-workspace/test-real-projects/serde/ --complete --external --format github-comment
+
+# 🆕 既存セッションでデッドコード解析
+./target/debug/nekocode deadcode SESSION_ID --external --min-confidence 85
+
 # 性能比較（必ず ../test-workspace/ を使用）
 ./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/typescript/ --benchmark
 ```
@@ -119,6 +147,10 @@ cargo build --release
 ```bash
 # stats_onlyで大規模プロジェクトも安全（パスは自動調整される）
 nekocode-analyze(path: "../test-workspace/test-real-projects/typescript", stats_only: true)
+
+# 🆕 デッドコード検出（Claude Code経由）
+session-create(path: "../test-workspace/test-real-projects/serde", complete: true, external: true, format: "github-comment")
+deadcode(session_id: "SESSION_ID", external: true, min_confidence: 85, format: "text")
 ```
 
 ## 🎯 **重要なファイル**

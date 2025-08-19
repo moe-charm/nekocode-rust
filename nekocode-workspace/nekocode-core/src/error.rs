@@ -48,6 +48,9 @@ pub enum NekocodeError {
     #[error("Session error: {0}")]
     Session(String),
     
+    #[error("External tool error: {0}")]
+    External(String),
+    
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }

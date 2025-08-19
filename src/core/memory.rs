@@ -105,12 +105,13 @@ impl MemoryManager {
         Ok(entry.id)
     }
     
-    /// Load a memory entry by name and type
+    /// Load a memory entry by name or ID and type
     pub fn load(&self, name: &str, memory_type: MemoryType) -> Result<MemoryEntry> {
         let entries = self.list_by_type(memory_type.clone())?;
         
         for entry in entries {
-            if entry.name == name {
+            // Check both name and ID for match
+            if entry.name == name || entry.id == name {
                 return Ok(entry);
             }
         }

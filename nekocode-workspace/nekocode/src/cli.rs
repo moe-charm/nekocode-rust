@@ -38,6 +38,14 @@ pub enum Commands {
     },
     
     /// Create a new analysis session
+    /// 
+    /// Examples:
+    /// 
+    ///   nekocode session-create /my/project
+    /// 
+    ///   nekocode session-create /my/project --complete --external
+    /// 
+    ///   nekocode session-create /my/project --complete --format github-comment
     SessionCreate {
         /// Path to the project directory
         path: PathBuf,
@@ -45,6 +53,26 @@ pub enum Commands {
         /// Session name (optional)
         #[arg(short, long)]
         name: Option<String>,
+        
+        /// Run complete analysis with dead code detection
+        #[arg(long)]
+        complete: bool,
+        
+        /// Output format for complete analysis (text, json, github-comment, csv, summary)
+        #[arg(long, default_value = "text")]
+        format: String,
+        
+        /// Save complete analysis report to file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        
+        /// Minimum confidence threshold for dead code detection (0-100)
+        #[arg(long, default_value = "60")]
+        min_confidence: u8,
+        
+        /// Use external tools for dead code analysis
+        #[arg(long)]
+        external: bool,
     },
     
     /// Update an existing session
@@ -55,6 +83,66 @@ pub enum Commands {
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
+    },
+    
+    /// Refresh session analysis with smart level detection
+    /// 
+    /// Examples:
+    /// 
+    ///   nekocode refresh abc123                    # Smart auto-detection
+    /// 
+    ///   nekocode refresh abc123 --level project   # Force L2 project analysis
+    /// 
+    ///   nekocode refresh abc123 --deadcode        # Force L3 deadcode analysis
+    /// 
+    ///   nekocode refresh abc123 --security        # Force L4 security analysis
+    Refresh {
+        /// Session ID to refresh
+        session_id: String,
+        
+        /// Analysis level (file, project, cross, advanced, smart)
+        #[arg(short, long)]
+        level: Option<String>,
+        
+        /// Force L2: Refresh dependencies and project structure
+        #[arg(long)]
+        deps: bool,
+        
+        /// Force L3: Refresh dead code detection
+        #[arg(long)]
+        deadcode: bool,
+        
+        /// Force L3: Check for circular dependencies
+        #[arg(long)]
+        circular: bool,
+        
+        /// Force L3: Detect code duplications
+        #[arg(long)]
+        duplicates: bool,
+        
+        /// Force L4: Run security analysis
+        #[arg(long)]
+        security: bool,
+        
+        /// Force L4: Calculate quality metrics
+        #[arg(long)]
+        quality: bool,
+        
+        /// Refresh specific file only (L1 level)
+        #[arg(short, long)]
+        file: Option<String>,
+        
+        /// Show verbose output
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Use external tools where applicable
+        #[arg(long)]
+        external: bool,
+        
+        /// Output format (text, json, github-comment)
+        #[arg(long, default_value = "text")]
+        format: String,
     },
     
     /// List all sessions
@@ -141,4 +229,33 @@ pub enum Commands {
         #[arg(short, long)]
         session_id: Option<String>,
     },
+    
+    /// Detect dead code in a session
+    /// 
+    /// Examples:
+    /// 
+    ///   nekocode deadcode abc123 --external
+    /// 
+    ///   nekocode deadcode abc123 --format github-comment --min-confidence 90
+    Deadcode {
+        /// Session ID to analyze
+        session_id: String,
+        
+        /// Use external tools for analysis
+        #[arg(long)]
+        external: bool,
+        
+        /// Output format (text, json, github-comment, csv, summary)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+        
+        /// Minimum confidence threshold (0-100)
+        #[arg(long, default_value = "60")]
+        min_confidence: u8,
+        
+        /// Save report to file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    
 }
