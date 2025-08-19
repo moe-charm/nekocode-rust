@@ -67,17 +67,15 @@ __pycache__/
 # 🚨 CRITICAL ADDITIONS (2025-08-19) 🚨
 # These were MISSING and caused 3.6GB Git bloat!
 
-# 🔧 Binary directories - NEVER commit (18MB each!)
-bin/
-releases/
-/bin/
-/releases/
-
 # 🦀 Rust target dirs - NEVER commit (3.6GB total!)
 /target/
 /*/target/
 /**/target/
 /nekocode-workspace/target/
+
+# 🚀 IMPORTANT: bin/ and releases/ are now INCLUDED for instant usability!
+# Users can clone and immediately use pre-built binaries
+# Only exclude temporary build artifacts, not final binaries
 
 # 📊 NekoCode data dirs - Can become huge!
 .nekocode_history/
