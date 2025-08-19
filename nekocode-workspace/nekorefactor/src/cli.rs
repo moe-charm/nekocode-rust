@@ -95,6 +95,98 @@ pub enum Commands {
     },
     
     
+    /// Remove comments from source code
+    StripComments {
+        /// File or directory to process
+        path: PathBuf,
+        
+        /// Keep documentation comments (JSDoc, docstrings, etc.)
+        #[arg(long)]
+        keep_docs: bool,
+        
+        /// Keep license headers
+        #[arg(long)]
+        keep_license: bool,
+        
+        /// Keep important markers (@important, WARNING, etc.)
+        #[arg(long)]
+        keep_important: bool,
+        
+        /// Keep directive comments (eslint-disable, @ts-ignore, etc.)
+        #[arg(long)]
+        keep_directives: bool,
+        
+        /// Only remove inline comments (//, #)
+        #[arg(long)]
+        inline_only: bool,
+        
+        /// Only remove block comments (/* */, """ """)
+        #[arg(long)]
+        block_only: bool,
+        
+        /// Only remove trailing comments (end of line)
+        #[arg(long)]
+        trailing_only: bool,
+        
+        /// Process directory recursively
+        #[arg(short, long)]
+        recursive: bool,
+        
+        /// Language override (auto-detect if not specified)
+        #[arg(short, long)]
+        language: Option<String>,
+        
+        /// Preview only, don't apply changes
+        #[arg(long, alias = "dry-run")]
+        preview: bool,
+        
+        /// Show statistics only
+        #[arg(long)]
+        stats_only: bool,
+        
+        /// Create backup files (.bak)
+        #[arg(long)]
+        backup: bool,
+    },
+
+    /// Show edit history
+    EditHistory {
+        /// Number of recent entries to show
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+        
+        /// Show entries for specific file
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+        
+        /// Show entries for specific session
+        #[arg(short, long)]
+        session: Option<String>,
+        
+        /// Show detailed information
+        #[arg(long)]
+        detailed: bool,
+    },
+    
+    /// Show specific edit details
+    EditShow {
+        /// Edit ID to show
+        edit_id: String,
+    },
+    
+    /// Rollback an edit
+    EditRollback {
+        /// Edit ID to rollback
+        edit_id: String,
+        
+        /// Force rollback without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+    
+    /// Show edit history statistics
+    EditStats,
+
     /// Move lines between files
     MoveLines {
         /// Source file

@@ -4,10 +4,17 @@
 
 実際のMCPプロトコル（stdio + JSON-RPC）で実装
 
-🆕 Phase 2完了: Dead Code Detection機能追加！
-- session-create --complete: 完全解析でデッドコード検出
-- deadcode: Rust専用90%精度デッドコード分析
-- cargo clippy + cargo-machete統合
+🆕 Phase 3完了: Strip Comments機能追加！
+- strip-comments: Tree-sitter AST解析による100%安全コメント削除
+- edit-rollback: 編集履歴からのロールバック機能
+- edit-stats: 編集統計表示機能
+- 7言語完全対応（JS/TS/Python/Rust/C++/Go/C#）
+- 文字列リテラル完全保護・選択的コメント保護
+
+🚀 既存機能:
+- Dead Code Detection: 外部ツール統合による90%精度
+- Smart Refactoring: AST活用セマンティック位置指定
+- SQLite統合: 9倍高速・750倍I/O効率化
 """
 
 import asyncio
@@ -493,6 +500,23 @@ class NekoCodeMCPServer:
                 }
             },
             {
+                "name": "refresh",
+                "description": "🔄 統一Refresh（9倍高速・自動レベル判定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "level": {"type": "string", "description": "解析レベル (file/project/cross/advanced/smart)", "default": "smart"},
+                        "file": {"type": "string", "description": "特定ファイルのみ更新（L1）"},
+                        "deadcode": {"type": "boolean", "description": "デッドコード検出（L3）", "default": False},
+                        "security": {"type": "boolean", "description": "セキュリティ解析（L4）", "default": False},
+                        "quality": {"type": "boolean", "description": "品質メトリクス（L4）", "default": False},
+                        "verbose": {"type": "boolean", "description": "詳細出力", "default": False}
+                    },
+                    "required": ["session_id"]
+                }
+            },
+            {
                 "name": "deadcode",
                 "description": "🔍 デッドコード分析（Rust: 90%精度）",
                 "inputSchema": {
@@ -601,6 +625,47 @@ class NekoCodeMCPServer:
             {
                 "name": "watch_config",
                 "description": "⚙️ ファイル監視設定表示",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "strip_comments",
+                "description": "🧹 コメント削除（Tree-sitter AST解析・100%安全）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "ターゲットファイルパス"},
+                        "recursive": {"type": "boolean", "description": "ディレクトリ再帰処理", "default": False},
+                        "backup": {"type": "boolean", "description": "バックアップ作成", "default": False},
+                        "keep_docs": {"type": "boolean", "description": "ドキュメント保持（JSDoc/docstring）", "default": False},
+                        "keep_license": {"type": "boolean", "description": "ライセンス保持", "default": True},
+                        "keep_directives": {"type": "boolean", "description": "ディレクティブ保持（eslint-disable等）", "default": True},
+                        "keep_important": {"type": "boolean", "description": "重要マーカー保持（WARNING/FIXME等）", "default": False},
+                        "inline_only": {"type": "boolean", "description": "インラインコメントのみ削除", "default": False},
+                        "block_only": {"type": "boolean", "description": "ブロックコメントのみ削除", "default": False},
+                        "trailing_only": {"type": "boolean", "description": "行末コメントのみ削除", "default": False},
+                        "preview": {"type": "boolean", "description": "プレビューモード", "default": False},
+                        "stats_only": {"type": "boolean", "description": "統計のみ表示", "default": False}
+                    },
+                    "required": ["file_path"]
+                }
+            },
+            {
+                "name": "edit_rollback",
+                "description": "🔄 編集ロールバック（ID指定）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "edit_id": {"type": "string", "description": "ロールバック対象編集ID"}
+                    },
+                    "required": ["edit_id"]
+                }
+            },
+            {
+                "name": "edit_stats",
+                "description": "📊 編集統計表示",
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -865,6 +930,8 @@ class NekoCodeMCPServer:
                 return await self._tool_config_show(arguments)
             elif tool_name == "config_set":
                 return await self._tool_config_set(arguments)
+            elif tool_name == "refresh":
+                return await self._tool_refresh(arguments)
             elif tool_name == "deadcode":
                 return await self._tool_deadcode(arguments)
             elif tool_name == "smart_insert":
@@ -883,6 +950,12 @@ class NekoCodeMCPServer:
                 return await self._tool_watch_stop_all(arguments)
             elif tool_name == "watch_config":
                 return await self._tool_watch_config(arguments)
+            elif tool_name == "strip_comments":
+                return await self._tool_strip_comments(arguments)
+            elif tool_name == "edit_rollback":
+                return await self._tool_edit_rollback(arguments)
+            elif tool_name == "edit_stats":
+                return await self._tool_edit_stats(arguments)
             else:
                 return {
                     "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
@@ -1518,6 +1591,45 @@ class NekoCodeMCPServer:
         result = await self._run_nekocode(["config", "set", key, value])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
+    async def _tool_refresh(self, args: Dict) -> Dict:
+        """🔄 統一Refresh - 9倍高速・自動レベル判定"""
+        session_id = args["session_id"]
+        level = args.get("level", "smart")
+        file_path = args.get("file")
+        deadcode = args.get("deadcode", False)
+        security = args.get("security", False)
+        quality = args.get("quality", False)
+        verbose = args.get("verbose", False)
+        
+        # コマンド構築
+        cmd = ["refresh", session_id]
+        
+        if level != "smart":
+            cmd.extend(["--level", level])
+        
+        if file_path:
+            cmd.extend(["--file", file_path])
+        
+        if deadcode:
+            cmd.append("--deadcode")
+        
+        if security:
+            cmd.append("--security")
+            
+        if quality:
+            cmd.append("--quality")
+        
+        if verbose:
+            cmd.append("--verbose")
+        
+        result = await self._run_nekocode(cmd)
+        
+        # 結果の整形
+        if "output" in result:
+            return {"content": [{"type": "text", "text": result["output"]}]}
+        else:
+            return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+    
     async def _tool_deadcode(self, args: Dict) -> Dict:
         """🔍 デッドコード分析 - Rust: 90%精度"""
         session_id = args["session_id"]
@@ -1696,6 +1808,89 @@ class NekoCodeMCPServer:
             return {"content": [{"type": "text", "text": json.dumps(config_display, indent=2, ensure_ascii=False)}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"設定表示エラー: {str(e)}"}], "isError": True}
+    
+    # ========================================
+    # 🧹 コメント削除ツール
+    # ========================================
+    
+    async def _tool_strip_comments(self, args: Dict) -> Dict:
+        """コメント削除（Tree-sitter AST解析・100%安全）"""
+        file_path = args["file_path"]
+        
+        # Build command arguments
+        cmd_args = ["strip-comments", file_path]
+        
+        # Add options
+        if args.get("recursive", False):
+            cmd_args.append("--recursive")
+        if args.get("backup", False):
+            cmd_args.append("--backup")
+        if args.get("keep_docs", False):
+            cmd_args.append("--keep-docs")
+        if not args.get("keep_license", True):  # Default is True
+            cmd_args.append("--no-keep-license")
+        if not args.get("keep_directives", True):  # Default is True
+            cmd_args.append("--no-keep-directives")
+        if args.get("keep_important", False):
+            cmd_args.append("--keep-important")
+        if args.get("inline_only", False):
+            cmd_args.append("--inline-only")
+        if args.get("block_only", False):
+            cmd_args.append("--block-only")
+        if args.get("trailing_only", False):
+            cmd_args.append("--trailing-only")
+        if args.get("preview", False):
+            cmd_args.append("--preview")
+        if args.get("stats_only", False):
+            cmd_args.append("--stats-only")
+        
+        result = await self._run_nekorefactor(cmd_args)
+        
+        if "error" in result:
+            return {
+                "content": [{"type": "text", "text": f"❌ Strip Comments エラー: {result['error']}"}],
+                "isError": True
+            }
+        
+        # Format result based on operation type
+        if args.get("stats_only", False):
+            return {"content": [{"type": "text", "text": f"📊 統計結果:\n{result['result']}"}]}
+        elif args.get("preview", False):
+            return {"content": [{"type": "text", "text": f"🔍 プレビュー結果:\n{result['result']}"}]}
+        else:
+            return {"content": [{"type": "text", "text": f"🧹 コメント削除完了:\n{result['result']}"}]}
+    
+    async def _tool_edit_rollback(self, args: Dict) -> Dict:
+        """編集ロールバック（ID指定）"""
+        edit_id = args["edit_id"]
+        
+        # Build command
+        cmd_args = ["edit-rollback", edit_id]
+        
+        result = await self._run_nekorefactor(cmd_args)
+        
+        if "error" in result:
+            return {
+                "content": [{"type": "text", "text": f"❌ ロールバックエラー: {result['error']}"}],
+                "isError": True
+            }
+        
+        return {"content": [{"type": "text", "text": f"🔄 ロールバック完了:\n{result['result']}"}]}
+    
+    async def _tool_edit_stats(self, args: Dict) -> Dict:
+        """編集統計表示"""
+        # Build command
+        cmd_args = ["edit-stats"]
+        
+        result = await self._run_nekorefactor(cmd_args)
+        
+        if "error" in result:
+            return {
+                "content": [{"type": "text", "text": f"❌ 統計取得エラー: {result['error']}"}],
+                "isError": True
+            }
+        
+        return {"content": [{"type": "text", "text": f"📊 編集統計:\n{result['result']}"}]}
     
     async def run(self):
         """MCPサーバー実行"""

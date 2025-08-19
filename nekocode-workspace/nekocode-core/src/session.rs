@@ -12,6 +12,7 @@ use std::fs;
 
 use crate::types::{AnalysisResult, Language, SymbolInfo};
 use crate::error::{NekocodeError, Result};
+use crate::compact::{OutputMode, CompactSerializer};
 
 /// Session information stored in .nekocode_sessions/
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +126,11 @@ impl Session {
     
     /// Save session to disk
     pub fn save(&mut self) -> Result<()> {
+        self.save_with_mode(OutputMode::Human)
+    }
+    
+    /// Save session with specific output mode
+    pub fn save_with_mode(&mut self, mode: OutputMode) -> Result<()> {
         // Create session directory if it doesn't exist
         if !self.session_dir.exists() {
             fs::create_dir_all(&self.session_dir)
@@ -132,8 +138,18 @@ impl Session {
         }
         
         let file_path = self.session_dir.join(format!("{}.json", self.info.id));
-        let content = serde_json::to_string_pretty(&self.info)
-            .map_err(|e| NekocodeError::Serde(e))?;
+        
+        let content = match mode {
+            OutputMode::Human => {
+                serde_json::to_string_pretty(&self.info)
+                    .map_err(|e| NekocodeError::Serde(e))?
+            },
+            OutputMode::Compact => {
+                let compact_json = CompactSerializer::to_compact_json(&self.info);
+                serde_json::to_string(&compact_json)
+                    .map_err(|e| NekocodeError::Serde(e))?
+            }
+        };
         
         fs::write(file_path, content)
             .map_err(|e| NekocodeError::Io(e))?;

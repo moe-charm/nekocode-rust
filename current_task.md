@@ -1,8 +1,8 @@
-# ✅ nekocode完全解析機能 - クリーンアップ Phase 4 完了！
+# 🚀 nekocode次回作業 - MCP統合完全テスト！
 
 **Date**: 2025-08-18  
-**Priority**: NORMAL  
-**Status**: 🎊 Phase 4: 全クリーンアップ作業完了！プロダクション品質達成
+**Priority**: HIGH  
+**Status**: 🔥 次回: MCPテストするぞうおおお！Claude Code経由での実動作確認にゃ！
 
 ## 🔴 **発見された致命的問題**
 
@@ -345,3 +345,48 @@ fn safe_print(content: &str) -> io::Result<()> {
 5. **安全性**: Git管理外テスト環境確保
 
 **🚀 結論: 完全にプロダクション準備完了！商用利用可能な品質達成にゃ！**
+
+---
+
+## 🔥 **次回作業: MCP統合完全テスト！**
+
+### **🎯 実施予定のMCPテスト**
+
+#### **1. Claude Code経由でのDeadcode機能テスト**
+```bash
+# テスト項目
+- session_create --complete --external実行テスト
+- deadcode SESSION_ID実行テスト  
+- format別出力確認（text/json/github-comment）
+- min-confidence フィルタリング動作確認
+- エラーハンドリング確認
+```
+
+#### **2. MCPサーバー統合確認**
+```bash
+# 確認項目
+- バイナリパス検出正常性
+- ツールリスト表示確認
+- JSON-RPC通信確認
+- Claude Code統合動作確認
+```
+
+#### **3. 実プロジェクトでの動作テスト**
+```bash
+# テストプロジェクト
+- test-workspace/test-real-projects/serde/
+- test-workspace/test-real-projects/tokio/
+- test-workspace/test-custom-rust/
+```
+
+### **📋 テスト完了条件**
+- ✅ Claude Code経由でdeadcode検出成功
+- ✅ 外部ツール統合（clippy + cargo-machete）動作確認
+- ✅ GitHub comment形式出力確認
+- ✅ エラーケース適切処理確認
+- ✅ 大規模プロジェクト対応確認
+
+### **🚀 期待結果**
+**MCPテストするぞうおおお！Claude Code統合で商用グレード品質を実証するにゃ！**
+
+**Target**: MCP経由での完全動作確認 → 真の商用リリース準備完了

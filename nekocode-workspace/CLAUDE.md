@@ -31,6 +31,27 @@ nekocode-workspace/           # 🎯 メインワークスペース
 
 ## 🎯 **5分割Unix哲学ツールチェーン**
 
+### **1. nekocode** - 🔍 **核心解析エンジン** ⭐SQLite+Refresh統合! (2025-08-18)
+
+#### **🔄 統一Refreshコマンド（9倍高速・750倍I/O効率）**
+```bash
+# Smart自動判定（変更内容から最適レベル選択）
+./target/debug/nekocode refresh SESSION_ID
+
+# レベル指定
+./target/debug/nekocode refresh SESSION_ID --level project      # L2: 依存関係
+./target/debug/nekocode refresh SESSION_ID --deadcode            # L3: デッドコード
+./target/debug/nekocode refresh SESSION_ID --security --quality  # L4: 高度解析
+
+# ファイル単位高速更新（SQLite最適化: 2.2ms）
+./target/debug/nekocode refresh SESSION_ID --file parser.ts --verbose
+```
+
+**🚀 SQLiteベースセッション（実装済み・移行準備中）:**
+- 9倍高速化: 19.4ms → 2.2ms
+- 750倍I/O削減: 0.6MB → 0.8KB  
+- ファイル単位更新で大規模プロジェクト対応
+
 ### **2. nekorefactor** - 🔧 **革新的リファクタリング** ⭐NEW! 
 
 #### **🌟 Smart Refactoring（AST活用・2025-08-17実装完了）**

@@ -85,6 +85,66 @@ pub enum Commands {
         verbose: bool,
     },
     
+    /// Refresh session analysis with smart level detection
+    /// 
+    /// Examples:
+    /// 
+    ///   nekocode refresh abc123                    # Smart auto-detection
+    /// 
+    ///   nekocode refresh abc123 --level project   # Force L2 project analysis
+    /// 
+    ///   nekocode refresh abc123 --deadcode        # Force L3 deadcode analysis
+    /// 
+    ///   nekocode refresh abc123 --security        # Force L4 security analysis
+    Refresh {
+        /// Session ID to refresh
+        session_id: String,
+        
+        /// Analysis level (file, project, cross, advanced, smart)
+        #[arg(short, long)]
+        level: Option<String>,
+        
+        /// Force L2: Refresh dependencies and project structure
+        #[arg(long)]
+        deps: bool,
+        
+        /// Force L3: Refresh dead code detection
+        #[arg(long)]
+        deadcode: bool,
+        
+        /// Force L3: Check for circular dependencies
+        #[arg(long)]
+        circular: bool,
+        
+        /// Force L3: Detect code duplications
+        #[arg(long)]
+        duplicates: bool,
+        
+        /// Force L4: Run security analysis
+        #[arg(long)]
+        security: bool,
+        
+        /// Force L4: Calculate quality metrics
+        #[arg(long)]
+        quality: bool,
+        
+        /// Refresh specific file only (L1 level)
+        #[arg(short, long)]
+        file: Option<String>,
+        
+        /// Show verbose output
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Use external tools where applicable
+        #[arg(long)]
+        external: bool,
+        
+        /// Output format (text, json, github-comment)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    
     /// List all sessions
     SessionList {
         /// Show detailed information

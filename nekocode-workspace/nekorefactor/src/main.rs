@@ -7,7 +7,9 @@ mod cli;
 mod smart;
 
 use clap::Parser;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use nekocode_core::{Result, NekocodeError};
 use crate::cli::{Cli, Commands, SmartCommands};
@@ -15,6 +17,7 @@ use crate::preview::{PreviewManager, InsertPosition};
 use crate::replace::{ReplaceEngine, ReplaceOptions};
 use crate::moveclass::{MoveClassEngine, MoveOptions};
 use crate::smart::{SmartRefactor, SmartPosition, Scope};
+use nekorefactor::{CommentStripper, StripOptions, EditEntry, EditOperation, get_history, record_edit};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -296,6 +299,152 @@ async fn main() -> Result<()> {
             }
         }
         
+        Commands::StripComments { path, keep_docs, keep_license, keep_important, keep_directives, 
+                                   inline_only, block_only, trailing_only, recursive, language, 
+                                   preview, stats_only, backup } => {
+            // Determine language if not specified
+            let detected_language = if let Some(lang) = language {
+                lang
+            } else {
+                detect_language_from_path(&path)?
+            };
+            
+            // Create strip options
+            let options = StripOptions {
+                keep_docs,
+                keep_license,
+                keep_important,
+                keep_directives,
+                inline_only,
+                block_only,
+                trailing_only,
+                preview,
+                stats_only,
+            };
+            
+            // Create comment stripper
+            let mut stripper = CommentStripper::new(&detected_language, options.clone())?;
+            
+            if path.is_dir() && recursive {
+                // Process directory recursively
+                process_directory_recursive(&path, &mut stripper, &options, backup)?;
+            } else if path.is_file() {
+                // Process single file
+                process_file(&path, &mut stripper, &options, backup)?;
+            } else {
+                return Err(NekocodeError::Config(format!("Invalid path: {:?}", path)));
+            }
+        }
+        
+        Commands::EditHistory { limit, file, session, detailed } => {
+            let history = get_history();
+            let entries = if let Some(file_path) = file {
+                history.get_by_file(&file_path)
+            } else if let Some(session_id) = session {
+                history.get_by_session(&session_id)
+            } else {
+                history.get_recent(limit)
+            };
+            
+            if entries.is_empty() {
+                println!("No edit history found");
+            } else {
+                println!("📋 Edit History ({} entries):", entries.len());
+                for entry in entries {
+                    if detailed {
+                        println!("\n🆔 {}", entry.id);
+                        println!("   Time: {}", entry.timestamp.format("%Y-%m-%d %H:%M:%S"));
+                        println!("   File: {:?}", entry.file_path);
+                        println!("   Operation: {}", entry.summary());
+                        println!("   Size change: {:+} bytes", entry.size_diff);
+                        if let Some(desc) = &entry.description {
+                            println!("   Description: {}", desc);
+                        }
+                        if !entry.tags.is_empty() {
+                            println!("   Tags: {}", entry.tags.join(", "));
+                        }
+                    } else {
+                        println!("  {} {} - {} - {}", 
+                            entry.timestamp.format("%H:%M"),
+                            &entry.id[..8],
+                            entry.file_path.display(),
+                            entry.summary()
+                        );
+                    }
+                }
+            }
+        }
+        
+        Commands::EditShow { edit_id } => {
+            let history = get_history();
+            if let Some(entry) = history.get_by_id(&edit_id) {
+                println!("📝 Edit Details");
+                println!("================");
+                println!("ID: {}", entry.id);
+                println!("Time: {}", entry.timestamp.format("%Y-%m-%d %H:%M:%S"));
+                println!("File: {:?}", entry.file_path);
+                println!("Operation: {}", entry.summary());
+                println!("Size change: {:+} bytes", entry.size_diff);
+                
+                if let Some(session) = &entry.session_id {
+                    println!("Session: {}", session);
+                }
+                if let Some(desc) = &entry.description {
+                    println!("Description: {}", desc);
+                }
+                if !entry.tags.is_empty() {
+                    println!("Tags: {}", entry.tags.join(", "));
+                }
+                
+                println!("\n📄 Content Changes:");
+                println!("Before ({} bytes):", entry.original_content.len());
+                println!("{}", entry.original_content.lines().take(10).collect::<Vec<_>>().join("\n"));
+                if entry.original_content.lines().count() > 10 {
+                    println!("... ({} more lines)", entry.original_content.lines().count() - 10);
+                }
+                
+                println!("\nAfter ({} bytes):", entry.new_content.len());
+                println!("{}", entry.new_content.lines().take(10).collect::<Vec<_>>().join("\n"));
+                if entry.new_content.lines().count() > 10 {
+                    println!("... ({} more lines)", entry.new_content.lines().count() - 10);
+                }
+            } else {
+                println!("❌ Edit not found: {}", edit_id);
+            }
+        }
+        
+        Commands::EditRollback { edit_id, force } => {
+            let history = get_history();
+            if let Some(entry) = history.get_by_id(&edit_id) {
+                if !force {
+                    println!("⚠️  About to rollback edit: {}", entry.summary());
+                    println!("   File: {:?}", entry.file_path);
+                    println!("   Time: {}", entry.timestamp.format("%Y-%m-%d %H:%M:%S"));
+                    print!("   Continue? (y/N): ");
+                    std::io::stdout().flush().unwrap();
+                    
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).unwrap();
+                    
+                    if !input.trim().to_lowercase().starts_with('y') {
+                        println!("Rollback cancelled");
+                        return Ok(());
+                    }
+                }
+                
+                history.rollback(&edit_id)?;
+                println!("✅ Rollback completed: {:?}", entry.file_path);
+            } else {
+                println!("❌ Edit not found: {}", edit_id);
+            }
+        }
+        
+        Commands::EditStats => {
+            let history = get_history();
+            let stats = history.get_stats();
+            println!("{}", stats.display());
+        }
+
         Commands::Smart { command } => {
             match command {
                 SmartCommands::Insert { session_id, file, content, after_function, before_function, in_class, in_imports, line, preview } => {
@@ -371,6 +520,162 @@ async fn main() -> Result<()> {
     }
     
     Ok(())
+}
+
+/// Detect programming language from file path
+fn detect_language_from_path(path: &Path) -> Result<String> {
+    if path.is_dir() {
+        return Ok("auto".to_string());
+    }
+    
+    let extension = path.extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+        
+    let language = match extension.to_lowercase().as_str() {
+        "js" | "jsx" | "mjs" => "javascript",
+        "ts" | "tsx" => "typescript",
+        "py" | "pyw" => "python",
+        "rs" => "rust",
+        "c" => "c",
+        "cpp" | "cc" | "cxx" | "c++" => "cpp",
+        "h" | "hpp" | "hxx" => "cpp",
+        "go" => "go",
+        "cs" => "csharp",
+        _ => "auto",
+    };
+    
+    Ok(language.to_string())
+}
+
+/// Process a single file
+fn process_file(
+    path: &Path,
+    stripper: &mut CommentStripper,
+    options: &StripOptions,
+    backup: bool,
+) -> Result<()> {
+    println!("🔍 Processing: {:?}", path);
+    
+    // Read file content
+    let content = fs::read_to_string(path)
+        .map_err(|e| NekocodeError::Io(e))?;
+    
+    // Strip comments
+    let (result, stats) = stripper.strip(&content)?;
+    
+    if options.stats_only {
+        // Just show statistics
+        println!("{}", stats.display());
+        return Ok(());
+    }
+    
+    if options.preview {
+        // Show preview
+        println!("📄 Preview for {:?}:", path);
+        println!("{}", stats.display());
+        println!("\n💾 Processed Content:");
+        println!("{}", result);
+        return Ok(());
+    }
+    
+    // Create backup if requested
+    if backup {
+        let backup_path = path.with_extension(
+            format!("{}.bak", path.extension().and_then(|s| s.to_str()).unwrap_or(""))
+        );
+        fs::copy(path, backup_path)?;
+    }
+    
+    // Write result
+    fs::write(path, &result)
+        .map_err(|e| NekocodeError::Io(e))?;
+    
+    // Record edit in history
+    let edit_entry = EditEntry::from_strip_comments(
+        path.to_path_buf(),
+        content,
+        result,
+        stats.removed_comments,
+        stats.kept_comments,
+    );
+    record_edit(edit_entry)?;
+    
+    // Show results
+    println!("✅ Completed: {:?}", path);
+    println!("   Comments removed: {}", stats.removed_comments);
+    println!("   Comments kept: {}", stats.kept_comments);
+    println!("   Size reduction: {:.1}%", stats.reduction_percentage());
+    
+    Ok(())
+}
+
+/// Process directory recursively
+fn process_directory_recursive(
+    dir: &Path,
+    stripper: &mut CommentStripper,
+    options: &StripOptions,
+    backup: bool,
+) -> Result<()> {
+    println!("📁 Processing directory recursively: {:?}", dir);
+    
+    let mut total_files = 0;
+    let mut processed_files = 0;
+    
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        
+        if path.is_dir() {
+            // Recurse into subdirectory
+            process_directory_recursive(&path, stripper, options, backup)?;
+        } else if path.is_file() && is_supported_file(&path) {
+            total_files += 1;
+            
+            // Update stripper for this file's language
+            if let Ok(detected_lang) = detect_language_from_path(&path) {
+                if detected_lang != "auto" {
+                    // Create new stripper for this language
+                    if let Ok(mut file_stripper) = CommentStripper::new(&detected_lang, options.clone()) {
+                        match process_file(&path, &mut file_stripper, options, backup) {
+                            Ok(()) => processed_files += 1,
+                            Err(e) => println!("⚠️  Warning: Failed to process {:?}: {}", path, e),
+                        }
+                    } else {
+                        println!("⚠️  Warning: Unsupported language for {:?}", path);
+                    }
+                } else {
+                    // Try with original stripper
+                    match process_file(&path, stripper, options, backup) {
+                        Ok(()) => processed_files += 1,
+                        Err(e) => println!("⚠️  Warning: Failed to process {:?}: {}", path, e),
+                    }
+                }
+            }
+        }
+    }
+    
+    println!("📊 Directory summary:");
+    println!("   Total files found: {}", total_files);
+    println!("   Files processed: {}", processed_files);
+    
+    Ok(())
+}
+
+/// Check if file extension is supported
+fn is_supported_file(path: &Path) -> bool {
+    if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+        matches!(ext.to_lowercase().as_str(), 
+            "js" | "jsx" | "mjs" | "ts" | "tsx" | 
+            "py" | "pyw" | 
+            "rs" | 
+            "c" | "cpp" | "cc" | "cxx" | "c++" | "h" | "hpp" | "hxx" |
+            "go" | 
+            "cs"
+        )
+    } else {
+        false
+    }
 }
 
 /// Parse insert position from string

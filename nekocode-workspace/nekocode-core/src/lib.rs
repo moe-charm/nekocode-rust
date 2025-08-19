@@ -8,21 +8,25 @@
 //! - Memory management
 
 pub mod session;
+pub mod sqlite_session;
 pub mod config;
 pub mod types;
 pub mod io;
 pub mod memory;
 pub mod traits;
 pub mod error;
+pub mod compact;
 
 // Re-exports for easy access
 pub use session::{SessionManager, SessionInfo, Session, SessionProvider};
+pub use sqlite_session::{SqliteSession, FileRecord, ChangedFile, ChangeType, SessionStats};
 pub use config::{Config, AnalysisConfig, GeneralConfig, MemoryConfig};
 pub use types::{Language, SymbolInfo, FunctionInfo, ClassInfo, FileInfo, AnalysisResult};
 pub use traits::{AnalysisProvider, LanguageSupport};
 pub use error::{NekocodeError, Result};
 pub use io::{FileProcessor, PathUtils};
 pub use memory::{MemoryManager, MemoryType};
+pub use compact::{OutputMode, CompactSerializer, HumanFormatter};
 
 /// NekoCode Core version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
