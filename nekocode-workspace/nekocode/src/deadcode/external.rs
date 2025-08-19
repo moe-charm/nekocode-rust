@@ -346,6 +346,12 @@ pub struct ToolAvailability {
 }
 
 impl ToolAvailability {
+    /// Check if any external tool is available
+    pub fn has_any_tool(&self) -> bool {
+        self.cargo_clippy || self.vulture || self.staticcheck || 
+        self.eslint || self.clang_tidy || self.cargo_machete
+    }
+    
     /// Get available tools for language
     pub fn get_available_for_language(&self, language: Language) -> Vec<ExternalTool> {
         let mut tools = Vec::new();

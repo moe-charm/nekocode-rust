@@ -70,6 +70,7 @@ impl<'a> DeadCodeAnalyzer<'a> {
                     line_start: func.symbol.line_start,
                     line_end: func.symbol.line_end,
                     language: result.file_info.language,
+                    is_public: func.is_public,  // Track visibility
                 });
             }
             
@@ -86,6 +87,7 @@ impl<'a> DeadCodeAnalyzer<'a> {
                     line_start: class.symbol.line_start,
                     line_end: class.symbol.line_end,
                     language: result.file_info.language,
+                    is_public: class.is_public,  // Track visibility
                 });
             }
         }
@@ -165,9 +167,26 @@ impl<'a> DeadCodeAnalyzer<'a> {
 
     /// Check if symbol is an entry point (main, test, etc.)
     fn is_entry_point(&self, symbol: &SymbolRef) -> bool {
+        // Public symbols are always considered entry points (can be used by external code)
+        if symbol.is_public {
+            return true;
+        }
+        
+        // Common entry points
         matches!(symbol.name.as_str(), "main" | "test" | "setup" | "teardown") ||
         symbol.name.starts_with("test_") ||
-        symbol.name.starts_with("bench_")
+        symbol.name.starts_with("bench_") ||
+        // Rust-specific: common trait methods (even if private)
+        (symbol.language == Language::Rust && (
+            symbol.name == "new" ||           // Constructor
+            symbol.name == "default" ||        // Default trait
+            symbol.name == "from" ||          // From trait
+            symbol.name == "into" ||          // Into trait
+            symbol.name == "fmt" ||           // Display/Debug traits
+            symbol.name == "clone" ||         // Clone trait
+            symbol.name == "drop" ||          // Drop trait
+            symbol.name.starts_with("new_")   // Common constructor pattern
+        ))
     }
 
     /// Calculate confidence based on analysis method
@@ -189,6 +208,7 @@ pub struct SymbolRef {
     pub line_start: u32,
     pub line_end: u32,
     pub language: Language,
+    pub is_public: bool,  // Track visibility for better dead code detection
 }
 
 /// Type of symbol

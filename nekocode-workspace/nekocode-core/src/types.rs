@@ -193,6 +193,7 @@ pub struct FunctionInfo {
     pub is_async: bool,
     pub is_static: bool,
     pub is_generic: bool,
+    pub is_public: bool,  // Added for visibility tracking
     pub complexity: Option<u32>,
 }
 
@@ -206,6 +207,7 @@ pub struct ClassInfo {
     pub fields: Vec<String>,   // Symbol IDs
     pub is_abstract: bool,
     pub is_interface: bool,
+    pub is_public: bool,  // Added for visibility tracking
 }
 
 /// Import information

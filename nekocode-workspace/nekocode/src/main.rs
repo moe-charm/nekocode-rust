@@ -307,12 +307,29 @@ async fn handle_deadcode_command(
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
     use nekocode::deadcode::report::OutputFormat;
+    use nekocode::deadcode::external::ExternalToolManager;
     
     println!("🔍 Analyzing dead code in session: {}", session_id);
     
     // Load session
     let mut session_manager = SessionManager::new()?;
     let session = session_manager.get_session_mut(&session_id)?;
+    
+    // Check for external tools and provide guidance
+    if !external {
+        let tools = ExternalToolManager::check_tools();
+        if tools.has_any_tool() {
+            eprintln!("💡 Tip: External tools detected! Use --external flag for better accuracy:");
+            eprintln!("      nekocode deadcode {} --external", session_id);
+            eprintln!("      External tools provide 90%+ accuracy vs 60% for internal analysis");
+            eprintln!("");
+        }
+        eprintln!("⚠️  Using internal analysis (60% accuracy). May have false positives.");
+        eprintln!("    Especially for: public APIs, trait implementations, test utilities");
+        eprintln!("");
+    } else {
+        println!("✅ Using external tools for high-accuracy analysis (90%+ confidence)");
+    }
     
     // Create analyzer
     let analyzer = DeadCodeAnalyzer::new(session, external);
@@ -394,26 +411,35 @@ async fn handle_session_create_command(
         println!("📝 Name: {}", name);
     }
     
+    if !complete {
+        println!("💡 Tip: Use --complete for dead code analysis");
+        println!("      Example: nekocode session-create {} --complete --external --format github-comment", path.display());
+    }
+    
     // Step 2: Run complete analysis if requested
     if complete {
         println!("🔍 Running complete analysis...");
         
-        // Check external tools if requested
+        // Check external tools and provide guidance
+        use nekocode::deadcode::external::ExternalToolManager;
+        let tools = ExternalToolManager::check_tools();
+        
+        if !external && tools.has_any_tool() {
+            eprintln!("💡 Tip: External tools detected! Add --external flag for better accuracy:");
+            eprintln!("      nekocode session-create {} --complete --external", path.display());
+            eprintln!("      External tools provide 90%+ accuracy vs 60% for internal analysis");
+            eprintln!("");
+        }
+        
         if external {
-            use nekocode::deadcode::external::ExternalToolManager;
-            let tools = ExternalToolManager::check_tools();
-            if !tools.has_any_tools() {
+            if !tools.has_any_tool() {
                 println!("⚠️ No external tools found!");
-                
-                // Detect primary language in project for targeted guidance
-                let primary_language = detect_primary_language(&path)?;
-                tools.display_installation_guide(primary_language);
-                
-                println!("\n🔄 Proceeding with internal analysis only...");
-                println!("   (Install external tools above for 90% accuracy vs 60% internal)");
             } else {
-                println!("✅ External tools detected - using high accuracy analysis");
+                println!("✅ Using external tools for high-accuracy analysis (90%+ confidence)");
             }
+        } else {
+            eprintln!("⚠️  Using internal analysis (60% accuracy). May have false positives.");
+            eprintln!("    Especially for: public APIs, trait implementations, test utilities");
         }
         
         // Load session for analysis

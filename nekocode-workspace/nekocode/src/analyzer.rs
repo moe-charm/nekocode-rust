@@ -125,6 +125,7 @@ impl JavaScriptAnalyzer {
                 is_async: false,
                 is_static: false,
                 is_generic: false,
+                is_public: true,  // JavaScript functions are public by default
                 complexity: None,
             };
             
@@ -188,6 +189,7 @@ impl JavaScriptAnalyzer {
                 fields: Vec::new(),
                 is_abstract: false,
                 is_interface: false,
+                is_public: true,  // JavaScript classes are public by default
             };
             
             for capture in mat.captures {
@@ -403,6 +405,7 @@ impl PythonAnalyzer {
                     is_async: false,
                     is_static: false,
                     is_generic: false,
+                    is_public: true,  // JavaScript functions are public by default
                     complexity: None,
                 };
                 
@@ -473,6 +476,7 @@ impl PythonAnalyzer {
                     fields: Vec::new(),
                     is_abstract: false,
                     is_interface: false,
+                    is_public: true,  // JavaScript classes are public by default
                 };
                 
                 classes.push(class_info);
@@ -622,6 +626,7 @@ impl RustAnalyzer {
         let query_str = r#"
             [
               (function_item
+                visibility_modifier: (visibility_modifier)? @vis
                 name: (identifier) @name) @function
               (closure_expression) @closure
             ]
@@ -635,9 +640,15 @@ impl RustAnalyzer {
         for mat in matches {
             let mut func_name = String::new();
             let mut func_node = None;
+            let mut is_public = false;
             
             for capture in mat.captures {
                 match query.capture_names()[capture.index as usize].as_ref() {
+                    "vis" => {
+                        if let Ok(vis_text) = capture.node.utf8_text(source.as_bytes()) {
+                            is_public = vis_text.contains("pub");
+                        }
+                    }
                     "name" => {
                         if let Ok(name) = capture.node.utf8_text(source.as_bytes()) {
                             func_name = name.to_string();
@@ -664,7 +675,7 @@ impl RustAnalyzer {
                     column_start: node.start_position().column as u32,
                     column_end: node.end_position().column as u32,
                     language: Language::Rust,
-                    visibility: Some(Visibility::Public),
+                    visibility: if is_public { Some(Visibility::Public) } else { Some(Visibility::Private) },
                     parent_id: None,
                     metadata: std::collections::HashMap::new(),
                 };
@@ -676,6 +687,7 @@ impl RustAnalyzer {
                     is_async: false,
                     is_static: false,
                     is_generic: false,
+                    is_public,  // Set based on visibility modifier
                     complexity: None,
                 };
                 
@@ -692,10 +704,13 @@ impl RustAnalyzer {
         let query_str = r#"
             [
               (struct_item
+                visibility_modifier: (visibility_modifier)? @vis
                 name: (type_identifier) @name) @struct
               (enum_item
+                visibility_modifier: (visibility_modifier)? @vis
                 name: (type_identifier) @name) @enum
               (trait_item
+                visibility_modifier: (visibility_modifier)? @vis
                 name: (type_identifier) @name) @trait
             ]
         "#;
@@ -708,9 +723,15 @@ impl RustAnalyzer {
         for mat in matches {
             let mut class_name = String::new();
             let mut class_node = None;
+            let mut is_public = false;
             
             for capture in mat.captures {
                 match query.capture_names()[capture.index as usize].as_ref() {
+                    "vis" => {
+                        if let Ok(vis_text) = capture.node.utf8_text(source.as_bytes()) {
+                            is_public = vis_text.contains("pub");
+                        }
+                    }
                     "name" => {
                         if let Ok(name) = capture.node.utf8_text(source.as_bytes()) {
                             class_name = name.to_string();
@@ -747,6 +768,7 @@ impl RustAnalyzer {
                     fields: Vec::new(),
                     is_abstract: false,
                     is_interface: node.kind() == "trait_item",
+                    is_public: is_public,  // Use detected visibility
                 };
                 
                 classes.push(class_info);
@@ -871,6 +893,7 @@ impl CppAnalyzer {
                 is_async: false,
                 is_static: false,
                 is_generic: false,
+                is_public: true,  // Default to public for now
                 complexity: None,
             });
         } else if node.kind() == "class_specifier" || node.kind() == "struct_specifier" {
@@ -912,6 +935,7 @@ impl CppAnalyzer {
                 fields: Vec::new(),
                 is_abstract: false,
                 is_interface: false,
+                is_public: true,  // Default to public for now
             });
         }
         
@@ -999,6 +1023,9 @@ impl GoAnalyzer {
                     parent_id: None,
                     metadata: std::collections::HashMap::new(),
                 };
+                // In Go, functions starting with uppercase are public
+                let is_public = symbol.name.chars().next().map_or(false, |c| c.is_uppercase());
+                
                 functions.push(FunctionInfo {
                     symbol,
                     parameters: Vec::new(),
@@ -1006,6 +1033,7 @@ impl GoAnalyzer {
                     is_async: false,
                     is_static: false,
                     is_generic: false,
+                    is_public,
                     complexity: None,
                 });
             } else if node.kind() == "type_declaration" {
@@ -1023,6 +1051,9 @@ impl GoAnalyzer {
                     parent_id: None,
                     metadata: std::collections::HashMap::new(),
                 };
+                // In Go, types starting with uppercase are public
+                let is_public = symbol.name.chars().next().map_or(false, |c| c.is_uppercase());
+                
                 classes.push(ClassInfo {
                     symbol,
                     base_classes: Vec::new(),
@@ -1031,6 +1062,7 @@ impl GoAnalyzer {
                     fields: Vec::new(),
                     is_abstract: false,
                     is_interface: false,
+                    is_public,
                 });
             }
         }
@@ -1142,6 +1174,7 @@ impl CSharpAnalyzer {
                 is_async: false,
                 is_static: false,
                 is_generic: false,
+                is_public: true,  // Default to public for now
                 complexity: None,
             });
         } else if node.kind() == "class_declaration" || node.kind() == "interface_declaration" {
@@ -1183,6 +1216,7 @@ impl CSharpAnalyzer {
                 fields: Vec::new(),
                 is_abstract: false,
                 is_interface: node.kind() == "interface_declaration",
+                is_public: true,  // C# class visibility depends on modifiers
             });
         }
         
