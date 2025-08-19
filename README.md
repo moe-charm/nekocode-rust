@@ -61,26 +61,42 @@ cargo build --release
 🆕 Unused dependencies analysis (cargo-machete integration)
 ```
 
-### 🆕 **Dead Code Detection** (Phase 2 Complete!)
+### 🆕 **Dead Code Detection** - ⚠️ **Use --external for Accuracy!**
 
-**Rust Analysis (90% Accuracy):**
+**🚨 IMPORTANT: Accuracy Difference**
+- **With --external flag**: 90%+ accuracy using external tools ✅
+- **Without --external**: 60% accuracy with many false positives ❌
+
+**Correct Usage (High Accuracy):**
 ```bash
-# Complete analysis with external tools integration
-./nekocode session-create rust-project/ --complete --external --format text
+# ✅ RECOMMENDED: Use external tools for accurate detection
+./nekocode session-create project/ --complete --external --format text
+./nekocode deadcode SESSION_ID --external --min-confidence 85
 
-# Results: Comprehensive dead code detection
-📊 4 dead code items found:
-  • Functions: dead_function (95% confidence) - clippy
-  • Structs: UnusedStruct (95% confidence) - clippy  
-  • Variables: unused_var (95% confidence) - clippy
-  • Dependencies: serde (85% confidence) - cargo-machete
+# The tool will guide you:
+💡 Tip: External tools detected! Use --external flag for better accuracy
 ```
 
-**External Tools Integration:**
-- **cargo clippy** (95% confidence): Functions, structs, variables
-- **cargo-machete** (85% confidence): Unused dependencies in Cargo.toml
-- **JSON parsing**: Full message format support with precise line numbers
-- **Unified reporting**: Single report combining multiple analysis tools
+**External Tools by Language:**
+| Language | Tool | Accuracy | What it Detects |
+|----------|------|----------|-----------------|
+| **Rust** | cargo clippy | 95% | Functions, structs, variables |
+| **Rust** | cargo-machete | 85% | Unused dependencies |
+| **Python** | vulture | 90% | Unused code, imports |
+| **Go** | staticcheck | 90% | Dead code, bugs |
+| **JavaScript/TypeScript** | Internal only | 60% | Basic unused detection |
+
+**Installation for Better Accuracy:**
+```bash
+# Rust projects
+cargo install cargo-machete
+
+# Python projects  
+pip install vulture
+
+# Go projects
+go install honnef.co/go/tools/cmd/staticcheck@latest
+```
 
 **Example Output:**
 ```json

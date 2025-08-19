@@ -26,10 +26,12 @@
 
 | 機能 | CLIコマンド | MCPツール | 説明 |
 |------|-------------|-----------|------|
-| **解析** | `nekocode_ai analyze <path>` | `mcp__nekocode__analyze` | プロジェクト/ファイル解析 |
-| **セッション作成** | `nekocode_ai session-create <path>` | `mcp__nekocode__session_create` | 対話式セッション開始 |
-| **統計情報** | `nekocode_ai session-command <id> stats` | `mcp__nekocode__session_stats` | セッション統計表示 |
-| **言語一覧** | `nekocode_ai languages` | `mcp__nekocode__list_languages` | サポート言語表示 |
+| **解析** | `nekocode analyze <path>` | `mcp__nekocode__analyze` | プロジェクト/ファイル解析 |
+| **セッション作成** | `nekocode session-create <path>` | `mcp__nekocode__session_create` | 対話式セッション開始 |
+| **🆕 デッドコード検出** | `nekocode deadcode <id> --external` | - | **外部ツールで高精度解析（90%+）** |
+| **🆕 完全解析** | `nekocode session-create <path> --complete --external` | `session_create(complete=True, external=True)` | **セッション作成＋デッドコード検出** |
+| **統計情報** | `nekocode session-info <id>` | `mcp__nekocode__session_stats` | セッション統計表示 |
+| **言語一覧** | `nekocode languages` | `mcp__nekocode__list_languages` | サポート言語表示 |
 
 ### 🆕 Direct Mode編集コマンド（セッション不要！）
 
@@ -51,13 +53,13 @@
 
 ```bash
 # 高速統計モード（推奨）
-./bin/nekocode_ai analyze src/ --stats-only --io-threads 16
+./bin/nekocode analyze src/ --stats-only
 
 # 単一ファイル解析
-./bin/nekocode_ai analyze main.cpp
+./bin/nekocode analyze main.cpp
 
 # プログレス表示付き（大規模プロジェクト用）
-./bin/nekocode_ai session-create large-project/ --progress
+./bin/nekocode session-create large-project/
 ```
 
 ### MCP使用例（Claude Code内）
@@ -75,6 +77,73 @@ result = mcp__nekocode__session_create(
     path="large-project/"
 )
 session_id = result["session_id"]
+```
+
+## 🆕 **デッドコード検出機能** - ⚠️ **必ず--externalを使用！**
+
+### **🚨 精度の重要な違い**
+| モード | 精度 | 誤検出 | 推奨度 |
+|--------|------|--------|--------|
+| `--external` あり | **90%+** | ほぼなし | ✅ **強く推奨** |
+| `--external` なし | 60% | 多い | ❌ 非推奨 |
+
+### **なぜ外部ツールが必要か**
+内部解析だけでは以下を誤検出してしまいます：
+- **公開API**: ライブラリの公開関数・クラス
+- **トレイト実装**: Rust/Goのインターフェース実装
+- **テストユーティリティ**: テスト用のヘルパー関数
+- **フレームワーク統合**: React/Vue/Express等のコールバック
+
+### CLI使用例（正しい使い方）
+
+```bash
+# ✅ 推奨: 完全解析（セッション作成＋デッドコード検出）
+./bin/nekocode session-create project/ --complete --external --format text
+
+# ✅ 推奨: 既存セッションでデッドコード検出
+./bin/nekocode deadcode SESSION_ID --external --min-confidence 85
+
+# ❌ 非推奨: 外部ツールなし（誤検出多発）
+./bin/nekocode deadcode SESSION_ID  # 60%精度、使わないで！
+
+# 💡 ツールが自動でガイド表示
+# 外部ツールが検出されると、以下のメッセージが表示されます：
+# "💡 Tip: External tools detected! Use --external flag for better accuracy"
+```
+
+### MCP使用例（Claude Code内）
+
+```python
+# ✅ 推奨: 完全解析
+result = mcp__nekocode__session_create(
+    path="project/",
+    complete=True,
+    external=True,  # 必須！90%+精度
+    format="github-comment"
+)
+```
+
+### 必要な外部ツールのインストール
+
+```bash
+# Rust（標準搭載）
+cargo clippy --version  # 既にある
+
+# Python
+pip install vulture
+
+# Go
+go install honnef.co/go/tools/cmd/staticcheck@latest
+
+# JavaScript/TypeScript
+# 現在は内部解析のみ（60%精度）
+```
+
+### ツールが自動でガイド表示
+```
+💡 Tip: External tools detected! Use --external flag for better accuracy:
+      nekocode deadcode SESSION_ID --external
+      External tools provide 90%+ accuracy vs 60% for internal analysis
 ```
 
 ### 引数説明
@@ -401,6 +470,39 @@ cat memory/movelines_previews/movelines_*.json
 
 # 問題なければ実行
 ./bin/nekocode_ai movelines-confirm PREVIEW_ID
+```
+
+### 例5: デッドコード検出（高精度版）
+
+```bash
+# Step 1: 外部ツールをインストール（言語別）
+# Rust
+cargo install cargo-machete  # 未使用依存関係検出
+
+# Python
+pip install vulture  # 未使用コード検出
+
+# Go
+go install honnef.co/go/tools/cmd/staticcheck@latest
+
+# Step 2: セッション作成と同時に完全解析
+./bin/nekocode session-create rust-project/ --complete --external --format github-comment
+# 出力例:
+# ✅ Using external tools for high-accuracy analysis (90%+ confidence)
+# 📊 Complete analysis finished: 23 dead code items found (60% threshold)
+
+# Step 3: 信頼度別フィルタリング
+./bin/nekocode deadcode SESSION_ID --external --min-confidence 90
+# → 90%以上の確実なデッドコードのみ表示
+
+./bin/nekocode deadcode SESSION_ID --external --min-confidence 80
+# → 80%以上の高確率デッドコード表示
+
+# Step 4: CI/CD用GitHub形式出力
+./bin/nekocode deadcode SESSION_ID --external --format github-comment -o report.md
+
+# ❌ 避けるべき使い方（誤検出多発）
+./bin/nekocode deadcode SESSION_ID  # --externalなし = 60%精度
 ```
 
 ---

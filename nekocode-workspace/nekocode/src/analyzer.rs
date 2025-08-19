@@ -626,7 +626,7 @@ impl RustAnalyzer {
         let query_str = r#"
             [
               (function_item
-                visibility_modifier: (visibility_modifier)? @vis
+                (visibility_modifier)? @vis
                 name: (identifier) @name) @function
               (closure_expression) @closure
             ]
@@ -704,13 +704,13 @@ impl RustAnalyzer {
         let query_str = r#"
             [
               (struct_item
-                visibility_modifier: (visibility_modifier)? @vis
+                (visibility_modifier)? @vis
                 name: (type_identifier) @name) @struct
               (enum_item
-                visibility_modifier: (visibility_modifier)? @vis
+                (visibility_modifier)? @vis
                 name: (type_identifier) @name) @enum
               (trait_item
-                visibility_modifier: (visibility_modifier)? @vis
+                (visibility_modifier)? @vis
                 name: (type_identifier) @name) @trait
             ]
         "#;

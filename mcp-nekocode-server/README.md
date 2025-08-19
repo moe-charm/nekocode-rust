@@ -92,6 +92,33 @@ NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配
 - `mcp__nekocode__session_update` - **NEW!** 🚀 インクリメンタル更新（23-49ms、918-1956x高速化）
 - `mcp__nekocode__find_files` - 🔎 ファイル検索（超高速3ms）
 
+### 🆕 **デッドコード検出機能** - ⚠️ **--external必須！**
+
+**🚨 重要: 精度の違い**
+- **外部ツール使用時**: 90%+ の高精度 ✅
+- **外部ツールなし**: 60% の低精度（誤検出多発） ❌
+
+**正しい使い方（CLI）:**
+```bash
+# ✅ 推奨: 外部ツールで高精度解析
+./nekocode session-create project/ --complete --external
+./nekocode deadcode SESSION_ID --external --min-confidence 85
+
+# ツールが自動でガイド表示:
+💡 Tip: External tools detected! Use --external flag for better accuracy
+```
+
+**MCPでの使い方:**
+```python
+# セッション作成時に完全解析
+mcp__nekocode__session_create(path="project/", complete=True, external=True)
+```
+
+**必要な外部ツール:**
+- **Rust**: cargo clippy（標準搭載）
+- **Python**: `pip install vulture`
+- **Go**: `go install honnef.co/go/tools/cmd/staticcheck@latest`
+
 ### 🔍 File Watching System（NEW!）
 **リアルタイムファイル監視 - 編集と同時に解析自動更新**
 - **自動ファイル監視**: コードファイル・設定ファイル・重要ファイルを自動検出
