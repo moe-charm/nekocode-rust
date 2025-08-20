@@ -33,7 +33,7 @@ BINARIES=(
 # Define deployment locations
 DEPLOY_LOCATIONS=(
     "../../releases"                           # nekocode-rust-clean/releases
-    "../../../nyash/releases"                  # nyash/releases
+    "../../../../nekocode-cpp-github/nyash/releases"  # nyash/releases
     "../../../nekocode-cpp-github/releases"    # main releases (if exists)
 )
 
@@ -44,9 +44,14 @@ for location in "${DEPLOY_LOCATIONS[@]}"; do
         
         for binary in "${BINARIES[@]}"; do
             if [ -f "target/release/$binary" ]; then
-                cp "target/release/$binary" "$location/$binary"
+                cp -f "target/release/$binary" "$location/$binary"
                 chmod +x "$location/$binary"
-                echo -e "${GREEN}  ✓ $binary${NC}"
+                # Verify the copy was successful
+                if [ -f "$location/$binary" ]; then
+                    echo -e "${GREEN}  ✓ $binary copied successfully${NC}"
+                else
+                    echo -e "${RED}  ✗ Failed to copy $binary${NC}"
+                fi
             else
                 echo -e "${RED}  ✗ $binary not found${NC}"
             fi
