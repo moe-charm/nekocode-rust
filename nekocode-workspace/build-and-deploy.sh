@@ -32,7 +32,8 @@ BINARIES=(
 
 # Define deployment locations
 DEPLOY_LOCATIONS=(
-    "../../releases"                           # nekocode-rust-clean/releases
+    "../releases"                              # IMPORTANT: nekocode-rust-clean/releases (for git clone users!)
+    "../../releases"                           # nekocode-rust-clean/releases (backup)
     "../../../../nekocode-cpp-github/nyash/releases"  # nyash/releases
     "../../../nekocode-cpp-github/releases"    # main releases (if exists)
 )
