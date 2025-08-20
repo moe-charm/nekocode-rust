@@ -9,7 +9,7 @@ mod smart;
 use clap::Parser;
 use std::io::{self, Read, Write};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nekocode_core::{Result, NekocodeError};
 use crate::cli::{Cli, Commands, SmartCommands};
@@ -17,7 +17,7 @@ use crate::preview::{PreviewManager, InsertPosition};
 use crate::replace::{ReplaceEngine, ReplaceOptions};
 use crate::moveclass::{MoveClassEngine, MoveOptions};
 use crate::smart::{SmartRefactor, SmartPosition, Scope};
-use nekorefactor::{CommentStripper, StripOptions, EditEntry, EditOperation, get_history, record_edit};
+use nekorefactor::{CommentStripper, StripOptions, EditEntry, get_history, record_edit};
 
 #[tokio::main]
 async fn main() -> Result<()> {

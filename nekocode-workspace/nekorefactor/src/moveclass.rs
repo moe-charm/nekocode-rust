@@ -5,7 +5,7 @@ use std::fs;
 
 use nekocode_core::{
     Result, NekocodeError, SessionManager, Language,
-    SymbolInfo, FunctionInfo, ClassInfo
+    SymbolInfo
 };
 
 /// Options for move operations
@@ -348,7 +348,7 @@ impl MoveClassEngine {
         // 2. Update their import statements
         // 3. Handle different import styles for each language
         
-        let mut updated_files = Vec::new();
+        let updated_files = Vec::new();
         
         // TODO: Implement actual import updating logic
         // This would require parsing imports in all project files

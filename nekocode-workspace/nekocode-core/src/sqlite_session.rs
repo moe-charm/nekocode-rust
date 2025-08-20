@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use crate::types::{AnalysisResult, Language};
+use crate::types::AnalysisResult;
 use crate::SessionInfo;
 
 /// SQLite-based session storage for high-performance differential updates

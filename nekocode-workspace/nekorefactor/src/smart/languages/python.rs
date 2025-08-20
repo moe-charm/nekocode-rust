@@ -1,6 +1,6 @@
 //! Python-specific rules for smart refactoring
 
-use nekocode_core::{Result, NekocodeError};
+use nekocode_core::Result;
 use crate::smart::{AstInfo, InsertPoint, Indent};
 use super::{LanguageRules, find_function_by_name, find_class_by_name};
 
@@ -52,7 +52,7 @@ impl LanguageRules for PythonRules {
         
         // Insert before the function definition
         // Check for decorators and docstrings
-        let mut start_line = func.start_line;
+        let start_line = func.start_line;
         
         // TODO: Check for decorators by looking at lines before
         // For now, just insert at the function definition line
@@ -97,7 +97,7 @@ impl LanguageRules for PythonRules {
     
     fn find_imports_insert_point(&self, ast_info: &AstInfo) -> Result<InsertPoint> {
         // Find the last import statement, or insert at the beginning
-        let mut last_import_line = 0u32;
+        let last_import_line = 0u32;
         let mut found_imports = false;
         
         for import in &ast_info.imports {

@@ -2,12 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 
 use nekocode_core::{
-    AnalysisResult, SessionManager, Session, Language,
-    FunctionInfo, ClassInfo, SymbolInfo, Result, NekocodeError
+    AnalysisResult, SessionManager,
+    FunctionInfo, Result
 };
 
 /// Risk levels for impact assessment

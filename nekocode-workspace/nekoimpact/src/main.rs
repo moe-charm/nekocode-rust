@@ -8,7 +8,7 @@ use clap::Parser;
 use nekocode_core::{SessionManager, Result, NekocodeError};
 use crate::cli::{Cli, Commands};
 use crate::impact::{ImpactAnalyzer, ImpactResult};
-use crate::analyzer::{AnalysisOptions, OutputFormat};
+use crate::analyzer::OutputFormat;
 
 #[tokio::main]
 async fn main() -> Result<()> {

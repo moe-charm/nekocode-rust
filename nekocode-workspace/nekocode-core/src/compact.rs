@@ -3,7 +3,6 @@
 //! This module provides compact JSON serialization that reduces
 //! session file sizes by 20-30% through short key names.
 
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 

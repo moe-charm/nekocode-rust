@@ -57,13 +57,64 @@ impl SessionCommands {
         ))
     }
     
-    /// Query AST by path
-    pub async fn ast_query(&mut self, session_id: &str, path: &str) -> Result<String> {
+    /// Query AST by path (searches for symbols, functions, classes)
+    pub async fn ast_query(&mut self, session_id: &str, query: &str) -> Result<String> {
         let session = self.session_manager.get_session_mut(session_id)?;
         
-        // This would require storing AST in session or rebuilding it
-        // For now, return a placeholder
-        Ok(format!("🔍 Querying AST path: {}\n(AST query functionality requires AST storage in session)", path))
+        let mut output = String::new();
+        output.push_str(&format!("🔍 Searching for: {}\n", query));
+        output.push_str(&"=".repeat(50));
+        output.push('\n');
+        
+        let mut found_count = 0;
+        
+        // Search in classes
+        for result in &session.info.analysis_results {
+            for class in &result.classes {
+                if class.symbol.name.contains(query) || class.symbol.name == query {
+                    found_count += 1;
+                    output.push_str(&format!("\n📦 Class: {}\n", class.symbol.name));
+                    output.push_str(&format!("   📄 File: {}\n", result.file_info.path.display()));
+                    output.push_str(&format!("   📍 Lines: {}-{}\n", class.symbol.line_start, class.symbol.line_end));
+                    output.push_str(&format!("   🔧 Methods: {}\n", class.methods.len()));
+                    if !class.methods.is_empty() {
+                        output.push_str("   📝 Methods:\n");
+                        for method_id in &class.methods {
+                            // Methods are stored as Symbol IDs (strings), just display them
+                            output.push_str(&format!("      - {}\n", method_id));
+                        }
+                    }
+                }
+            }
+            
+            // Search in functions
+            for func in &result.functions {
+                if func.symbol.name.contains(query) || func.symbol.name == query {
+                    found_count += 1;
+                    output.push_str(&format!("\n⚡ Function: {}\n", func.symbol.name));
+                    output.push_str(&format!("   📄 File: {}\n", result.file_info.path.display()));
+                    output.push_str(&format!("   📍 Lines: {}-{}\n", func.symbol.line_start, func.symbol.line_end));
+                    if let Some(ref ret_type) = func.return_type {
+                        output.push_str(&format!("   📝 Returns: {}\n", ret_type));
+                    }
+                    if func.is_async {
+                        output.push_str("   ⚡ Async function\n");
+                    }
+                }
+            }
+        }
+        
+        if found_count == 0 {
+            output.push_str(&format!("\n❌ No matches found for '{}'\n", query));
+            output.push_str("\n💡 Tips:\n");
+            output.push_str("  - Try a partial name (e.g., 'String' instead of 'StringBox')\n");
+            output.push_str("  - Check spelling and case\n");
+            output.push_str("  - Use ast-dump to see all available symbols\n");
+        } else {
+            output.push_str(&format!("\n✅ Found {} matches\n", found_count));
+        }
+        
+        Ok(output)
     }
     
     /// Dump AST in specified format

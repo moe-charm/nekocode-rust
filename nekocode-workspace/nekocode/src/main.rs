@@ -606,8 +606,8 @@ async fn handle_refresh_command(
     external: bool,
     format: String,
 ) -> Result<()> {
-    use nekocode_core::SqliteSession;
-    use std::path::Path;
+    
+    
     
     if verbose {
         println!("🔄 Starting refresh for session: {}", session_id);
