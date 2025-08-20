@@ -234,10 +234,20 @@ pub enum Commands {
     
     /// Detect dead code in a session
     /// 
+    /// First create a session, then analyze it:
+    /// 
+    ///   1. Create session: nekocode session-create /path/to/project
+    ///      → Returns session ID (e.g., abc123)
+    /// 
+    ///   2. Analyze dead code: nekocode deadcode abc123 --external
+    /// 
+    /// Or do both at once:
+    /// 
+    ///   nekocode session-create /path/to/project --complete --external
+    /// 
     /// Examples:
     /// 
     ///   nekocode deadcode abc123 --external
-    /// 
     ///   nekocode deadcode abc123 --format github-comment --min-confidence 90
     Deadcode {
         /// Session ID to analyze

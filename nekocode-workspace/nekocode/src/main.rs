@@ -313,6 +313,37 @@ async fn handle_deadcode_command(
     
     // Load session
     let mut session_manager = SessionManager::new()?;
+    
+    // Check if session exists, if not show helpful message
+    if session_manager.get_session_mut(&session_id).is_err() {
+        eprintln!("❌ Session '{}' not found!", session_id);
+        eprintln!("\n💡 How to use deadcode analysis:");
+        eprintln!("  1. First create a session:");
+        eprintln!("     nekocode session-create /path/to/project");
+        eprintln!("\n  2. Then run deadcode analysis:");
+        eprintln!("     nekocode deadcode <SESSION_ID> --external");
+        eprintln!("\n  Or do both at once:");
+        eprintln!("     nekocode session-create /path/to/project --complete --external");
+        
+        // Show available sessions
+        let sessions = session_manager.list_sessions()?;
+        if !sessions.is_empty() {
+            eprintln!("\n📋 Available sessions:");
+            for session in sessions.iter().take(5) {
+                eprintln!("  {} - {} ({} files)", 
+                    session.id, 
+                    session.path.display(),
+                    session.file_count
+                );
+            }
+            if sessions.len() > 5 {
+                eprintln!("  ... and {} more. Use 'nekocode session-list' to see all.", sessions.len() - 5);
+            }
+        }
+        
+        return Err(NekocodeError::SessionNotFound(session_id));
+    }
+    
     let session = session_manager.get_session_mut(&session_id)?;
     
     // Check for external tools and provide guidance
