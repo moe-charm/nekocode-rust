@@ -65,6 +65,28 @@ nekorefactor smart replace SESSION_ID file.py "value" "new_value" --in-class MyC
 nekorefactor smart move SESSION_ID "MyClass::method" target.py --update-imports
 ```
 
+### 📂 **Split File** (2025-08-21実装完了)
+
+巨大ファイルを**クラス/関数単位で自動分割**！
+
+```bash
+# クラス単位で分割（デフォルト・推奨）
+nekorefactor split-file objects.rs --output ./split/
+# → Calculator.rs, StringProcessor.rs, standalone.rs
+
+# 関数単位で分割
+nekorefactor split-file large_file.js --by functions --output ./functions/
+# → 01_hello.js, 02_greet.js, 03_calculate.js...
+
+# サイズ指定分割（開発中）
+nekorefactor split-file huge.py --by size:500 --output ./chunks/
+```
+
+#### ✨ **特徴**
+- **言語別最適化**: Rust implブロック、JS/TS class、Python class対応
+- **依存関係保持**: 必要なimport文を自動追加
+- **スタンドアロン関数**: クラスに属さない関数を別ファイルに
+
 ### 🧹 **Strip Comments** (2025-08-18実装完了)
 
 Tree-sitter AST解析による**世界最高精度のコメント削除**！

@@ -96,6 +96,10 @@ def new_function():  # ✅ 正確な位置・インデント！
 # 行移動・クラス移動
 ./target/debug/nekorefactor move-lines src.js 10 5 dest.js 20
 ./target/debug/nekorefactor move-class SESSION_ID SYMBOL_ID target.js
+
+# 🆕 ファイル分割（2025-08-21追加）
+./target/debug/nekorefactor split-file objects.rs --output ./split/  # クラス単位（デフォルト）
+./target/debug/nekorefactor split-file huge.js --by functions        # 関数単位
 ```
 
 #### **✅ 検証済み機能（2025-08-17テスト完了）**
