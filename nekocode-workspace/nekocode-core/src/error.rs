@@ -51,6 +51,12 @@ pub enum NekocodeError {
     #[error("External tool error: {0}")]
     External(String),
     
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
+    
+    #[error("Analysis error: {0}")]
+    AnalysisError(String),
+    
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }

@@ -5,6 +5,8 @@ mod replace;
 mod moveclass;
 mod cli;
 mod smart;
+mod split_file;
+mod language_detection;
 
 use clap::Parser;
 use std::io::{self, Read, Write};
@@ -289,13 +291,39 @@ async fn main() -> Result<()> {
             }
         }
         
-        Commands::SplitFile { file, by, output } => {
-            // TODO: Implement file splitting
-            println!("File splitting not yet implemented");
-            println!("File: {}", file.display());
-            println!("Split by: {}", by);
-            if let Some(output) = output {
-                println!("Output: {}", output.display());
+        Commands::SplitFile { file, by, output, verbose } => {
+            use crate::split_file::{FileSplitter, SplitBy};
+            
+            let split_by = by.parse::<SplitBy>().unwrap_or_else(|e| {
+                eprintln!("❌ Error parsing split type: {}", e);
+                std::process::exit(1);
+            });
+            
+            let mut splitter = FileSplitter::new().unwrap_or_else(|e| {
+                eprintln!("❌ Failed to create file splitter: {}", e);
+                std::process::exit(1);
+            });
+            
+            match splitter.split_file(&file, split_by, output.as_deref(), verbose).await {
+                Ok(result) => {
+                    println!("✅ File splitting completed!");
+                    println!("📄 Original file: {}", result.original_file.display());
+                    println!("📊 Total functions: {}", result.total_functions);
+                    println!("📏 Total lines: {}", result.total_lines);
+                    println!("📁 Created {} split files:", result.split_files.len());
+                    
+                    for split_file in &result.split_files {
+                        println!("  ✓ {} - {} (lines {}-{})", 
+                                split_file.file_path.display(),
+                                split_file.function_name,
+                                split_file.start_line,
+                                split_file.end_line);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ File splitting failed: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
         

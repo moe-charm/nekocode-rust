@@ -261,13 +261,17 @@ pub enum Commands {
         /// File to split
         file: PathBuf,
         
-        /// Split by (functions, classes, size)
+        /// Split by (functions, classes, size:N)
         #[arg(long, default_value = "classes")]
         by: String,
         
         /// Output directory
         #[arg(short, long)]
         output: Option<PathBuf>,
+        
+        /// Verbose output
+        #[arg(short, long)]
+        verbose: bool,
     },
     
     /// Smart refactoring with Tree-sitter AST
