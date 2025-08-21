@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::process::Command;
+use std::collections::HashSet;
 use nekocode_core::{Result, NekocodeError, SessionManager, AnalysisResult};
 use crate::language_detection::LanguageDetector;
 
@@ -212,6 +213,9 @@ impl FileSplitter {
             println!("📊 Found {} classes to split", analysis_result.classes.len());
         }
         
+        // Track which functions have been included in class files
+        let mut included_functions = HashSet::new();
+        
         // Process each class
         for (i, class) in analysis_result.classes.iter().enumerate() {
             let start_line = class.symbol.line_start as usize;
@@ -227,28 +231,29 @@ impl FileSplitter {
             
             // Extract class content and its impl blocks
             let mut class_content = Vec::new();
+            let mut processed_impl_blocks = std::collections::HashSet::new();
             
             // Add the class/struct definition
             class_content.extend_from_slice(&lines[start_line-1..end_line]);
             
             // Find all impl blocks for this class
             for func in &analysis_result.functions {
-                // Check if this function belongs to the class
-                if func.symbol.name.starts_with("new") || func.symbol.name == "new" {
-                    // Special handling for constructors
-                    if func.symbol.line_start > start_line as u32 && func.symbol.line_end <= end_line as u32 {
-                        continue; // Already included in class definition
-                    }
-                }
-                
                 // Check if function is within an impl block for this class
-                // This is a heuristic - look for impl blocks near the class
                 if let Some(impl_line) = find_impl_block_for_class(&lines, &class.symbol.name, func.symbol.line_start as usize) {
+                    // Mark this function as included
+                    included_functions.insert(func.symbol.line_start);
+                    
+                    // Skip if we've already processed this impl block
+                    if processed_impl_blocks.contains(&impl_line) {
+                        continue;
+                    }
+                    
                     let impl_start = impl_line;
                     let impl_end = find_impl_block_end(&lines, impl_start);
                     
-                    // Only add if not already included
-                    if impl_start >= end_line {
+                    // Only add if not already included in the struct definition
+                    if impl_start > end_line {
+                        processed_impl_blocks.insert(impl_line);
                         class_content.push("");  // Add empty line separator
                         class_content.extend_from_slice(&lines[impl_start-1..impl_end]);
                     }
@@ -283,7 +288,7 @@ impl FileSplitter {
         
         // Add standalone functions to a separate file if any exist
         let standalone_functions: Vec<_> = analysis_result.functions.iter()
-            .filter(|f| !is_method_function(&lines, f.symbol.line_start as usize))
+            .filter(|f| !included_functions.contains(&f.symbol.line_start))
             .collect();
             
         if !standalone_functions.is_empty() {
@@ -422,16 +427,47 @@ impl FileSplitter {
 
 /// Helper function to find impl block for a class
 fn find_impl_block_for_class(lines: &[&str], class_name: &str, func_line: usize) -> Option<usize> {
+    if func_line == 0 || func_line > lines.len() {
+        return None;
+    }
+    
+    // First check if this function line is indented (likely a method)
+    let func_line_text = lines[func_line - 1];
+    if !func_line_text.starts_with("    ") && !func_line_text.starts_with("\t") {
+        // Top-level function, not a method
+        return None;
+    }
+    
     // Search backwards from function line for impl block
+    let mut brace_depth = 0;
     for i in (0..func_line.min(lines.len())).rev() {
-        let line = lines[i].trim();
-        if line.starts_with(&format!("impl {}", class_name)) || 
-           line.starts_with(&format!("impl<")) && line.contains(class_name) {
-            return Some(i + 1);  // Return 1-based line number
+        let line = lines[i];
+        let trimmed = line.trim();
+        
+        // Track brace depth to ensure we're in the right scope
+        for ch in line.chars().rev() {
+            if ch == '}' {
+                brace_depth += 1;
+            } else if ch == '{' {
+                brace_depth = if brace_depth > 0 { brace_depth - 1 } else { 0 };
+            }
         }
+        
+        // Only check for impl if we're at the right brace level
+        if brace_depth == 0 {
+            if trimmed.starts_with(&format!("impl {}", class_name)) || 
+               (trimmed.starts_with("impl ") && trimmed.contains(class_name)) {
+                // Verify this impl block contains our function
+                let impl_end = find_impl_block_end(lines, i + 1);
+                if func_line <= impl_end {
+                    return Some(i + 1);  // Return 1-based line number
+                }
+            }
+        }
+        
         // Stop if we hit another struct/class definition
-        if line.starts_with("struct ") || line.starts_with("class ") || 
-           line.starts_with("pub struct ") || line.starts_with("pub class ") {
+        if trimmed.starts_with("struct ") || trimmed.starts_with("class ") || 
+           trimmed.starts_with("pub struct ") || trimmed.starts_with("pub class ") {
             break;
         }
     }
@@ -462,19 +498,51 @@ fn find_impl_block_end(lines: &[&str], start_line: usize) -> usize {
 
 /// Helper function to check if a function is a method (inside impl block)
 fn is_method_function(lines: &[&str], func_line: usize) -> bool {
-    // Search backwards from function line for impl block
-    for i in (0..func_line.min(lines.len())).rev() {
-        let line = lines[i].trim();
-        if line.starts_with("impl ") || line.starts_with("impl<") {
-            return true;
+    if func_line == 0 || func_line > lines.len() {
+        return false;
+    }
+    
+    // Check indentation - methods are usually indented
+    let func_line_str = lines[func_line - 1];
+    if !func_line_str.starts_with("    ") && !func_line_str.starts_with("\t") {
+        // Top-level function (not indented) - likely standalone
+        if func_line_str.trim_start().starts_with("fn ") || 
+           func_line_str.trim_start().starts_with("pub fn ") {
+            return false;
         }
-        // Stop if we hit a struct definition or another function at the same indentation level
-        if line.starts_with("struct ") || line.starts_with("pub struct ") ||
-           line.starts_with("fn ") || line.starts_with("pub fn ") {
-            if i < func_line - 1 {  // Not the function we're checking
-                break;
+    }
+    
+    // Search backwards from function line for impl block
+    let mut brace_depth = 0;
+    for i in (0..func_line.min(lines.len())).rev() {
+        let line = lines[i];
+        
+        // Count braces to track nesting
+        for ch in line.chars().rev() {
+            if ch == '}' {
+                brace_depth += 1;
+            } else if ch == '{' {
+                if brace_depth > 0 {
+                    brace_depth -= 1;
+                } else {
+                    // Found an opening brace at the right level
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("impl ") || trimmed.starts_with("impl<") {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // If we've exited all blocks, this is not a method
+        if brace_depth == 0 && i < func_line - 1 {
+            let trimmed = lines[i].trim();
+            if !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with("#") {
+                // Hit non-empty, non-comment line outside any block
+                return false;
             }
         }
     }
+    
     false
 }
