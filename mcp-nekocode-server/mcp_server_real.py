@@ -1332,17 +1332,36 @@ class NekoCodeMCPServer:
         if "session_id" in result:
             session_id = result["session_id"]
         elif "output" in result and isinstance(result["output"], str):
-            # Rust版の出力: "Session created: XXXXX"
+            # Rust版の出力から複数のパターンでセッションIDを探す
             import re
-            match = re.search(r"Session created: ([a-f0-9]+)", result["output"])
-            if match:
-                session_id = match.group(1)
+            # パターン1: "Session created: XXXXX" or "Created session XXXXX"
+            patterns = [
+                r"[Ss]ession created: ([a-f0-9]+)",
+                r"[Cc]reated session ([a-f0-9]+)",
+                r"[Ss]ession: ([a-f0-9]+)",
+                r"session_id: ([a-f0-9]+)"
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, result["output"])
+                if match:
+                    session_id = match.group(1)
+                    break
         
         if session_id:
-            self.sessions[session_id] = {"path": path}
+            self.sessions[session_id] = {"path": path, "complete": complete}
             logger.info(f"✅ セッション登録完了: {session_id} -> {path}")
         else:
             logger.warning(f"⚠️ セッションID抽出失敗: {result}")
+        
+        # completeモードの場合、大量出力を制限
+        if complete and "output" in result:
+            output = result["output"]
+            # 出力が長すぎる場合はサマリーのみ返す
+            if isinstance(output, str) and len(output) > 20000:
+                # 最初の5000文字と最後の1000文字を保持
+                truncated = output[:5000] + "\n\n... [中略: 大量の解析結果] ...\n\n" + output[-1000:]
+                result["output"] = truncated
+                result["note"] = "⚠️ 出力が大きすぎるため一部省略しました。詳細はログを確認してください。"
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1352,13 +1371,35 @@ class NekoCodeMCPServer:
         """セッション統計"""
         session_id = args["session_id"]
         
+        # まずセッションがメモリにあるか確認（警告のみ）
         if session_id not in self.sessions:
+            logger.warning(f"⚠️ セッション {session_id} がメモリにありません。ディスクから読み込みます。")
+        
+        # 5分割版の正しいコマンドを試す
+        # session-stats, session-info, session-command stats の順で試す
+        commands_to_try = [
+            ["session-stats", session_id],
+            ["session-info", session_id],
+            ["session-command", session_id, "stats"],
+            ["ast-stats", session_id]  # フォールバック
+        ]
+        
+        result = None
+        for cmd in commands_to_try:
+            test_result = await self._run_nekocode(cmd)
+            if "error" not in test_result:
+                result = test_result
+                break
+            elif "not found" not in test_result.get("error", "").lower():
+                # コマンド自体は存在するがセッションが見つからない場合
+                result = test_result
+                break
+        
+        if result is None:
             return {
-                "content": [{"type": "text", "text": f"セッション {session_id} が見つかりません"}],
+                "content": [{"type": "text", "text": f"❌ セッション {session_id} が見つかりません"}],
                 "isError": True
             }
-        
-        result = await self._run_nekocode(["session-command", session_id, "stats"])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
