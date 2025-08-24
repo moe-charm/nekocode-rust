@@ -1348,8 +1348,10 @@ class NekoCodeMCPServer:
                     break
         
         if session_id:
+            # ログ出力のみ（セッション管理はnekocodeバイナリの責任）
+            logger.info(f"✅ セッション作成完了: {session_id} -> {path}")
+            # 互換性のため最小限の情報は保持（必須ではない）
             self.sessions[session_id] = {"path": path, "complete": complete}
-            logger.info(f"✅ セッション登録完了: {session_id} -> {path}")
         else:
             logger.warning(f"⚠️ セッションID抽出失敗: {result}")
         
@@ -1371,35 +1373,14 @@ class NekoCodeMCPServer:
         """セッション統計"""
         session_id = args["session_id"]
         
-        # まずセッションがメモリにあるか確認（警告のみ）
-        if session_id not in self.sessions:
-            logger.warning(f"⚠️ セッション {session_id} がメモリにありません。ディスクから読み込みます。")
+        # nekocodeバイナリに直接委譲（セッション管理はバイナリ側の責任）
+        # 5分割版のコマンドフォーマットで実行
+        result = await self._run_nekocode(["session-info", session_id])
         
-        # 5分割版の正しいコマンドを試す
-        # session-stats, session-info, session-command stats の順で試す
-        commands_to_try = [
-            ["session-stats", session_id],
-            ["session-info", session_id],
-            ["session-command", session_id, "stats"],
-            ["ast-stats", session_id]  # フォールバック
-        ]
-        
-        result = None
-        for cmd in commands_to_try:
-            test_result = await self._run_nekocode(cmd)
-            if "error" not in test_result:
-                result = test_result
-                break
-            elif "not found" not in test_result.get("error", "").lower():
-                # コマンド自体は存在するがセッションが見つからない場合
-                result = test_result
-                break
-        
-        if result is None:
-            return {
-                "content": [{"type": "text", "text": f"❌ セッション {session_id} が見つかりません"}],
-                "isError": True
-            }
+        # エラーチェック（コマンドが存在しない場合は他のフォーマットを試す）
+        if "error" in result and "unrecognized" in result["error"].lower():
+            # 代替コマンドを試す
+            result = await self._run_nekocode(["ast-stats", session_id])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1411,12 +1392,7 @@ class NekoCodeMCPServer:
         verbose = args.get("verbose", False)
         dry_run = args.get("dry_run", False)
         
-        if session_id not in self.sessions:
-            return {
-                "content": [{"type": "text", "text": f"セッション {session_id} が見つかりません"}],
-                "isError": True
-            }
-        
+        # セッション管理はnekocodeバイナリの責任（MCPサーバーはチェック不要）
         # コマンド引数構築
         cmd_args = ["session-update", session_id]
         if verbose:
@@ -1461,12 +1437,7 @@ class NekoCodeMCPServer:
         """循環依存検出"""
         session_id = args["session_id"]
         
-        if session_id not in self.sessions:
-            return {
-                "content": [{"type": "text", "text": f"セッション {session_id} が見つかりません"}],
-                "isError": True
-            }
-        
+        # セッション管理はnekocodeバイナリの責任
         result = await self._run_nekocode(["session-command", session_id, "include-cycles"])
         
         return {
@@ -1477,12 +1448,7 @@ class NekoCodeMCPServer:
         """依存関係グラフ"""
         session_id = args["session_id"]
         
-        if session_id not in self.sessions:
-            return {
-                "content": [{"type": "text", "text": f"セッション {session_id} が見つかりません"}],
-                "isError": True
-            }
-        
+        # セッション管理はnekocodeバイナリの責任
         result = await self._run_nekocode(["session-command", session_id, "include-graph"])
         
         return {
@@ -1700,12 +1666,7 @@ class NekoCodeMCPServer:
         session_id = args["session_id"]
         edit_id = args["edit_id"]
         
-        # セッション存在チェック
-        if session_id not in self.sessions:
-            return {
-                "content": [{"type": "text", "text": f"Session not found: {session_id}"}],
-                "isError": True
-            }
+        # セッション管理はnekocodeバイナリの責任（チェック不要）
         
         # コマンド実行（引数を個別に渡す）
         result = await self._run_nekocode(["session-command", session_id, "edit-show", edit_id])
