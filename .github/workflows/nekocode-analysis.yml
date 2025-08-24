@@ -94,35 +94,9 @@ jobs:
           *🚀 [NekoCode](https://github.com/moe-charm/nekocode-rust)による分析*
           EOF
 
-      - name: Comment PR
+      - name: Comment PR (disabled; replaced by Impact Diff workflow)
+        if: false
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('impact_report.md', 'utf8');
-            
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const nekocodeComment = comments.data.find(comment => 
-              comment.body.includes('🦀 NekoCode 分析レポート')
-            );
-            
-            if (nekocodeComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: nekocodeComment.id,
-                body: report
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: report
-              });
-            }
+            // Disabled in favor of .github/workflows/impact-diff.yml upsert comment

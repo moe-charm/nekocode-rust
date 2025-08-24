@@ -2,6 +2,8 @@
 
 **CLI と MCP Server の完全ガイド** - 最新のDirect Mode対応版
 
+> 注意: バイナリ名は Rustワークスペース版の `nekocode`（推奨）です。旧ドキュメントで登場する `nekocode_ai` はレガシー互換名で、同等とみなしてください（`nekocode_ai` → `nekocode`）。
+
 最終更新: 2025-08-13 | Version: 2.3 | 🆕 トークン制限設定対応
 
 ---

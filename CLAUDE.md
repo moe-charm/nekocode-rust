@@ -1,5 +1,67 @@
 # 🦀 NekoCode Project - Claude Context Information (Rust Edition)
 
+> 2025-08-25 Handover: Impact Diff + CI Migration (nekocode-rust)
+
+このセクションは、`nekocode-rust` への完全移行と CI での Impact Diff 投稿を安定稼働させるための引き継ぎメモです。高権限で立ち上げ直す前に、以下のポイントを確認してください。
+
+1) 絶対原則（再掲）
+- セッション起点（session-first）。旧式の `analyze` 系は使用しない/非推奨。
+- MCP/CLI/CI すべて「セッション作成 → セッションIDベースの操作」で統一。
+
+2) Impact Diff（差分解析）導入状況
+- 5バイナリ構成（`nekocode` + `nekoimpact`）では、`nekoimpact diff <SESSION_ID> --compare-ref <ref> [--include-working] --format github-comment` を実装済み。
+- `nekocode-rust`（単一バイナリ）にネイティブ diff サブコマンドが未実装の場合、CI スクリプトがフォールバックして「簡易サマリ（変更ファイル件数＋一覧）」を PR コメントに出力。
+- 変更ファイルの行レンジに重なる関数/クラスを変更と判定（5バイナリ）。関数ヘッダ行変更は署名変更（SignatureChanged）として扱い、公開 API の変更はリスク加重。
+
+3) CI 構成（nekocode-rust）
+- 追加: `.github/workflows/impact-diff.yml`
+  - Rust ツールチェーンセットアップ → `scripts/impact-diff.sh origin/${{ github.base_ref }}` → PR コメント投稿。
+- 既存ワークフロー移行:
+  - `.github/workflows/nekocode-analysis.yml` および `.github/workflows/pr-analysis.yml` は、旧 `analyze`/`analyze-impact` ベースから session-first 版に置換済み（スクリプト呼び出し）。
+- 共通スクリプト: `scripts/impact-diff.sh`
+  - 5バイナリ（`target/release/nekocode, nekoimpact` または `releases/nekocode, nekoimpact`）と、単一バイナリ（`target/release/nekocode-rust` または `releases/nekocode-rust`）両対応。
+  - 単一バイナリでネイティブ diff が未実装の場合は、git diff を用いた簡易サマリに自動フォールバック。
+  - ENV `INCLUDE_WORKING=true` で未コミット/ステージ済み変更も解析に含める。
+
+4) よくある失敗と対処
+- 症状: 「Git diff分析はまだ実装されていません」
+  - 対処: スクリプトが簡易サマリにフォールバックするよう更新済み。ワークフローが `scripts/impact-diff.sh` を呼んでいるか確認。
+- 症状: 影響分析ワークフローが `analyze`/`analyze-impact` を呼んで失敗
+  - 対処: `.github/workflows/nekocode-analysis.yml` / `.github/workflows/pr-analysis.yml` が session-first 版に置換されているか確認（`scripts/impact-diff.sh` を実行する定義に差し替え）。
+- 症状: Base ref の差分が常に 0
+  - 対処1: `actions/checkout@v4` は `fetch-depth: 0` にする。
+  - 対処2: `git fetch --no-tags --depth=1 origin ${{ github.base_ref }}` を実行。
+  - 対処3: デフォルトブランチ名（`main` or `master`）に合わせて compare-ref を設定。
+- 症状: PR コメント投稿に失敗
+  - 対処: ワークフロー `permissions: pull-requests: write` を設定済みか確認。`GITHUB_TOKEN` 権限を「Read/Write」に。
+- 症状: セキュリティ系（license/audit/CodeQL）が落ちる
+  - 対処: まずは暫定で `continue-on-error: true` を付与してブロッキング回避 → 後続で依存更新/除外を検討。
+
+5) 手動確認（ローカル）
+```bash
+# 単一バイナリがない場合はビルド
+cargo build --release
+
+# セッション起点でImpact Diff（5バイナリ）
+releases/nekocode session-create .
+releases/nekoimpact diff <SESSION_ID> --compare-ref origin/master --format github-comment
+
+# CI相当の動き（単一/5バイナリ両対応）
+chmod +x scripts/impact-diff.sh
+scripts/impact-diff.sh origin/master impact.md
+cat impact.md
+```
+
+6) 最高権限での再起動前チェック
+- Actions の Default permissions: Read and write 権限に。（Repo Settings → Actions → General）
+- 必要ならワークフロー単位 `permissions: pull-requests: write` を維持。
+- Runner で `jq` が必要（なければ `gh` 側で投稿可能）。
+- compare-ref は `origin/${{ github.base_ref }}` を推奨（fetch済み前提）。
+
+7) 将来計画（ToDo）
+- `nekocode-rust` にネイティブ `diff` サブコマンドを実装し、5バイナリの diff 機能に近づける。
+- 破壊的変更（公開APIの削除/署名変更）の優先提示、参照関係の深追い（波及影響表示）。
+- PRサイズ/言語ごとのテンプレート最適化（長文抑制/折り畳み）。
 ## 📁 **重要：メインディレクトリ** (このディレクトリがメイン！)
 
 ```
