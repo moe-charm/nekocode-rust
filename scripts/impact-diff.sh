@@ -68,6 +68,22 @@ echo "::group::Run impact diff ($COMPARE_REF)"
 COMMENT=""
 if [[ "$VARIANT" == "five-binary" ]]; then
   COMMENT=$("$NEKOIMPACT_FIVE" diff "$SESSION_ID" --compare-ref "$COMPARE_REF" "${INCLUDE_FLAG[@]}" --format github-comment || true)
+  # Fallback if five-binary diff is not available
+  if [[ -z "$COMMENT" ]] || echo "$COMMENT" | grep -qi "not yet implemented"; then
+    echo "⚠️ Five-binary diff not available. Generating simple impact summary..."
+    CHANGED=$(git -C "$ROOT_DIR" diff --name-only "$COMPARE_REF"..HEAD || true)
+    COUNT=$(printf "%s" "$CHANGED" | sed '/^$/d' | wc -l | tr -d ' ')
+    COMMENT=$(
+      {
+        echo "## 🔍 Impact Diff (Simple Summary)"; echo;
+        echo "- Base: \`$COMPARE_REF\`  ";
+        echo "- Session: \`$SESSION_ID\`"; 
+        echo "- Changed files: **$COUNT**"; echo;
+        printf "%s\n" "$CHANGED" | sed 's/^/- `/' | sed 's/$/`/'
+        echo; echo "---"; echo "*Simple summary generated due to missing native diff command*";
+      }
+    )
+  fi
 else
   if "$NEKOCODE_RUST" --help 2>/dev/null | grep -qi "diff"; then
     COMMENT=$("$NEKOCODE_RUST" diff --session-id "$SESSION_ID" --compare-ref "$COMPARE_REF" "${INCLUDE_FLAG[@]}" --format github-comment || true)
@@ -94,4 +110,3 @@ echo "::endgroup::"
 if [[ -n "$OUT_FILE" ]]; then printf "%s\n" "$COMMENT" >"$OUT_FILE"; fi
 
 exit 0
-
