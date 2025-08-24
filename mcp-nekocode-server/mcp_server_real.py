@@ -1380,7 +1380,7 @@ class NekoCodeMCPServer:
         # エラーチェック（コマンドが存在しない場合は他のフォーマットを試す）
         if "error" in result and "unrecognized" in result["error"].lower():
             # 代替コマンドを試す
-            result = await self._run_nekocode(["ast-stats", session_id])
+            result = await self._run_nekocode(["ast-stats", "--session-id", session_id])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1513,7 +1513,7 @@ class NekoCodeMCPServer:
         if args.get("force", False):
             cmd_args.append("--force")
             
-        result = await self._run_nekocode(cmd_args)
+        result = await self._run_nekorefactor(cmd_args)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_insert_preview(self, args: Dict) -> Dict:
@@ -1539,7 +1539,7 @@ class NekoCodeMCPServer:
         # プレビューモード追加
         cmd_args.append("--preview")
         
-        result = await self._run_nekocode(cmd_args)
+        result = await self._run_nekorefactor(cmd_args)
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1573,7 +1573,7 @@ class NekoCodeMCPServer:
             cmd_args.append(args["position"])
         
         # 直接実行（プレビューなし）
-        result = await self._run_nekocode(cmd_args)
+        result = await self._run_nekorefactor(cmd_args)
         
         return {
             "content": [{"type": "text", "text": json.dumps(result.get("output", result), indent=2, ensure_ascii=False)}]
@@ -1588,7 +1588,7 @@ class NekoCodeMCPServer:
         insert_line = str(args["insert_line"])
         
         # 新コマンド構造: move-lines --preview
-        result = await self._run_nekocode([
+        result = await self._run_nekorefactor([
             "move-lines", srcfile, start_line, line_count, dstfile, insert_line, "--preview"
         ])
         
@@ -1612,7 +1612,7 @@ class NekoCodeMCPServer:
             }
         
         # 直接実行（デフォルト）
-        result = await self._run_nekocode([
+        result = await self._run_nekorefactor([
             "move-lines", srcfile, str(start_line), str(line_count), dstfile, str(insert_line)
         ])
         
@@ -1713,7 +1713,7 @@ class NekoCodeMCPServer:
         """AST構造をクエリ"""
         session_id = args["session_id"]
         path = args["path"]
-        result = await self._run_nekocode(["ast-query", session_id, path])
+        result = await self._run_nekocode(["ast-query", path, "--session-id", session_id])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_scope_analysis(self, args: Dict) -> Dict:
@@ -1737,9 +1737,16 @@ class NekoCodeMCPServer:
         allow_force = token_config.get("allow_force_output", True)
         
         # 🚨 まずast-statsでサイズ確認
-        stats_result = await self._run_nekocode(["ast-stats", session_id])
+        stats_result = await self._run_nekocode(["ast-stats", "--session-id", session_id])
         
-        result = await self._run_nekocode(["ast-dump", session_id, format_type])
+        # コマンドを正しい形式で構築
+        cmd_args = ["ast-dump", "--session-id", session_id, "--format", format_type]
+        if line_limit:
+            cmd_args.extend(["--limit", str(line_limit)])
+        if force:
+            cmd_args.append("--force")
+        
+        result = await self._run_nekocode(cmd_args)
         
         # 🔥 トークン制限チェック
         if isinstance(result, dict):

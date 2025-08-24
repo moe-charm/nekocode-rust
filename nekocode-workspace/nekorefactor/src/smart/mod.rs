@@ -311,6 +311,16 @@ impl SmartRefactor {
         
         // Insert at the specified line
         let line_idx = (point.line - 1) as usize;
+        
+        // Range check to prevent panic
+        if line_idx > lines.len() {
+            return Err(NekocodeError::Refactoring(format!(
+                "Invalid insertion point: line {} exceeds file length {} lines",
+                point.line,
+                lines.len()
+            )));
+        }
+        
         lines.insert(line_idx, content.to_string());
         
         // Write back
