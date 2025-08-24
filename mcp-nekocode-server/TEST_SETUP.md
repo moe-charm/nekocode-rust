@@ -104,8 +104,8 @@ Error: Tool not found
 Error: NekoCodeバイナリが見つかりません
 ```
 **解決法**: 
-- `../build/nekocode_ai` が存在するか確認
-- 実行権限があるか確認: `chmod +x ../build/nekocode_ai`
+- `../nekocode-workspace/target/debug/nekocode` が存在するか確認（または `target/release/nekocode`）
+- 実行権限があるか確認: `chmod +x ../nekocode-workspace/target/debug/nekocode`
 
 #### 3. **パーミッションエラー**
 ```
@@ -114,7 +114,7 @@ Permission denied
 **解決法**:
 ```bash
 chmod +x mcp_server_real.py
-chmod +x ../build/nekocode_ai
+chmod +x ../nekocode-workspace/target/debug/nekocode
 ```
 
 #### 4. **JSONエラー**
@@ -124,8 +124,8 @@ JSON decode error
 **解決法**: NekoCodeの出力形式を確認:
 ```bash
 # 手動でNekoCodeを実行してみる
-../build/nekocode_ai --help
-../build/nekocode_ai --list-languages
+../nekocode-workspace/target/debug/nekocode --help
+../nekocode-workspace/target/debug/nekocode --list-languages
 ```
 
 ### **ログ確認**

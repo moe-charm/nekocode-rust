@@ -1,5 +1,7 @@
 # ⚡ NekoCode Performance Optimization Guide
 
+> Note: コマンド例に旧名 `nekocode_ai` が登場する箇所は、現行の `nekocode`（Rustワークスペース版）に読み替えてください。
+
 ## 🎯 Quick Reference for Claude Code
 
 ### Storage-Optimized Options
