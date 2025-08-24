@@ -1464,7 +1464,7 @@ class NekoCodeMCPServer:
             # LANGUAGES行を抽出
             lines = result["output"].split('\n')
             lang_line = next((line for line in lines if 'LANGUAGES:' in line), "")
-            languages = lang_line.replace('LANGUAGES:', '').strip() if lang_line else "JS/TS/C++/C/Python/C#"
+            languages = lang_line.replace('LANGUAGES:', '').strip() if lang_line else "JS/TS/C++/C/Python/C#/Go/Rust"
             return {"content": [{"type": "text", "text": f"対応言語: {languages}"}]}
         else:
             return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
@@ -1476,7 +1476,8 @@ class NekoCodeMCPServer:
         replacement = args["replacement"]
         
         # 新コマンド構造: replace --preview
-        result = await self._run_nekocode(["replace", file_path, pattern, replacement, "--preview"])
+        # route to nekorefactor (correct binary for editing)
+        result = await self._run_nekorefactor(["replace", file_path, pattern, replacement, "--preview"])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1497,7 +1498,7 @@ class NekoCodeMCPServer:
             }
         
         # 直接実行（デフォルト）
-        result = await self._run_nekocode(["replace", file_path, pattern, replacement])
+        result = await self._run_nekorefactor(["replace", file_path, pattern, replacement])
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
