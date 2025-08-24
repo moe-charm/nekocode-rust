@@ -94,8 +94,7 @@ if [[ "$VARIANT" == "five-binary" ]]; then
     # Breaking change hints (Rust pub removals)
     BREAKING_COUNT="0"
     if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then
-      BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | tr -d ' ' || echo 0)
-      BREAKING_COUNT=$(printf "%s" "$BREAKING_COUNT" | tr -d '\n' )
+      BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | awk '{printf "%d",$1}' 2>/dev/null || echo 0)
     fi
 
     # Dependency change hints
@@ -125,7 +124,7 @@ if [[ "$VARIANT" == "five-binary" ]]; then
         echo "- Changed files: **$COUNT**"; 
         if [[ -n "$NUMSTAT" ]]; then echo "- Changes: $NUMSTAT"; fi
         if [[ -n "$LANG_TABLE" ]]; then echo; echo "### 📚 Language Breakdown"; printf "%s\n" "$LANG_TABLE"; fi
-        if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then echo; echo "### ⚠️ Potential Breaking Removals"; echo "- Rust public items removed: **$BREAKING_COUNT**"; fi
+        if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then echo; echo "### ⚠️ Potential Breaking Removals"; echo "- Rust public items removed: $BREAKING_COUNT"; fi
         if [[ -n "$DEPS_HINT" ]]; then echo; echo "### 📦 Dependency Changes"; echo "- $DEPS_HINT"; fi
         echo; echo "<details><summary>Changed files (first $MAX_FILES)</summary>"; echo; 
         printf "%s\n" "$FILE_LIST" | sed 's/^/- `/' | sed 's/$/`/'
@@ -164,8 +163,7 @@ else
     # Breaking change hints (Rust pub removals)
     BREAKING_COUNT="0"
     if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then
-      BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | tr -d ' ' || echo 0)
-      BREAKING_COUNT=$(printf "%s" "$BREAKING_COUNT" | tr -d '\n' )
+      BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | awk '{printf "%d",$1}' 2>/dev/null || echo 0)
     fi
 
     # Dependency change hints
