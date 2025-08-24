@@ -51,11 +51,16 @@ class NekoCodeMCPServer:
         if env_path and os.path.exists(env_path):
             return os.path.abspath(env_path)
         
+        # 現在のMCPサーバーファイルの場所から動的に解決
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)  # nekocode-rust-clean/ ディレクトリ
+        
         possible_paths = [
-            # 🚀 最優先：配布用releases/ディレクトリ（ここで完結！）
-            "../nekocode-rust-clean/releases/nekocode",
-            "./nekocode-rust-clean/releases/nekocode",
-            "/mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github/nekocode-rust-clean/releases/nekocode",
+            # 🚀 最優先：配布用releases/ディレクトリ（動的解決）
+            os.path.join(project_root, "releases", "nekocode"),
+            # 開発用：nekocode-workspace（動的解決）
+            os.path.join(project_root, "nekocode-workspace", "target", "release", "nekocode"),
+            os.path.join(project_root, "nekocode-workspace", "target", "debug", "nekocode"),
             # 開発用（fallback）
             "../nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
             "./nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
@@ -98,8 +103,10 @@ class NekoCodeMCPServer:
         if legacy_binary:
             return legacy_binary
         
-        # デフォルト（releases/ディレクトリ）
-        return "../nekocode-rust-clean/releases/nekocode"
+        # デフォルト（動的解決）
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        return os.path.join(project_root, "releases", "nekocode")
     
     def _find_nekorefactor_binary(self) -> str:
         """nekorefactor バイナリの場所を特定"""
@@ -108,11 +115,16 @@ class NekoCodeMCPServer:
         if env_path and os.path.exists(env_path):
             return os.path.abspath(env_path)
         
+        # 現在のMCPサーバーファイルの場所から動的に解決
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)  # nekocode-rust-clean/ ディレクトリ
+        
         possible_paths = [
-            # 🚀 最優先：配布用releases/ディレクトリ（ここで完結！）
-            "../nekocode-rust-clean/releases/nekorefactor",
-            "./nekocode-rust-clean/releases/nekorefactor",
-            "/mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github/nekocode-rust-clean/releases/nekorefactor",
+            # 🚀 最優先：配布用releases/ディレクトリ（動的解決）
+            os.path.join(project_root, "releases", "nekorefactor"),
+            # 開発用：nekocode-workspace（動的解決）
+            os.path.join(project_root, "nekocode-workspace", "target", "release", "nekorefactor"),
+            os.path.join(project_root, "nekocode-workspace", "target", "debug", "nekorefactor"),
             # 開発用（fallback）
             "../nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor",
             "./nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor",
@@ -140,8 +152,10 @@ class NekoCodeMCPServer:
         if nekorefactor_binary:
             return nekorefactor_binary
         
-        # デフォルト（releases/ディレクトリ）
-        return "../nekocode-rust-clean/releases/nekorefactor"
+        # デフォルト（動的解決）
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        return os.path.join(project_root, "releases", "nekorefactor")
     
     def _load_config(self) -> Dict:
         """nekocode_config.json を読み込み（あれば）"""
@@ -1260,7 +1274,7 @@ class NekoCodeMCPServer:
         
         cmd_args = ["analyze", path]
         if language != "auto":
-            cmd_args.extend(["--lang", language])
+            cmd_args.extend(["--language", language])
         
         # 🚀 NEW: Rust版に--stats-onlyオプションを追加済み！
         if stats_only:
