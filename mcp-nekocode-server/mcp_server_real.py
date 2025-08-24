@@ -52,11 +52,15 @@ class NekoCodeMCPServer:
             return os.path.abspath(env_path)
         
         possible_paths = [
-            # 🚀 nekocode-workspace 5分割バイナリ優先（確実にこれを使う）
-            "../nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
-            "./nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
+            # 🚀 最優先：配布用releases/ディレクトリ（ここで完結！）
+            "../nekocode-rust-clean/releases/nekocode",
+            "./nekocode-rust-clean/releases/nekocode",
+            "/mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github/nekocode-rust-clean/releases/nekocode",
+            # 開発用（fallback）
             "../nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
             "./nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
+            "../nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
+            "./nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
             # Legacy paths (fallback)
             "./nekocode-workspace/target/debug/nekocode",
             "../nekocode-workspace/target/debug/nekocode",
@@ -94,8 +98,8 @@ class NekoCodeMCPServer:
         if legacy_binary:
             return legacy_binary
         
-        # デフォルト（5分割版nekocode-workspace優先）
-        return "../nekocode-rust-clean/nekocode-workspace/target/debug/nekocode"
+        # デフォルト（releases/ディレクトリ）
+        return "../nekocode-rust-clean/releases/nekocode"
     
     def _find_nekorefactor_binary(self) -> str:
         """nekorefactor バイナリの場所を特定"""
@@ -105,17 +109,21 @@ class NekoCodeMCPServer:
             return os.path.abspath(env_path)
         
         possible_paths = [
-            # 🚀 nekocode-workspace 5分割バイナリ（確実にこれを使う）
-            "../nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor",
-            "./nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor",
+            # 🚀 最優先：配布用releases/ディレクトリ（ここで完結！）
+            "../nekocode-rust-clean/releases/nekorefactor",
+            "./nekocode-rust-clean/releases/nekorefactor",
+            "/mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github/nekocode-rust-clean/releases/nekorefactor",
+            # 開発用（fallback）
             "../nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor",
             "./nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor",
+            "../nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor",
+            "./nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor",
             # Legacy paths (fallback)
             "./nekocode-workspace/target/debug/nekorefactor",
             "../nekocode-workspace/target/debug/nekorefactor",
             "./nekocode-workspace/target/release/nekorefactor",
             "../nekocode-workspace/target/release/nekorefactor",
-            # 相対パス（debugを優先）
+            # 相対パス（fallback）
             "./target/debug/nekorefactor",
             "../target/debug/nekorefactor",
             "./target/release/nekorefactor", 
@@ -132,8 +140,8 @@ class NekoCodeMCPServer:
         if nekorefactor_binary:
             return nekorefactor_binary
         
-        # デフォルト
-        return "../nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor"
+        # デフォルト（releases/ディレクトリ）
+        return "../nekocode-rust-clean/releases/nekorefactor"
     
     def _load_config(self) -> Dict:
         """nekocode_config.json を読み込み（あれば）"""
