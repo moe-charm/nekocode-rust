@@ -95,6 +95,7 @@ if [[ "$VARIANT" == "five-binary" ]]; then
     BREAKING_COUNT="0"
     if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then
       BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | tr -d ' ' || echo 0)
+      BREAKING_COUNT=$(printf "%s" "$BREAKING_COUNT" | tr -d '\n' )
     fi
 
     # Dependency change hints
@@ -164,6 +165,7 @@ else
     BREAKING_COUNT="0"
     if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then
       BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | tr -d ' ' || echo 0)
+      BREAKING_COUNT=$(printf "%s" "$BREAKING_COUNT" | tr -d '\n' )
     fi
 
     # Dependency change hints
