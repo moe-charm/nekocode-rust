@@ -22,12 +22,12 @@ pub mod compact;
 pub use session::{SessionManager, SessionInfo, Session, SessionProvider};
 pub use sqlite_session::{SqliteSession, FileRecord, ChangedFile, ChangeType, SessionStats};
 pub use cli_session::{CliSessionConfig, CliSessionHelper, SessionHistoryEntry, CliSettings};
-pub use config::{Config, AnalysisConfig, GeneralConfig, MemoryConfig};
+pub use config::{Config, AnalysisConfig, GeneralConfig, MemoryConfig, ConfigManager};
 pub use types::{Language, SymbolInfo, FunctionInfo, ClassInfo, FileInfo, AnalysisResult};
 pub use traits::{AnalysisProvider, LanguageSupport};
 pub use error::{NekocodeError, Result};
 pub use io::{FileProcessor, PathUtils};
-pub use memory::{MemoryManager, MemoryType};
+pub use memory::{MemoryManager, MemoryType, MemoryEntry};
 pub use compact::{OutputMode, CompactSerializer, HumanFormatter};
 
 /// NekoCode Core version

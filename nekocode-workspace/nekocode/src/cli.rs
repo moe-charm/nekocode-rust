@@ -261,4 +261,54 @@ pub enum Commands {
         output: Option<PathBuf>,
     },
     
+    /// Save memory content
+    MemorySave {
+        /// Memory type (auto, memo, api, cache)
+        memory_type: String,
+        
+        /// Memory name
+        name: String,
+        
+        /// Content to save
+        content: String,
+    },
+    
+    /// Load memory content
+    MemoryLoad {
+        /// Memory type (auto, memo, api, cache)
+        memory_type: String,
+        
+        /// Memory name
+        name: String,
+    },
+    
+    /// List memories
+    MemoryList {
+        /// Filter by memory type (optional)
+        #[arg(short = 't', long)]
+        memory_type: Option<String>,
+    },
+    
+    /// Show memory timeline
+    MemoryTimeline {
+        /// Number of days to show
+        #[arg(short, long, default_value = "7")]
+        days: i64,
+        
+        /// Filter by memory type (optional)
+        #[arg(short = 't', long)]
+        memory_type: Option<String>,
+    },
+    
+    /// Show configuration
+    ConfigShow,
+    
+    /// Set configuration value
+    ConfigSet {
+        /// Configuration key
+        key: String,
+        
+        /// Configuration value
+        value: String,
+    },
 }

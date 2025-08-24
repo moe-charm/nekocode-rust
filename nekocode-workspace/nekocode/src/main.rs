@@ -4,7 +4,11 @@ use clap::Parser;
 use std::fs;
 use std::io::{self, Write};
 
-use nekocode_core::{Result, NekocodeError, session::SessionManager, CliSessionHelper};
+use nekocode_core::{
+    Result, NekocodeError, session::SessionManager, CliSessionHelper,
+    memory::{MemoryManager, MemoryType},
+    config::ConfigManager,
+};
 use nekocode::{
     Cli,
     SessionCommands, SessionUpdater,
@@ -215,6 +219,29 @@ async fn async_main(cli: Cli) -> Result<()> {
             handle_deadcode_command(session_id, external, format, min_confidence, output).await?;
         }
         
+        Commands::MemorySave { memory_type, name, content } => {
+            handle_memory_save(memory_type, name, content)?;
+        }
+        
+        Commands::MemoryLoad { memory_type, name } => {
+            handle_memory_load(memory_type, name)?;
+        }
+        
+        Commands::MemoryList { memory_type } => {
+            handle_memory_list(memory_type)?;
+        }
+        
+        Commands::MemoryTimeline { days, memory_type } => {
+            handle_memory_timeline(days, memory_type)?;
+        }
+        
+        Commands::ConfigShow => {
+            handle_config_show()?;
+        }
+        
+        Commands::ConfigSet { key, value } => {
+            handle_config_set(key, value)?;
+        }
     }
     
     Ok(())
@@ -764,4 +791,100 @@ fn safe_print(content: &str) -> io::Result<()> {
         }
         Err(e) => Err(e),
     }
+}
+
+/// Handle memory save command
+fn handle_memory_save(memory_type: String, name: String, content: String) -> Result<()> {
+    let mem_type = MemoryType::from_str(&memory_type)
+        .ok_or_else(|| NekocodeError::Config(format!("Invalid memory type: {}", memory_type)))?;
+    
+    let mut memory_manager = MemoryManager::new();
+    memory_manager.save(mem_type, name.clone(), content)?;
+    
+    println!("💾 Saved memory: {}:{}", memory_type, name);
+    Ok(())
+}
+
+/// Handle memory load command
+fn handle_memory_load(memory_type: String, name: String) -> Result<()> {
+    let mem_type = MemoryType::from_str(&memory_type)
+        .ok_or_else(|| NekocodeError::Config(format!("Invalid memory type: {}", memory_type)))?;
+    
+    let memory_manager = MemoryManager::new();
+    let entry = memory_manager.load(mem_type, &name)?;
+    
+    println!("📂 Memory: {}:{}", memory_type, name);
+    println!("📅 Created: {}", entry.created_at.format("%Y-%m-%d %H:%M:%S"));
+    println!("📅 Updated: {}", entry.updated_at.format("%Y-%m-%d %H:%M:%S"));
+    println!("📝 Content:\n{}", entry.content);
+    
+    Ok(())
+}
+
+/// Handle memory list command
+fn handle_memory_list(memory_type: Option<String>) -> Result<()> {
+    let mem_type = memory_type.as_ref()
+        .and_then(|t| MemoryType::from_str(t));
+    
+    let memory_manager = MemoryManager::new();
+    let entries = memory_manager.list_by_type(mem_type);
+    
+    if entries.is_empty() {
+        println!("No memories found");
+    } else {
+        println!("📋 Memories:");
+        for entry in entries {
+            println!("  {}:{} - {} ({})", 
+                entry.memory_type.as_str(),
+                entry.name,
+                entry.updated_at.format("%Y-%m-%d %H:%M:%S"),
+                entry.content.len()
+            );
+        }
+    }
+    
+    Ok(())
+}
+
+/// Handle memory timeline command
+fn handle_memory_timeline(days: i64, memory_type: Option<String>) -> Result<()> {
+    let memory_manager = MemoryManager::new();
+    let entries = memory_manager.get_timeline(days);
+    
+    if entries.is_empty() {
+        println!("No memories in the last {} days", days);
+    } else {
+        println!("📅 Memory timeline (last {} days):", days);
+        
+        let mem_type = memory_type.as_ref()
+            .and_then(|t| MemoryType::from_str(t));
+        
+        for entry in entries {
+            if mem_type.map(|t| t == entry.memory_type).unwrap_or(true) {
+                println!("  {} - {}:{} ({})", 
+                    entry.created_at.format("%Y-%m-%d %H:%M"),
+                    entry.memory_type.as_str(),
+                    entry.name,
+                    entry.content.len()
+                );
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Handle config show command
+fn handle_config_show() -> Result<()> {
+    let config_manager = ConfigManager::new()?;
+    println!("{}", config_manager.show_all());
+    Ok(())
+}
+
+/// Handle config set command
+fn handle_config_set(key: String, value: String) -> Result<()> {
+    let mut config_manager = ConfigManager::new()?;
+    config_manager.set(&key, value)?;
+    println!("✅ Configuration updated: {} ", key);
+    Ok(())
 }

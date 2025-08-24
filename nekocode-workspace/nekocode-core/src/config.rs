@@ -103,3 +103,95 @@ impl Default for MemoryConfig {
         }
     }
 }
+
+/// Configuration manager for easy access
+pub struct ConfigManager {
+    config: Config,
+    config_path: PathBuf,
+}
+
+impl ConfigManager {
+    /// Create new config manager
+    pub fn new() -> Result<Self> {
+        let config_path = Self::default_config_path()?;
+        let config = if config_path.exists() {
+            Config::load_from_file(&config_path)?
+        } else {
+            Config::default()
+        };
+        
+        Ok(Self {
+            config,
+            config_path,
+        })
+    }
+    
+    /// Get default config path
+    fn default_config_path() -> Result<PathBuf> {
+        let home = std::env::var("HOME")
+            .map_err(|_| NekocodeError::Config("HOME not set".to_string()))?;
+        Ok(PathBuf::from(home).join(".nekocode").join("config.json"))
+    }
+    
+    /// Get config value
+    pub fn get(&self, key: &str) -> Option<String> {
+        match key {
+            "session_dir" => Some(self.config.general.session_dir.display().to_string()),
+            "log_level" => Some(self.config.general.log_level.clone()),
+            "parallel_jobs" => Some(self.config.general.parallel_jobs.to_string()),
+            "max_sessions_in_memory" => Some(self.config.memory.max_sessions_in_memory.to_string()),
+            "auto_save_interval_seconds" => Some(self.config.memory.auto_save_interval_seconds.to_string()),
+            "cleanup_old_sessions_days" => Some(self.config.memory.cleanup_old_sessions_days.to_string()),
+            _ => None,
+        }
+    }
+    
+    /// Set config value
+    pub fn set(&mut self, key: &str, value: String) -> Result<()> {
+        match key {
+            "log_level" => self.config.general.log_level = value,
+            "parallel_jobs" => {
+                self.config.general.parallel_jobs = value.parse()
+                    .map_err(|_| NekocodeError::Config("Invalid parallel_jobs value".to_string()))?;
+            }
+            "max_sessions_in_memory" => {
+                self.config.memory.max_sessions_in_memory = value.parse()
+                    .map_err(|_| NekocodeError::Config("Invalid max_sessions_in_memory value".to_string()))?;
+            }
+            "auto_save_interval_seconds" => {
+                self.config.memory.auto_save_interval_seconds = value.parse()
+                    .map_err(|_| NekocodeError::Config("Invalid auto_save_interval_seconds value".to_string()))?;
+            }
+            "cleanup_old_sessions_days" => {
+                self.config.memory.cleanup_old_sessions_days = value.parse()
+                    .map_err(|_| NekocodeError::Config("Invalid cleanup_old_sessions_days value".to_string()))?;
+            }
+            _ => return Err(NekocodeError::Config(format!("Unknown config key: {}", key))),
+        }
+        
+        // Save to file
+        self.config.save_to_file(&self.config_path)?;
+        Ok(())
+    }
+    
+    /// Show all config values
+    pub fn show_all(&self) -> String {
+        format!(
+            "📋 Configuration:\n\
+             General:\n\
+             - session_dir: {}\n\
+             - log_level: {}\n\
+             - parallel_jobs: {}\n\
+             Memory:\n\
+             - max_sessions_in_memory: {}\n\
+             - auto_save_interval_seconds: {}\n\
+             - cleanup_old_sessions_days: {}",
+            self.config.general.session_dir.display(),
+            self.config.general.log_level,
+            self.config.general.parallel_jobs,
+            self.config.memory.max_sessions_in_memory,
+            self.config.memory.auto_save_interval_seconds,
+            self.config.memory.cleanup_old_sessions_days,
+        )
+    }
+}
