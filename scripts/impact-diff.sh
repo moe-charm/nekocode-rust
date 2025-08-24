@@ -73,14 +73,64 @@ if [[ "$VARIANT" == "five-binary" ]]; then
     echo "⚠️ Five-binary diff not available. Generating simple impact summary..."
     CHANGED=$(git -C "$ROOT_DIR" diff --name-only "$COMPARE_REF"..HEAD || true)
     COUNT=$(printf "%s" "$CHANGED" | sed '/^$/d' | wc -l | tr -d ' ')
+    MAX_FILES=${MAX_FILES:-50}
+    SHOW_NUMSTAT=${SHOW_NUMSTAT:-true}
+    SHOW_LANG_BREAKDOWN=${SHOW_LANG_BREAKDOWN:-true}
+    SHOW_BREAKING_HINTS=${SHOW_BREAKING_HINTS:-true}
+    SHOW_DEPS=${SHOW_DEPS:-true}
+
+    # Shortstat
+    NUMSTAT=""
+    if [[ "$SHOW_NUMSTAT" == "true" ]]; then
+      NUMSTAT=$(git -C "$ROOT_DIR" diff --shortstat "$COMPARE_REF"..HEAD || true)
+    fi
+
+    # Language breakdown by extension
+    LANG_TABLE=""
+    if [[ "$SHOW_LANG_BREAKDOWN" == "true" ]]; then
+      LANG_TABLE=$(printf "%s\n" "$CHANGED" | sed '/^$/d' | awk -F. '{print $NF}' | tr '[:upper:]' '[:lower:]' | sort | uniq -c | sort -nr | awk '{printf "- %s: %s\n", $2, $1}')
+    fi
+
+    # Breaking change hints (Rust pub removals)
+    BREAKING_COUNT="0"
+    if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then
+      BREAKING_COUNT=$(git -C "$ROOT_DIR" diff -U0 "$COMPARE_REF"..HEAD -- '**/*.rs' | grep -E '^-\s*pub\s+(fn|struct|enum|trait)\b' | wc -l | tr -d ' ' || echo 0)
+    fi
+
+    # Dependency change hints
+    DEPS_HINT=""
+    if [[ "$SHOW_DEPS" == "true" ]]; then
+      if printf "%s\n" "$CHANGED" | grep -q '^Cargo\.toml$'; then
+        TOML_CHANGES=$(git -C "$ROOT_DIR" diff "$COMPARE_REF"..HEAD -- Cargo.toml | grep -E '^[+-][^+]' | wc -l | tr -d ' ' || echo 0)
+        DEPS_HINT="Cargo.toml changes: ${TOML_CHANGES} lines"
+      fi
+      if printf "%s\n" "$CHANGED" | grep -q '^Cargo\.lock$'; then
+        LOCK_CHANGES=$(git -C "$ROOT_DIR" diff --numstat "$COMPARE_REF"..HEAD -- Cargo.lock | awk '{add+=$1; del+=$2} END{printf "+%s −%s", add+0, del+0}')
+        if [[ -n "$LOCK_CHANGES" ]]; then
+          DEPS_HINT=$(printf "%s; Cargo.lock: %s" "$DEPS_HINT" "$LOCK_CHANGES")
+        fi
+      fi
+    fi
+
+    # Trim file list
+    FILE_LIST=$(printf "%s\n" "$CHANGED" | sed '/^$/d' | head -n "$MAX_FILES")
+    REMAIN=$(( COUNT > MAX_FILES ? COUNT - MAX_FILES : 0 ))
+
     COMMENT=$(
       {
         echo "## 🔍 Impact Diff (Simple Summary)"; echo;
         echo "- Base: \`$COMPARE_REF\`  ";
         echo "- Session: \`$SESSION_ID\`"; 
-        echo "- Changed files: **$COUNT**"; echo;
-        printf "%s\n" "$CHANGED" | sed 's/^/- `/' | sed 's/$/`/'
-        echo; echo "---"; echo "*Simple summary generated due to missing native diff command*";
+        echo "- Changed files: **$COUNT**"; 
+        if [[ -n "$NUMSTAT" ]]; then echo "- Changes: $NUMSTAT"; fi
+        if [[ -n "$LANG_TABLE" ]]; then echo; echo "### 📚 Language Breakdown"; printf "%s\n" "$LANG_TABLE"; fi
+        if [[ "$SHOW_BREAKING_HINTS" == "true" ]]; then echo; echo "### ⚠️ Potential Breaking Removals"; echo "- Rust public items removed: **$BREAKING_COUNT**"; fi
+        if [[ -n "$DEPS_HINT" ]]; then echo; echo "### 📦 Dependency Changes"; echo "- $DEPS_HINT"; fi
+        echo; echo "<details><summary>Changed files (first $MAX_FILES)</summary>"; echo; 
+        printf "%s\n" "$FILE_LIST" | sed 's/^/- `/' | sed 's/$/`/'
+        if [[ "$REMAIN" -gt 0 ]]; then echo; echo "…and ${REMAIN} more"; fi
+        echo; echo "</details>"; echo; 
+        echo "---"; echo "*Simple summary generated due to missing native diff command*";
       }
     )
   fi
