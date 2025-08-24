@@ -27,25 +27,41 @@ python3 --version  # Python 3.8+ 必要
 ```
 
 ### 3. Claude Code設定
-`claude_desktop_config.json` に追加:
+`claude_desktop_config.json` に追加（推奨は実装完了版の `mcp_server_real.py` を使用）:
 ```json
 {
   "mcpServers": {
     "nekocode": {
-      "command": "python3", 
-      "args": ["/絶対パス/mcp-nekocode-server/mcp_server_nekocode.py"],
+      "command": "python3",
+      "args": ["/絶対パス/nekocode-rust-clean/mcp-nekocode-server/mcp_server_real.py"],
       "env": {
-        "NEKOCODE_BINARY_PATH": "/絶対パス/nekocode-workspace/target/debug/nekocode"
+        "NEKOCODE_BINARY_PATH": "/絶対パス/nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
+        "NEKOREFACTOR_BINARY_PATH": "/絶対パス/nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor"
       }
     }
   }
 }
 ```
 **注意**: 
-- スクリプト名: `mcp_server_nekocode.py`（新しい統一導線版）
-- バイナリ名: `nekocode`（`_ai`なし）
+- スクリプト名: `mcp_server_real.py`（MCP実装・ツール群・トークン制限最適化入り）
+- バイナリ名: `nekocode`（五分割ワークスペース版）。旧`nekocode_ai`はレガシー互換。
 
 **詳細な設定方法は `TEST_SETUP.md` を参照してください**
+
+参考（オプション: シンプル版サーバーを使う場合）
+```json
+{
+  "mcpServers": {
+    "nekocode": {
+      "command": "python3",
+      "args": ["/絶対パス/nekocode-rust-clean/mcp-nekocode-server/mcp_server_nekocode.py"],
+      "env": {
+        "NEKOCODE_BINARY_PATH": "/絶対パス/nekocode-rust-clean/nekocode-workspace/target/debug/nekocode"
+      }
+    }
+  }
+}
+```
 
 ### 4. 設定ファイル（オプション） - **NEW! 統合設定システム**
 NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配置することで動作をカスタマイズ可能：
