@@ -16,17 +16,35 @@ use nekocode::{
 };
 use nekocode::cli::Commands;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // Initialize logger
     env_logger::init();
     
     // Parse CLI arguments
     let cli = Cli::parse();
     
+    // Extract threads parameter if available
+    let worker_threads = match &cli.command {
+        Commands::Analyze { threads, .. } => *threads,
+        _ => 8, // Default to 8 threads
+    };
+    
+    // Build custom tokio runtime with specified worker threads
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    
+    // Run async main with custom runtime
+    runtime.block_on(async_main(cli))
+}
+
+async fn async_main(cli: Cli) -> Result<()> {
+    
     // Execute command
     match cli.command {
-        Commands::Analyze { path, output, stats_only, language, ast: _ } => {
+        Commands::Analyze { path, output, stats_only, language, ast: _, threads: _ } => {
             // Check if path is a directory
             if path.is_dir() {
                 eprintln!("❌ Error: 'analyze' command expects a file, but got a directory: {}", path.display());

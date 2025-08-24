@@ -35,6 +35,10 @@ pub enum Commands {
         /// Build AST tree
         #[arg(long)]
         ast: bool,
+        
+        /// Number of parallel threads for file processing
+        #[arg(short, long, default_value = "8")]
+        threads: usize,
     },
     
     /// Create a new analysis session

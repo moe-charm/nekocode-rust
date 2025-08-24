@@ -52,7 +52,12 @@ class NekoCodeMCPServer:
             return os.path.abspath(env_path)
         
         possible_paths = [
-            # 🚀 nekocode-workspace 5分割バイナリ優先
+            # 🚀 nekocode-workspace 5分割バイナリ優先（確実にこれを使う）
+            "../nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
+            "./nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
+            "../nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
+            "./nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
+            # Legacy paths (fallback)
             "./nekocode-workspace/target/debug/nekocode",
             "../nekocode-workspace/target/debug/nekocode",
             "./nekocode-workspace/target/release/nekocode",
@@ -89,8 +94,8 @@ class NekoCodeMCPServer:
         if legacy_binary:
             return legacy_binary
         
-        # デフォルト（nekocode-workspace優先）
-        return "./nekocode-workspace/target/debug/nekocode"
+        # デフォルト（5分割版nekocode-workspace優先）
+        return "../nekocode-rust-clean/nekocode-workspace/target/debug/nekocode"
     
     def _find_nekorefactor_binary(self) -> str:
         """nekorefactor バイナリの場所を特定"""
@@ -100,7 +105,12 @@ class NekoCodeMCPServer:
             return os.path.abspath(env_path)
         
         possible_paths = [
-            # nekocode-workspace内のnekorefactor（debugを優先）
+            # 🚀 nekocode-workspace 5分割バイナリ（確実にこれを使う）
+            "../nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor",
+            "./nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor",
+            "../nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor",
+            "./nekocode-rust-clean/nekocode-workspace/target/release/nekorefactor",
+            # Legacy paths (fallback)
             "./nekocode-workspace/target/debug/nekorefactor",
             "../nekocode-workspace/target/debug/nekorefactor",
             "./nekocode-workspace/target/release/nekorefactor",
@@ -123,7 +133,7 @@ class NekoCodeMCPServer:
             return nekorefactor_binary
         
         # デフォルト
-        return "./nekocode-workspace/target/debug/nekorefactor"
+        return "../nekocode-rust-clean/nekocode-workspace/target/debug/nekorefactor"
     
     def _load_config(self) -> Dict:
         """nekocode_config.json を読み込み（あれば）"""
@@ -631,6 +641,27 @@ class NekoCodeMCPServer:
                 }
             },
             {
+                "name": "nekocode",
+                "description": "🌟 スマート統一エントリーポイント（推奨）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "解析対象パス"},
+                        "action": {
+                            "type": "string", 
+                            "description": "アクション（analyze/refresh/clean）", 
+                            "default": "analyze"
+                        },
+                        "options": {
+                            "type": "object",
+                            "description": "追加オプション",
+                            "default": {}
+                        }
+                    },
+                    "required": ["path"]
+                }
+            },
+            {
                 "name": "strip_comments",
                 "description": "🧹 コメント削除（Tree-sitter AST解析・100%安全）",
                 "inputSchema": {
@@ -956,6 +987,8 @@ class NekoCodeMCPServer:
                 return await self._tool_edit_rollback(arguments)
             elif tool_name == "edit_stats":
                 return await self._tool_edit_stats(arguments)
+            elif tool_name == "nekocode":
+                return await self._tool_nekocode(arguments)
             else:
                 return {
                     "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
@@ -971,6 +1004,245 @@ class NekoCodeMCPServer:
     # ========================================
     # ツール実装
     # ========================================
+    
+    async def _tool_nekocode(self, args: Dict) -> Dict:
+        """🌟 統一スマートエントリーポイント - 自動セッション管理"""
+        path = args["path"]
+        action = args.get("action", "analyze")
+        options = args.get("options", {})
+        
+        # パス正規化
+        abs_path = self.normalize_path(path)
+        
+        if action == "analyze":
+            # スマート解析（セッション自動管理）
+            return await self.smart_analyze(abs_path, options)
+        elif action == "watch":
+            # 監視モード
+            session_id = await self.get_or_create_session(abs_path)
+            return await self._tool_watch_start({"session_id": session_id})
+        elif action == "check":
+            # デッドコード・品質チェック
+            session_id = await self.get_or_create_session(abs_path)
+            return await self._tool_deadcode({
+                "session_id": session_id,
+                "external": options.get("external", True),
+                "min_confidence": options.get("min_confidence", 85),
+                "format": options.get("format", "text")
+            })
+        elif action == "config":
+            # 設定管理
+            if "set" in options:
+                return await self._tool_config_set(options["set"])
+            else:
+                return await self._tool_config_show({})
+        else:
+            return {
+                "content": [{
+                    "type": "text", 
+                    "text": f"❌ Unknown action: {action}\nAvailable: analyze, watch, check, config"
+                }]
+            }
+    
+    def normalize_path(self, path: str) -> str:
+        """パスを正規化（絶対パス変換）"""
+        import os
+        
+        # 相対パスを絶対パスに変換
+        if not os.path.isabs(path):
+            # MCPサーバーの場所を基準に解決
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            abs_path = os.path.abspath(os.path.join(base_dir, path))
+        else:
+            abs_path = os.path.abspath(path)
+        
+        return abs_path
+    
+    async def get_or_create_session(self, path: str) -> str:
+        """パスに対応するセッション取得/作成"""
+        import os
+        import json
+        
+        # セッションマッピングをチェック
+        if not hasattr(self, 'session_mapping'):
+            self.session_mapping = {}
+            
+        # キャッシュ確認
+        if path in self.session_mapping:
+            session_id = self.session_mapping[path]
+            # セッションが存在するか確認
+            if session_id in self.sessions:
+                return session_id
+        
+        # 既存セッション検索（.nekocode_sessions/から）
+        sessions_dir = os.path.join(os.path.dirname(path), ".nekocode_sessions")
+        if os.path.exists(sessions_dir):
+            for filename in os.listdir(sessions_dir):
+                if filename.endswith(".json"):
+                    session_file = os.path.join(sessions_dir, filename)
+                    try:
+                        with open(session_file, 'r') as f:
+                            session_data = json.load(f)
+                            if session_data.get("path") == path:
+                                session_id = filename.replace(".json", "")
+                                self.session_mapping[path] = session_id
+                                self.sessions[session_id] = session_data
+                                return session_id
+                    except:
+                        continue
+        
+        # 新規セッション作成
+        result = await self._run_nekocode(["session-create", path])
+        if "session_id" in result:
+            session_id = result["session_id"]
+            self.session_mapping[path] = session_id
+            self.sessions[session_id] = {"path": path, "is_new": True}
+            return session_id
+        else:
+            # フォールバック：ランダムID生成
+            import uuid
+            session_id = str(uuid.uuid4())[:8]
+            self.session_mapping[path] = session_id
+            self.sessions[session_id] = {"path": path, "is_new": True}
+            return session_id
+    
+    async def smart_analyze(self, path: str, options: Dict) -> Dict:
+        """スマート解析 - 差分更新or新規作成"""
+        import os
+        
+        # セッション自動取得/作成
+        session_id = await self.get_or_create_session(path)
+        
+        # セッション情報取得
+        session_info = self.sessions.get(session_id, {})
+        is_new = session_info.get("is_new", False)
+        
+        # ファイル数カウント
+        file_count = self.count_files(path)
+        
+        if is_new:
+            # 初回：フル解析
+            if file_count > 1000:
+                # 大規模：stats_onlyモード
+                result = await self._tool_analyze({
+                    "path": path,
+                    "stats_only": True
+                })
+                display_mode = "large"
+            else:
+                # 通常：フル解析
+                result = await self._tool_session_stats({"session_id": session_id})
+                display_mode = "full"
+            
+            # is_newフラグをクリア
+            if session_id in self.sessions:
+                self.sessions[session_id]["is_new"] = False
+        else:
+            # 2回目以降：差分更新
+            result = await self._tool_session_update({
+                "session_id": session_id,
+                "verbose": options.get("verbose", False)
+            })
+            display_mode = "diff"
+        
+        # 分かりやすく整形
+        return self.format_analysis_result(result, display_mode, path, session_id, file_count)
+    
+    def count_files(self, path: str) -> int:
+        """ファイル数をカウント"""
+        import os
+        
+        if not os.path.exists(path):
+            return 0
+        
+        if os.path.isfile(path):
+            return 1
+        
+        count = 0
+        exclude_dirs = {'.git', 'node_modules', 'target', '.nekocode_sessions', '__pycache__'}
+        
+        for root, dirs, files in os.walk(path):
+            # 除外ディレクトリをスキップ
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            
+            # ファイル数カウント
+            for file in files:
+                if not file.startswith('.') and not file.endswith('.tmp'):
+                    count += 1
+                    if count > 10000:  # 安全のため上限設定
+                        return count
+        
+        return count
+    
+    def format_analysis_result(self, result: Dict, mode: str, path: str, session_id: str, file_count: int) -> Dict:
+        """解析結果を分かりやすく整形"""
+        import json
+        
+        # エラーチェック
+        if "error" in result:
+            return result
+        
+        # モード別整形
+        if mode == "large":
+            # 大規模プロジェクト
+            text = f"""⚠️ Large Project: {path}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Files: {file_count:,} (Too many!)
+🚀 Mode: Quick stats only
+⏭️ Skipping: tests/, docs/, examples/
+⚡ Session: {session_id} [Optimized]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Tip: Use nekocode("src/") for specific analysis"""
+        
+        elif mode == "full":
+            # 初回フル解析
+            content = result.get("content", [{}])[0].get("text", "{}")
+            try:
+                data = json.loads(content) if isinstance(content, str) else content
+            except:
+                data = {}
+            
+            functions = data.get("functions", 0)
+            classes = data.get("classes", 0)
+            
+            text = f"""📊 Project Analysis: {path}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Files: {file_count:,}
+🔧 Functions: {functions:,}
+📦 Classes: {classes:,}
+⚡ Session: {session_id} [Created]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+        
+        else:  # diff mode
+            # 差分更新
+            content = result.get("content", [{}])[0].get("text", "{}")
+            try:
+                data = json.loads(content) if isinstance(content, str) else content
+            except:
+                data = {}
+            
+            changed = data.get("changed_files", 0)
+            update_time = data.get("update_time", "0ms")
+            
+            if changed == 0:
+                text = f"""✅ No changes: {path}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ Session: {session_id} [Cached]
+⏱️ Check time: {update_time}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+            else:
+                text = f"""⚡ Quick Update: {path}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 Changed: {changed} files ({update_time})
+⚡ Session: {session_id} [Updated]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+        
+        return {
+            "content": [{
+                "type": "text",
+                "text": text
+            }]
+        }
     
     async def _tool_analyze(self, args: Dict) -> Dict:
         """プロジェクト解析"""
