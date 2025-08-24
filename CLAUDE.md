@@ -176,8 +176,8 @@ nekocode-cpp-github/         # ルート
 ### 🔥 **コマンド例（必ずこのパスを使用）**
 ```bash
 # 必ず一個上のtest-workspaceを使用
-./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/express/
-./target/release/nekocode-rust session-create ../test-workspace/test-real-projects/flask/
+releases/nekocode session-create ../test-workspace/test-real-projects/express/
+releases/nekocode session-create ../test-workspace/test-real-projects/flask/
 ```
 
 **🛡️ 安全性**: test-workspaceがGitリポジトリ外にあるため物理的に分離・絶対安全！
@@ -189,11 +189,9 @@ nekocode-cpp-github/         # ルート
 # ビルド（3秒で完了）
 cargo build --release
 
-# 高速解析（必ず ../test-workspace/ を使用）
-./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/express/ --parser tree-sitter
-
 # セッション作成（必ず ../test-workspace/ を使用）
-./target/release/nekocode-rust session-create ../test-workspace/test-real-projects/flask/
+releases/nekocode session-create ../test-workspace/test-real-projects/express/
+releases/nekocode session-create ../test-workspace/test-real-projects/flask/
 
 # 🆕 デッドコード検出（完全解析）
 ./target/debug/nekocode session-create ../test-workspace/test-real-projects/serde/ --complete --external --format github-comment
@@ -201,8 +199,8 @@ cargo build --release
 # 🆕 既存セッションでデッドコード解析
 ./target/debug/nekocode deadcode SESSION_ID --external --min-confidence 85
 
-# 性能比較（必ず ../test-workspace/ を使用）
-./target/release/nekocode-rust analyze ../test-workspace/test-real-projects/typescript/ --benchmark
+# 解析の統計を確認（session-id省略で最新を使用）
+releases/nekocode ast-stats
 ```
 
 ### **MCP経由（Claude Code）**
@@ -242,7 +240,7 @@ cd nekocode-rust-clean
 cargo build --release
 
 # テスト実行（必ず ../test-workspace/ を使用）
-./target/release/nekocode-rust analyze ../test-workspace/test-files/
+releases/nekocode session-create ../test-workspace/test-files/
 ```
 
 ### **注意点**

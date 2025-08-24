@@ -140,10 +140,41 @@ nekorefactor strip-comments file.cpp --keep-important  # WARNING/FIXME保持
 cargo build --release
 ```
 
-### 2. セッション作成
+### 2. セッション作成 / お掃除
 ```bash
 ./target/debug/nekocode session-create /path/to/project
 # 出力: ✅ Created session: 12345678
+
+Tip: 以降の `ast-stats` / `ast-query` / `ast-dump` / `deadcode` は `--session-id` を省略すると
+最後に作成したセッションを自動使用します（CLIセッション自動記憶）。
+
+自動お掃除（Auto-Prune）:
+- デフォルトで「直近5件を保持」、30日以上未使用・パスが壊れたセッションを自動削除します。
+- 実行タイミング: `session-create` 完了直後に実行されます。
+- 設定は `~/.nekocode/cli_session.json` 内の `settings` で変更可能です。
+  - `auto_prune_enabled`: true/false
+  - `auto_prune_keep_recent`: 保持件数（既定: 5）
+  - `auto_prune_max_age_days`: 期限（例: 30、無効化は null）
+  - `auto_prune_delete_stale`: 壊れたパスを削除（true/false）
+
+お掃除（クリーンアップ）:
+
+```bash
+# CLIセッションの履歴だけを消す（本体データは保持）
+nekocode session-history --clear
+
+# 使っていない古いセッションを14日より前のものを削除
+nekocode session-prune --older-than 14
+
+# パスが存在しない壊れたセッションを削除
+nekocode session-prune --stale
+
+# 最新5件だけ残して他を削除
+nekocode session-prune --keep 5
+
+# すべてのセッションを削除（注意！）
+nekocode session-prune --all
+```
 ```
 
 ### 3. リファクタリング
@@ -250,6 +281,46 @@ nekorefactor edit-stats                                 # 統計表示
 
 # Smart機能テスト
 ./target/debug/nekorefactor smart insert SESSION_ID test.py "print('test')" --after-function main --preview
+
+## 🧩 MCP連携（Claude Code）
+
+- バイナリは `releases/` を優先（無ければ `target/release/`）。
+- セッションは自動記憶されるため、多くのMCPツールは `session_id` 省略で動作します。
+
+主要MCPツール例:
+
+```python
+# 1) セッション作成（最初に一度だけ）
+await mcp__nekocode__session_create(path=".")
+
+# 2) AST操作（session_id省略でOK）
+await mcp__nekocode__ast_query(path="VM::execute_binary_op")
+await mcp__nekocode__ast_stats()
+await mcp__nekocode__ast_dump(format="tree")
+
+# 3) 置換（プレビュー→確定）
+await mcp__nekocode__replace_preview(file_path="src/vm.rs",
+    pattern="self.execute_binary_op",
+    replacement="vm_modules::operators::execute_binary_op")
+await mcp__nekocode__replace_confirm()
+
+# 4) 行移動（プレビュー→確定）
+await mcp__nekocode__movelines_preview(
+    source="src/a.rs", start_line=10, line_count=5,
+    destination="src/b.rs", insert_line=20)
+await mcp__nekocode__movelines_confirm()
+
+# 5) クラス移動（プレビュー→確定）
+await mcp__nekocode__moveclass_preview(
+    session_id="<optional>", symbol_id="MyClass::method",
+    target="src/target.rs", update_imports=True)
+await mcp__nekocode__moveclass_confirm()
+```
+
+互換性メモ:
+- 旧版CLIでは `ast-query <SESSION_ID> <PATH>` 形式を要求することがあり、
+  MCPラッパーは自動的にレガシー形式へフォールバックします。
+- 可能なら最新の `releases/` バイナリを使用してください。
 ```
 
 ---

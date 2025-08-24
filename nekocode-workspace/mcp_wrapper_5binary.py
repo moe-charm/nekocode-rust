@@ -12,11 +12,17 @@ from typing import Dict, Any
 class NekoCode5BinaryMCP:
     def __init__(self):
         workspace_dir = os.path.dirname(os.path.abspath(__file__))
+        releases_dir = os.path.join(os.path.dirname(workspace_dir), 'releases')
+        # Prefer prebuilt releases binaries if available; fallback to local target builds
+        def pick(bin_name: str) -> str:
+            rel = os.path.join(releases_dir, bin_name)
+            tgt = os.path.join(workspace_dir, 'target/release', bin_name)
+            return rel if os.path.exists(rel) else tgt
         self.binaries = {
-            'nekocode': os.path.join(workspace_dir, 'target/release/nekocode'),
-            'nekorefactor': os.path.join(workspace_dir, 'target/release/nekorefactor'),
-            'nekoimpact': os.path.join(workspace_dir, 'target/release/nekoimpact'),
-            'nekoinc': os.path.join(workspace_dir, 'target/release/nekoinc'),
+            'nekocode': pick('nekocode'),
+            'nekorefactor': pick('nekorefactor'),
+            'nekoimpact': pick('nekoimpact'),
+            'nekoinc': pick('nekoinc'),
         }
         self.sessions = {}
         self.last_preview_id = None
@@ -61,24 +67,78 @@ class NekoCode5BinaryMCP:
         """nekorefactorを呼び出し"""
         cmd = [self.binaries['nekorefactor']]
         
+        # Keep last preview params for confirm step
+        if not hasattr(self, 'last_preview_params'):
+            self.last_preview_params = None
+        
         # コマンドマッピング
         if tool == 'replace_preview':
-            cmd.extend(['replace-preview', args['file_path'], 
-                       args['pattern'], args['replacement']])
+            # Use --preview flag on replace
+            file_path = args['file_path']
+            pattern = args['pattern']
+            replacement = args['replacement']
+            cmd.extend(['replace', file_path, pattern, replacement, '--preview'])
+            # Save preview params for confirm
+            self.last_preview_params = ('replace', file_path, pattern, replacement)
         elif tool == 'replace_confirm':
-            preview_id = args.get('preview_id', self.last_preview_id)
-            cmd.extend(['replace-confirm', preview_id])
+            # Re-run last preview without --preview
+            if not self.last_preview_params or self.last_preview_params[0] != 'replace':
+                return {'error': 'No replace preview to confirm'}
+            _, file_path, pattern, replacement = self.last_preview_params
+            cmd.extend(['replace', file_path, pattern, replacement])
         elif tool == 'insert_preview':
-            cmd.extend(['insert-preview', args['file_path'], 
-                       args['position'], args['content']])
+            file_path = args['file_path']
+            content = args['content']
+            # position can be 'start', 'end', or a line number
+            position = args.get('position')
+            cmd.extend(['insert', file_path, content])
+            if position:
+                # If numeric string, treat as line number
+                cmd.append(str(position))
+            cmd.append('--preview')
+            self.last_preview_params = ('insert', file_path, content, position)
         elif tool == 'insert_confirm':
-            preview_id = args.get('preview_id', self.last_preview_id)
-            cmd.extend(['insert-confirm', preview_id])
+            if not self.last_preview_params or self.last_preview_params[0] != 'insert':
+                return {'error': 'No insert preview to confirm'}
+            _, file_path, content, position = self.last_preview_params
+            cmd.extend(['insert', file_path, content])
+            if position:
+                cmd.append(str(position))
         elif tool == 'create_file':
             # 新機能！AIが喜ぶ
             cmd.extend(['create-file', args['path']])
             if 'template' in args:
                 cmd.extend(['--template', args['template']])
+        elif tool == 'movelines_preview':
+            # move-lines SOURCE START COUNT DEST INSERT --preview
+            source = args['source']
+            start = str(args['start_line'])
+            count = str(args['line_count'])
+            destination = args['destination']
+            insert_line = str(args['insert_line'])
+            cmd.extend(['move-lines', source, start, count, destination, insert_line, '--preview'])
+            self.last_preview_params = ('move-lines', source, start, count, destination, insert_line)
+        elif tool == 'movelines_confirm':
+            if not self.last_preview_params or self.last_preview_params[0] != 'move-lines':
+                return {'error': 'No movelines preview to confirm'}
+            _, source, start, count, destination, insert_line = self.last_preview_params
+            cmd.extend(['move-lines', source, start, count, destination, insert_line])
+        elif tool == 'moveclass_preview':
+            # move-class SESSION_ID SYMBOL_ID TARGET [--update-imports] --preview
+            sid = args['session_id']
+            symbol = args['symbol_id']
+            target = args['target']
+            cmd.extend(['move-class', sid, symbol, target, '--preview'])
+            if args.get('update_imports'):
+                cmd.append('--update-imports')
+            self.last_preview_params = ('move-class', sid, symbol, target, bool(args.get('update_imports')))
+        elif tool == 'moveclass_confirm':
+            if not self.last_preview_params or self.last_preview_params[0] != 'move-class':
+                return {'error': 'No moveclass preview to confirm'}
+            _, sid, symbol, target, update_imports = self.last_preview_params
+            cmd.extend(['move-class', sid, symbol, target])
+            if update_imports:
+                cmd.append('--update-imports')
         elif tool == 'extract_function':
             cmd.extend(['extract-function', args['session_id'],
                        args['function'], args['target']])
@@ -133,35 +193,136 @@ class NekoCode5BinaryMCP:
         """nekocodeを呼び出し"""
         cmd = [self.binaries['nekocode']]
         
-        if tool == 'analyze':
-            cmd.extend(['analyze', args.get('path', '.')])
-            if args.get('stats_only'):
-                cmd.append('--stats-only')
-            if 'language' in args:
-                cmd.extend(['--language', args['language']])
-        elif tool == 'session_create':
+        def run(cmd_list):
+            return subprocess.run(cmd_list, capture_output=True, text=True)
+        
+        def needs_legacy(err_out: str) -> bool:
+            if not err_out:
+                return False
+            # Detect old CLI that expects positional SESSION_ID
+            return (
+                "unexpected argument '--session-id'" in err_out
+                or 'Usage: nekocode ast-query <SESSION_ID>' in err_out
+                or 'Usage: nekocode ast-dump <SESSION_ID>' in err_out
+                or 'Usage: nekocode ast-stats <SESSION_ID>' in err_out
+            )
+        
+        if tool == 'session_create':
             cmd.extend(['session-create', args.get('path', '.')])
         elif tool == 'session_update':
             cmd.extend(['session-update', args['session_id']])
             if args.get('verbose'):
                 cmd.append('--verbose')
-        elif tool == 'session_stats':
-            cmd.extend(['session-stats', args['session_id']])
+        elif tool == 'session_list':
+            cmd.extend(['session-list'])
+            if args.get('detailed'):
+                cmd.append('--detailed')
+        elif tool == 'session_info':
+            cmd.extend(['session-info', args['session_id']])
+        elif tool == 'refresh':
+            cmd.extend(['refresh', args['session_id']])
+            if args.get('deps'):
+                cmd.append('--deps')
+            if args.get('deadcode'):
+                cmd.append('--deadcode')
+            if args.get('security'):
+                cmd.append('--security')
+            if args.get('quality'):
+                cmd.append('--quality')
+            if f := args.get('file'):
+                cmd.extend(['--file', f])
+            if args.get('external'):
+                cmd.append('--external')
+            if fmt := args.get('format'):
+                cmd.extend(['--format', fmt])
+        elif tool == 'deadcode':
+            cmd.append('deadcode')
+            if sid := args.get('session_id'):
+                cmd.extend(['--session-id', sid])
+            if args.get('external'):
+                cmd.append('--external')
+            if fmt := args.get('format'):
+                cmd.extend(['--format', fmt])
+            if mc := args.get('min_confidence'):
+                cmd.extend(['--min-confidence', str(mc)])
+            if out := args.get('output'):
+                cmd.extend(['--output', out])
+        elif tool == 'ast_stats':
+            # New style: optional session via --session-id (auto memory otherwise)
+            cmd_new = cmd + ['ast-stats']
+            if sid := args.get('session_id'):
+                cmd_new += ['--session-id', sid]
+            result = run(cmd_new)
+            if needs_legacy(result.stderr):
+                # Legacy fallback: positional session_id required
+                cmd_legacy = [self.binaries['nekocode'], 'ast-stats']
+                if sid := args.get('session_id'):
+                    cmd_legacy.append(sid)
+                result = run(cmd_legacy)
+            return {'content': [{'type': 'text', 'text': result.stdout or result.stderr}]}
         elif tool == 'ast_dump':
-            cmd.extend(['ast-dump', args['session_id']])
+            # New style first
+            cmd_new = cmd + ['ast-dump']
+            if sid := args.get('session_id'):
+                cmd_new += ['--session-id', sid]
             if 'format' in args:
-                cmd.extend(['--format', args['format']])
+                cmd_new += ['--format', args['format']]
+            result = run(cmd_new)
+            if needs_legacy(result.stderr):
+                # Legacy fallback expects positional session_id then optional format
+                cmd_legacy = [self.binaries['nekocode'], 'ast-dump']
+                if sid := args.get('session_id'):
+                    cmd_legacy.append(sid)
+                if 'format' in args:
+                    cmd_legacy += ['--format', args['format']]
+                result = run(cmd_legacy)
+            return {'content': [{'type': 'text', 'text': result.stdout or result.stderr}]}
         elif tool == 'ast_query':
-            cmd.extend(['ast-query', args['session_id'], args['path']])
+            # New style: ast-query <PATH> [--session-id SID]
+            path = args['path']
+            cmd_new = cmd + ['ast-query', path]
+            if sid := args.get('session_id'):
+                cmd_new += ['--session-id', sid]
+            result = run(cmd_new)
+            if needs_legacy(result.stderr):
+                # Legacy fallback: ast-query <SESSION_ID> <PATH>
+                cmd_legacy = [self.binaries['nekocode'], 'ast-query']
+                if sid := args.get('session_id'):
+                    cmd_legacy += [sid, path]
+                else:
+                    # No session provided and legacy required → return helpful error
+                    return {'error': "No session specified and legacy CLI requires <SESSION_ID>. Run 'session_create' first."}
+                result = run(cmd_legacy)
+            return {'content': [{'type': 'text', 'text': result.stdout or result.stderr}]}
+        elif tool == 'analyze':
+            # Deprecated: emulate by creating a session then returning stats or info
+            create = run([self.binaries['nekocode'], 'session-create', args.get('path', '.')])
+            sid = None
+            for line in (create.stdout or '').split('\n'):
+                if 'Created session:' in line:
+                    sid = line.split(':', 1)[1].strip()
+                    break
+            if not sid:
+                return {'content': [{'type': 'text', 'text': create.stdout or create.stderr}]}
+            if args.get('stats_only'):
+                # Use new style first, fallback to legacy
+                result = run([self.binaries['nekocode'], 'ast-stats', '--session-id', sid])
+                if needs_legacy(result.stderr):
+                    result = run([self.binaries['nekocode'], 'ast-stats', sid])
+            else:
+                result = run([self.binaries['nekocode'], 'session-info', sid])
+            return {'content': [{'type': 'text', 'text': result.stdout or result.stderr}]}
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Default execution path for other commands
+        result = run(cmd)
         
         # セッションIDを抽出して保存
-        if tool == 'session_create' and 'Session ID:' in result.stdout:
-            for line in result.stdout.split('\n'):
-                if 'Session ID:' in line:
-                    session_id = line.split('Session ID:')[1].strip()
+        if tool == 'session_create':
+            for line in (result.stdout or '').split('\n'):
+                if 'Created session:' in line:
+                    session_id = line.split(':', 1)[1].strip()
                     self.sessions['last'] = session_id
+                    break
         
         return {'content': [{'type': 'text', 'text': result.stdout or result.stderr}]}
     
@@ -183,11 +344,14 @@ class NekoCode5BinaryMCP:
         """利用可能なツールリスト"""
         return {
             'tools': [
-                # nekocode (解析エンジン)
-                {'name': 'analyze', 'description': '🚀 プロジェクト解析'},
+                # nekocode (解析エンジン) - セッション起点に統一
                 {'name': 'session_create', 'description': '🎮 セッション作成'},
                 {'name': 'session_update', 'description': '🔄 セッション更新'},
-                {'name': 'session_stats', 'description': '📊 セッション統計'},
+                {'name': 'session_list', 'description': '📋 セッション一覧'},
+                {'name': 'session_info', 'description': 'ℹ️ セッション情報'},
+                {'name': 'refresh', 'description': '🔁 セッション更新(スマート)'},
+                {'name': 'deadcode', 'description': '🧹 デッドコード検出'},
+                {'name': 'ast_stats', 'description': '📊 AST統計'},
                 {'name': 'ast_dump', 'description': '🌳 AST出力'},
                 {'name': 'ast_query', 'description': '🔍 AST検索'},
                 
@@ -196,6 +360,10 @@ class NekoCode5BinaryMCP:
                 {'name': 'replace_confirm', 'description': '✅ 置換実行'},
                 {'name': 'insert_preview', 'description': '📝 挿入プレビュー'},
                 {'name': 'insert_confirm', 'description': '✅ 挿入実行'},
+                {'name': 'movelines_preview', 'description': '📝 行移動プレビュー'},
+                {'name': 'movelines_confirm', 'description': '✅ 行移動実行'},
+                {'name': 'moveclass_preview', 'description': '📝 クラス移動プレビュー'},
+                {'name': 'moveclass_confirm', 'description': '✅ クラス移動実行'},
                 {'name': 'create_file', 'description': '📄 ファイル作成 (新機能!)'},
                 {'name': 'extract_function', 'description': '🔧 関数抽出'},
                 {'name': 'split_file', 'description': '✂️ ファイル分割'},

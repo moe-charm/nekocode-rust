@@ -3,10 +3,9 @@
 use clap::Parser;
 use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
 
 use nekocode_core::{
-    Result, NekocodeError, session::SessionManager, CliSessionHelper,
+    Result, NekocodeError, session::SessionManager, CliSessionHelper, CliSessionConfig,
     memory::{MemoryManager, MemoryType},
     config::ConfigManager,
 };
@@ -113,7 +112,10 @@ async fn async_main(cli: Cli) -> Result<()> {
             println!("  Updated: {}", session.info.last_modified.format("%Y-%m-%d %H:%M:%S"));
         }
         
-        Commands::SessionHistory { verbose } => {
+        Commands::SessionHistory { verbose, clear } => {
+            if clear {
+                CliSessionHelper::clear_history()?;
+            }
             CliSessionHelper::list_history()?;
             
             if verbose {
@@ -128,6 +130,58 @@ async fn async_main(cli: Cli) -> Result<()> {
                         session.file_count
                     );
                 }
+            }
+        }
+        
+        Commands::SessionPrune { older_than, stale, keep, all } => {
+            let mut session_manager = SessionManager::new()?;
+            let mut to_delete: std::collections::HashSet<String> = std::collections::HashSet::new();
+            
+            // List sessions sorted by last_accessed (newest first)
+            let sessions = session_manager.list_sessions()?;
+            
+            if all {
+                for s in &sessions {
+                    to_delete.insert(s.id.clone());
+                }
+            }
+            
+            if let Some(days) = older_than {
+                let cutoff = chrono::Utc::now() - chrono::Duration::days(days);
+                for s in &sessions {
+                    if s.last_accessed < cutoff {
+                        to_delete.insert(s.id.clone());
+                    }
+                }
+            }
+            
+            if stale {
+                for s in &sessions {
+                    if !s.path.exists() {
+                        to_delete.insert(s.id.clone());
+                    }
+                }
+            }
+            
+            if let Some(keep_n) = keep {
+                if sessions.len() > keep_n {
+                    for s in sessions.iter().skip(keep_n) {
+                        to_delete.insert(s.id.clone());
+                    }
+                }
+            }
+            
+            if to_delete.is_empty() {
+                println!("Nothing to prune");
+            } else {
+                let mut deleted = 0usize;
+                for id in to_delete {
+                    if session_manager.delete_session(&id).is_ok() {
+                        deleted += 1;
+                        println!("🗑️ Deleted session: {}", id);
+                    }
+                }
+                println!("✅ Prune complete: {} sessions deleted", deleted);
             }
         }
         
@@ -501,6 +555,57 @@ async fn handle_session_create_command(
         println!("      Example: nekocode session-create {} --complete --format github-comment", path.display());
     }
     
+    // Auto-prune old/stale sessions based on CLI settings
+    {
+        let settings = CliSessionConfig::load()?.settings;
+        if settings.auto_prune_enabled {
+            let mut manager = SessionManager::new()?;
+            let sessions = manager.list_sessions()?; // newest first
+            use std::collections::HashSet;
+            let mut to_delete: HashSet<String> = HashSet::new();
+
+            // Keep only the most recent N
+            if sessions.len() > settings.auto_prune_keep_recent {
+                for s in sessions.iter().skip(settings.auto_prune_keep_recent) {
+                    if s.id != session_id {
+                        to_delete.insert(s.id.clone());
+                    }
+                }
+            }
+
+            // Delete by age
+            if let Some(days) = settings.auto_prune_max_age_days {
+                let cutoff = chrono::Utc::now() - chrono::Duration::days(days);
+                for s in &sessions {
+                    if s.last_accessed < cutoff && s.id != session_id {
+                        to_delete.insert(s.id.clone());
+                    }
+                }
+            }
+
+            // Delete stale
+            if settings.auto_prune_delete_stale {
+                for s in &sessions {
+                    if !s.path.exists() && s.id != session_id {
+                        to_delete.insert(s.id.clone());
+                    }
+                }
+            }
+
+            if !to_delete.is_empty() {
+                let mut deleted = 0usize;
+                for id in to_delete {
+                    if manager.delete_session(&id).is_ok() {
+                        deleted += 1;
+                    }
+                }
+                if deleted > 0 {
+                    println!("🧹 Auto-prune: {} old sessions removed (keep {} recent)", deleted, settings.auto_prune_keep_recent);
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

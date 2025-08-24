@@ -149,6 +149,35 @@ pub enum Commands {
         /// Show all details
         #[arg(short, long)]
         verbose: bool,
+
+        /// Clear CLI session memory (history only)
+        #[arg(long, help = "Clear CLI session history (keeps current session unless cleared separately)")]
+        clear: bool,
+    },
+
+    /// Prune stored sessions from disk
+    ///
+    /// Examples:
+    ///   nekocode session-prune --older-than 14     # Delete sessions not used in 14+ days
+    ///   nekocode session-prune --stale             # Delete sessions whose path no longer exists
+    ///   nekocode session-prune --keep 5            # Keep 5 most recent, delete others
+    ///   nekocode session-prune --all               # Delete all sessions
+    SessionPrune {
+        /// Delete sessions not accessed for N days
+        #[arg(long, value_name = "DAYS")]
+        older_than: Option<i64>,
+
+        /// Delete sessions whose project path no longer exists
+        #[arg(long)]
+        stale: bool,
+
+        /// Keep only the N most recent sessions, delete others
+        #[arg(long, value_name = "N")]
+        keep: Option<usize>,
+
+        /// Delete all sessions
+        #[arg(long)]
+        all: bool,
     },
     
     /// AST operations on a session

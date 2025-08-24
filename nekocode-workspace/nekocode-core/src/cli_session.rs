@@ -44,7 +44,7 @@ pub struct SessionHistoryEntry {
 /// CLI-specific settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliSettings {
-    /// Auto-save session after analyze command
+    /// Auto-save session after session-create command
     pub auto_save_session: bool,
     
     /// Maximum number of sessions to keep in history
@@ -52,6 +52,18 @@ pub struct CliSettings {
     
     /// Show hints about session usage
     pub show_session_hints: bool,
+
+    /// Automatically prune old sessions on session-create
+    pub auto_prune_enabled: bool,
+
+    /// Keep this many most recent sessions (auto-prune)
+    pub auto_prune_keep_recent: usize,
+
+    /// Delete sessions not accessed for N days (None to disable)
+    pub auto_prune_max_age_days: Option<i64>,
+
+    /// Delete sessions whose project path no longer exists
+    pub auto_prune_delete_stale: bool,
 }
 
 impl Default for CliSettings {
@@ -60,6 +72,10 @@ impl Default for CliSettings {
             auto_save_session: true,
             max_history_size: 10,
             show_session_hints: true,
+            auto_prune_enabled: true,
+            auto_prune_keep_recent: 5,
+            auto_prune_max_age_days: Some(30),
+            auto_prune_delete_stale: true,
         }
     }
 }
@@ -122,7 +138,7 @@ impl CliSessionConfig {
         Ok(())
     }
     
-    /// Set current session (used after analyze command)
+    /// Set current session (used after session-create command)
     pub fn set_current_session(&mut self, session_id: String, path: PathBuf) -> Result<()> {
         self.current_session_id = Some(session_id.clone());
         self.current_path = Some(path.clone());
@@ -209,7 +225,7 @@ impl CliSessionConfig {
                     .unwrap_or("unknown")
             ))
         } else {
-            Some("💡 No active session. Run 'nekocode analyze <path>' to create one.".to_string())
+            Some("💡 No active session. Run 'nekocode session-create <path>' to create one.".to_string())
         }
     }
 }
@@ -231,11 +247,11 @@ impl CliSessionHelper {
         config.get_current_session_id()
             .map(|s| s.to_string())
             .ok_or_else(|| NekocodeError::SessionNotFound(
-                "No session ID provided and no active session found. Run 'nekocode analyze <path>' first.".to_string()
+                "No session ID provided and no active session found. Run 'nekocode session-create <path>' first.".to_string()
             ))
     }
     
-    /// Save session after analyze command
+    /// Save session after session-create command
     pub fn save_session(session_id: String, path: PathBuf) -> Result<()> {
         let mut config = CliSessionConfig::load()?;
         config.set_current_session(session_id, path)?;
@@ -285,6 +301,16 @@ impl CliSessionHelper {
             );
         }
         
+        Ok(())
+    }
+
+    /// Clear CLI session history (does not remove on-disk analysis sessions)
+    pub fn clear_history() -> Result<()> {
+        let mut config = CliSessionConfig::load()?;
+        config.session_history.clear();
+        config.last_updated = Utc::now();
+        config.save()?;
+        println!("🧹 Cleared CLI session history");
         Ok(())
     }
 }

@@ -114,8 +114,10 @@ def new_function():  # ✅ 正確な位置・インデント！
 ./target/debug/nekocode session-create /path/to/project/
 ./target/debug/nekocode session-list --detailed
 
-# 基本解析
-./target/debug/nekocode analyze /path/to/file.js
+# 基本解析（セッション作成→AST操作）
+./target/debug/nekocode session-create /path/to/project
+./target/debug/nekocode ast-stats
+./target/debug/nekocode ast-query "MyClass::myMethod"
 ```
 
 ### **3. nekoimpact** - 📊 **変更影響度解析** (51.2MB)
