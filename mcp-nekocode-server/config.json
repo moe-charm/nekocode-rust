@@ -9,13 +9,21 @@
   },
   "nekocode": {
     "binary_paths": [
-      "./build/nekocode_ai",
-      "../build/nekocode_ai",
-      "/usr/local/bin/nekocode_ai",
-      "nekocode_ai"
+      "../nekocode-workspace/target/release/nekocode",
+      "../nekocode-workspace/target/debug/nekocode",
+      "./../nekocode-workspace/target/release/nekocode",
+      "./../nekocode-workspace/target/debug/nekocode",
+      "../releases/nekocode",
+      "./releases/nekocode",
+      "./target/release/nekocode-rust",
+      "./target/debug/nekocode-rust",
+      "/usr/local/bin/nekocode",
+      "nekocode",
+      "nekocode-rust",
+      "nekocode_ai"  
     ],
-    "supported_languages": ["javascript", "typescript", "cpp", "c"],
-    "planned_languages": ["csharp", "python", "java", "go", "rust"],
+    "supported_languages": ["javascript", "typescript", "cpp", "c", "python", "csharp", "go", "rust"],
+    "planned_languages": ["java"],
     "features": {
       "fast_analysis": "38ms初回解析",
       "session_mode": "3ms継続操作", 
