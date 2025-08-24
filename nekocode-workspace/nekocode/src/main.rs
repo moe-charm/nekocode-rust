@@ -3,6 +3,7 @@
 use clap::Parser;
 use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 use nekocode_core::{
     Result, NekocodeError, session::SessionManager, CliSessionHelper,
