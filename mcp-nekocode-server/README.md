@@ -33,14 +33,17 @@ python3 --version  # Python 3.8+ 必要
   "mcpServers": {
     "nekocode": {
       "command": "python3", 
-      "args": ["/絶対パス/mcp-nekocode-server/mcp_server_real.py"],
+      "args": ["/絶対パス/mcp-nekocode-server/mcp_server_nekocode.py"],
       "env": {
-        "NEKOCODE_BINARY_PATH": "/絶対パス/build/nekocode_ai"
+        "NEKOCODE_BINARY_PATH": "/絶対パス/nekocode-workspace/target/debug/nekocode"
       }
     }
   }
 }
 ```
+**注意**: 
+- スクリプト名: `mcp_server_nekocode.py`（新しい統一導線版）
+- バイナリ名: `nekocode`（`_ai`なし）
 
 **詳細な設定方法は `TEST_SETUP.md` を参照してください**
 
@@ -86,11 +89,21 @@ NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配
 
 ## 🛠️ 利用可能なツール
 
-### 🎮 セッション機能（推奨！）
-- `mcp__nekocode__session_create` - **📍 最初にこれを使う！** 対話式セッション作成
-- `mcp__nekocode__session_stats` - 📊 統計情報（超高速3ms）
-- `mcp__nekocode__session_update` - **NEW!** 🚀 インクリメンタル更新（23-49ms、918-1956x高速化）
-- `mcp__nekocode__find_files` - 🔎 ファイル検索（超高速3ms）
+### 🚀 **必ず最初に実行するコマンド**
+- `mcp__nekocode__analyze_start` - **⭐ すべてはここから始まる！** ファイルもディレクトリも同じコマンドで開始
+
+### 🎮 セッション機能（analyze_start後に使用）
+- `mcp__nekocode__stats` - 📊 統計情報（セッションID自動使用）
+- `mcp__nekocode__deadcode` - 🔍 デッドコード検出（limit指定推奨）
+- `mcp__nekocode__ast_stats` - 🌳 AST統計情報
+- `mcp__nekocode__ast_query` - 🔍 AST検索
+- `mcp__nekocode__ast_dump` - 📋 AST構造表示
+
+### 📝 後方互換（旧コマンド）
+- `mcp__nekocode__session_create` - セッション作成（analyze_startを推奨）
+- `mcp__nekocode__session_stats` - 統計情報（statsを推奨）
+- `mcp__nekocode__session_update` - インクリメンタル更新
+- `mcp__nekocode__find_files` - ファイル検索
 
 ### 🆕 **デッドコード検出機能** - ⚠️ **--external必須！**
 
@@ -110,7 +123,11 @@ NekoCodeバイナリと同じディレクトリに `nekocode_config.json` を配
 
 **MCPでの使い方:**
 ```python
-# セッション作成時に完全解析
+# 新しい統一導線（推奨）
+mcp__nekocode__analyze_start("project/")  # まずこれを実行
+mcp__nekocode__deadcode(limit=20)  # セッションID自動使用
+
+# 旧方式（後方互換）
 mcp__nekocode__session_create(path="project/", complete=True, external=True)
 ```
 
@@ -384,7 +401,7 @@ stats = await mcp__nekocode__memory_stats()
 # → 各タイプのMemory数、使用状況を表示
 ```
 
-**💡 ヒント**: 複数回の操作を行う場合は、必ず最初に `session_create` を使ってください！
+**💡 ヒント**: 複数回の操作を行う場合は、必ず最初に `analyze_start` を使ってください！セッションが自動作成・記憶されます。
 
 ## ⚙️ コマンドラインオプション
 

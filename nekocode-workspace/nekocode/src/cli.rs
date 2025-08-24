@@ -15,32 +15,6 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Analyze a file or directory without creating a session
-    Analyze {
-        /// Path to analyze
-        path: PathBuf,
-        
-        /// Output format (text, json, stats)
-        #[arg(short, long, default_value = "text")]
-        output: String,
-        
-        /// Show only statistics
-        #[arg(long)]
-        stats_only: bool,
-        
-        /// Language to use (auto-detect if not specified)
-        #[arg(short, long)]
-        language: Option<String>,
-        
-        /// Build AST tree
-        #[arg(long)]
-        ast: bool,
-        
-        /// Number of parallel threads for file processing
-        #[arg(short, long, default_value = "8")]
-        threads: usize,
-    },
-    
     /// Create a new analysis session
     /// 
     /// Examples:
@@ -170,25 +144,35 @@ pub enum Commands {
         session_id: String,
     },
     
+    /// Show session history
+    SessionHistory {
+        /// Show all details
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    
     /// AST operations on a session
     AstStats {
-        /// Session ID
-        session_id: String,
+        /// Session ID (optional - uses last session if not provided)
+        #[arg(short, long)]
+        session_id: Option<String>,
     },
     
     /// Query AST by path (e.g., "MyClass::myMethod")
     AstQuery {
-        /// Session ID
-        session_id: String,
-        
         /// Query path
         path: String,
+        
+        /// Session ID (optional - uses last session if not provided)
+        #[arg(short, long)]
+        session_id: Option<String>,
     },
     
     /// Dump AST tree
     AstDump {
-        /// Session ID
-        session_id: String,
+        /// Session ID (optional - uses last session if not provided)
+        #[arg(short, long)]
+        session_id: Option<String>,
         
         /// Output format (tree, json, flat)
         #[arg(short, long, default_value = "tree")]
@@ -205,11 +189,12 @@ pub enum Commands {
     
     /// Scope analysis for a specific line
     ScopeAnalysis {
-        /// Session ID
-        session_id: String,
-        
         /// Line number to analyze
         line: u32,
+        
+        /// Session ID (optional - uses last session if not provided)
+        #[arg(short, long)]
+        session_id: Option<String>,
     },
     
     /// Export session data
@@ -254,8 +239,9 @@ pub enum Commands {
     ///   nekocode deadcode abc123 --external
     ///   nekocode deadcode abc123 --format github-comment --min-confidence 90
     Deadcode {
-        /// Session ID to analyze
-        session_id: String,
+        /// Session ID to analyze (optional - uses last session if not provided)
+        #[arg(short, long)]
+        session_id: Option<String>,
         
         /// Use external tools for higher accuracy (90%+ vs 60% internal)
         /// Recommended: cargo clippy (Rust), vulture (Python), staticcheck (Go)

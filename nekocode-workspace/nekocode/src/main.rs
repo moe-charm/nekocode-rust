@@ -4,14 +4,10 @@ use clap::Parser;
 use std::fs;
 use std::io::{self, Write};
 
-use nekocode_core::{Result, NekocodeError, session::SessionManager};
+use nekocode_core::{Result, NekocodeError, session::SessionManager, CliSessionHelper};
 use nekocode::{
     Cli,
     SessionCommands, SessionUpdater,
-    JavaScriptAnalyzer, TypeScriptAnalyzer,
-    PythonAnalyzer, RustAnalyzer,
-    CppAnalyzer, GoAnalyzer, CSharpAnalyzer,
-    Analyzer,
     DeadCodeAnalyzer, DeadItem, DeadCodeReport
 };
 use nekocode::cli::Commands;
@@ -23,11 +19,8 @@ fn main() -> Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
     
-    // Extract threads parameter if available
-    let worker_threads = match &cli.command {
-        Commands::Analyze { threads, .. } => *threads,
-        _ => 8, // Default to 8 threads
-    };
+    // Default to 8 threads for all commands
+    let worker_threads = 8;
     
     // Build custom tokio runtime with specified worker threads
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -44,79 +37,6 @@ async fn async_main(cli: Cli) -> Result<()> {
     
     // Execute command
     match cli.command {
-        Commands::Analyze { path, output, stats_only, language, ast: _, threads: _ } => {
-            // Check if path is a directory
-            if path.is_dir() {
-                eprintln!("❌ Error: 'analyze' command expects a file, but got a directory: {}", path.display());
-                eprintln!("💡 Hint: For directory analysis, use 'session-create' command instead:");
-                eprintln!("         nekocode session-create {}", path.display());
-                if stats_only {
-                    eprintln!("         Or for stats only: nekocode session-create {} --stats-only", path.display());
-                }
-                return Err(NekocodeError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("Directory provided to analyze command. Use 'session-create' for directories.")
-                )));
-            }
-            
-            // Check if file exists
-            if !path.exists() {
-                eprintln!("❌ Error: File not found: {}", path.display());
-                return Err(NekocodeError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("File not found: {}", path.display())
-                )));
-            }
-            
-            // Create appropriate analyzer
-            let mut analyzer = create_analyzer_for_path(&path, language.as_deref())?;
-            
-            // Read file content
-            let content = fs::read_to_string(&path)?;
-            
-            // Analyze
-            let result = analyzer.analyze(&path, &content).await?;
-            
-            // Output results
-            match output.as_str() {
-                "json" => {
-                    println!("{}", serde_json::to_string_pretty(&result)?);
-                }
-                "stats" => {
-                    println!("📊 Analysis Statistics:");
-                    println!("  Language: {:?}", result.file_info.language);
-                    println!("  Size: {} bytes", result.file_info.size_bytes);
-                    println!("  Lines: {}", result.file_info.total_lines);
-                    println!("  Functions: {}", result.functions.len());
-                    println!("  Classes: {}", result.classes.len());
-                    println!("  Imports: {}", result.imports.len());
-                    println!("  Exports: {}", result.exports.len());
-                }
-                _ => {
-                    if stats_only {
-                        println!("📊 Quick Stats: {} functions, {} classes, {} imports",
-                            result.functions.len(), result.classes.len(), result.imports.len());
-                    } else {
-                        println!("📄 Analysis complete: {}", path.display());
-                        println!("📊 Functions: {}", result.functions.len());
-                        println!("📊 Classes: {}", result.classes.len());
-                        if !result.functions.is_empty() {
-                            println!("\n🔧 Functions:");
-                            for func in &result.functions {
-                                println!("  {} (lines {}-{})", func.symbol.name, func.symbol.line_start, func.symbol.line_end);
-                            }
-                        }
-                        if !result.classes.is_empty() {
-                            println!("\n📦 Classes:");
-                            for class in &result.classes {
-                                println!("  {} (lines {}-{})", class.symbol.name, class.symbol.line_start, class.symbol.line_end);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
         Commands::SessionCreate { path, name, complete, format, output, min_confidence, external } => {
             handle_session_create_command(path, name, complete, format, output, min_confidence, external).await?;
         }
@@ -188,19 +108,46 @@ async fn async_main(cli: Cli) -> Result<()> {
             println!("  Updated: {}", session.info.last_modified.format("%Y-%m-%d %H:%M:%S"));
         }
         
+        Commands::SessionHistory { verbose } => {
+            CliSessionHelper::list_history()?;
+            
+            if verbose {
+                // Also show nekocode sessions
+                println!("\n📂 NekoCode Sessions:");
+                let session_manager = SessionManager::new()?;
+                let sessions = session_manager.list_sessions()?;
+                for session in sessions {
+                    println!("  {} - {} ({} files)", 
+                        session.id, 
+                        session.path.display(),
+                        session.file_count
+                    );
+                }
+            }
+        }
+        
         Commands::AstStats { session_id } => {
+            // Get session ID from args or config
+            let session_id = CliSessionHelper::get_session_id(session_id.as_deref())?;
+            
             let mut commands = SessionCommands::new()?;
             let stats = commands.ast_stats(&session_id).await?;
             println!("{}", stats);
         }
         
         Commands::AstQuery { session_id, path } => {
+            // Get session ID from args or config
+            let session_id = CliSessionHelper::get_session_id(session_id.as_deref())?;
+            
             let mut commands = SessionCommands::new()?;
             let result = commands.ast_query(&session_id, &path).await?;
             println!("{}", result);
         }
         
         Commands::AstDump { session_id, format, limit, force } => {
+            // Get session ID from args or config
+            let session_id = CliSessionHelper::get_session_id(session_id.as_deref())?;
+            
             let mut commands = SessionCommands::new()?;
             let mut result = commands.ast_dump(&session_id, &format).await?;
             
@@ -219,6 +166,9 @@ async fn async_main(cli: Cli) -> Result<()> {
         }
         
         Commands::ScopeAnalysis { session_id, line } => {
+            // Get session ID from args or config
+            let session_id = CliSessionHelper::get_session_id(session_id.as_deref())?;
+            
             println!("🎯 Scope analysis for session {} at line {}", session_id, line);
             println!("(Scope analysis functionality requires AST traversal implementation)");
         }
@@ -259,6 +209,9 @@ async fn async_main(cli: Cli) -> Result<()> {
         }
         
         Commands::Deadcode { session_id, external, format, min_confidence, output } => {
+            // Get session ID from args or config
+            let session_id = CliSessionHelper::get_session_id(session_id.as_deref())?;
+            
             handle_deadcode_command(session_id, external, format, min_confidence, output).await?;
         }
         
@@ -267,54 +220,6 @@ async fn async_main(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-/// Create appropriate analyzer for a path
-fn create_analyzer_for_path(path: &std::path::Path, language: Option<&str>) -> Result<Box<dyn Analyzer>> {
-    if let Some(lang) = language {
-        match lang.to_lowercase().as_str() {
-            "javascript" | "js" => Ok(Box::new(JavaScriptAnalyzer::new()?)),
-            "typescript" | "ts" => Ok(Box::new(TypeScriptAnalyzer::new()?)),
-            "python" | "py" => Ok(Box::new(PythonAnalyzer::new()?)),
-            "rust" | "rs" => Ok(Box::new(RustAnalyzer::new()?)),
-            "cpp" | "c++" | "cxx" => Ok(Box::new(CppAnalyzer::new()?)),
-            "go" => Ok(Box::new(GoAnalyzer::new()?)),
-            "csharp" | "cs" => Ok(Box::new(CSharpAnalyzer::new()?)),
-            _ => Err(NekocodeError::LanguageNotSupported(format!(
-                "Language '{}' is not supported. Supported: javascript, typescript, python, rust, cpp, go, csharp",
-                lang
-            )))
-        }
-    } else {
-        // Auto-detect from file extension
-        let ext = path.extension()
-            .and_then(|e| e.to_str())
-            .ok_or_else(|| {
-                if path.is_dir() {
-                    NekocodeError::LanguageNotSupported(
-                        "Cannot auto-detect language for directory. Use 'session-create' for directories.".to_string()
-                    )
-                } else {
-                    NekocodeError::LanguageNotSupported(format!(
-                        "Cannot detect language for file '{}'. Specify with --language option.",
-                        path.display()
-                    ))
-                }
-            })?;
-        
-        match ext {
-            "js" | "jsx" | "mjs" | "cjs" => Ok(Box::new(JavaScriptAnalyzer::new()?)),
-            "ts" | "tsx" => Ok(Box::new(TypeScriptAnalyzer::new()?)),
-            "py" | "pyw" | "pyi" => Ok(Box::new(PythonAnalyzer::new()?)),
-            "rs" => Ok(Box::new(RustAnalyzer::new()?)),
-            "cpp" | "cxx" | "cc" | "hpp" | "hxx" | "hh" | "c" | "h" => Ok(Box::new(CppAnalyzer::new()?)),
-            "go" => Ok(Box::new(GoAnalyzer::new()?)),
-            "cs" => Ok(Box::new(CSharpAnalyzer::new()?)),
-            _ => Err(NekocodeError::LanguageNotSupported(format!(
-                "File extension '{}' is not supported. Supported extensions: js, ts, py, rs, cpp, go, cs. Use --language to specify explicitly.",
-                ext
-            )))
-        }
-    }
-}
 
 /// Handle deadcode analysis command
 async fn handle_deadcode_command(
@@ -455,6 +360,9 @@ async fn handle_session_create_command(
     let mut updater = SessionUpdater::new()?;
     let session_id = updater.create_session(&path).await?;
     
+    // Save session to CLI config for automatic reuse
+    CliSessionHelper::save_session(session_id.clone(), path.clone())?;
+    
     println!("✅ Created session: {}", session_id);
     if let Some(name) = &name {
         println!("📝 Name: {}", name);
@@ -568,46 +476,6 @@ async fn handle_session_create_command(
     Ok(())
 }
 
-/// Detect primary language in project directory
-fn detect_primary_language(path: &std::path::Path) -> Result<Option<nekocode_core::Language>> {
-    use nekocode_core::Language;
-    use walkdir::WalkDir;
-    use std::collections::HashMap;
-    
-    let mut language_counts: HashMap<Language, usize> = HashMap::new();
-    
-    // Walk through project directory and count file types
-    for entry in WalkDir::new(path)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-    {
-        if let Some(extension) = entry.path().extension() {
-            if let Some(ext_str) = extension.to_str() {
-                let language = match ext_str {
-                    "rs" => Some(Language::Rust),
-                    "py" | "pyw" | "pyi" => Some(Language::Python),
-                    "js" | "jsx" | "mjs" | "cjs" => Some(Language::JavaScript),
-                    "ts" | "tsx" => Some(Language::TypeScript),
-                    "go" => Some(Language::Go),
-                    "cpp" | "cxx" | "cc" | "hpp" | "hxx" | "hh" | "c" | "h" => Some(Language::Cpp),
-                    "cs" => Some(Language::CSharp),
-                    _ => None,
-                };
-                
-                if let Some(lang) = language {
-                    *language_counts.entry(lang).or_insert(0) += 1;
-                }
-            }
-        }
-    }
-    
-    // Return the most common language
-    Ok(language_counts
-        .into_iter()
-        .max_by_key(|(_, count)| *count)
-        .map(|(lang, _)| lang))
-}
 
 /// Handle unified refresh command with smart level detection
 async fn handle_refresh_command(

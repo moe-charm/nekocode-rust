@@ -45,30 +45,195 @@ class NekoCodeMCPServer:
         self.server = MCPServer("nekocode")
         self.nekocode_path = self._find_nekocode_binary()
         self.sessions = {}  # アクティブセッション管理
+        self.config_dir = Path.home() / ".nekocode"
+        self.config_file = self.config_dir / "mcp_session.json"
+        self.current_session_id = None
+        self._init_config()
         self.setup_tools()
     
+    def _init_config(self):
+        """設定ファイルの初期化"""
+        self.config_dir.mkdir(exist_ok=True)
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    self.current_session_id = config.get('last_session_id')
+            except:
+                pass
+    
+    def _save_current_session(self, session_id: str, path: str):
+        """現在のセッションを設定ファイルに保存"""
+        config = {
+            'last_session_id': session_id,
+            'last_session_path': path,
+            'created_at': asyncio.get_event_loop().time()
+        }
+        with open(self.config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        self.current_session_id = session_id
+    
     def _find_nekocode_binary(self) -> str:
-        """nekocode_ai バイナリの場所を特定"""
+        """nekocode バイナリの場所を特定"""
+        # 新しいバイナリ名で検索
         possible_paths = [
-            "./bin/nekocode_ai",  # Current correct path
-            "../bin/nekocode_ai", 
-            "/usr/local/bin/nekocode_ai",
-            "nekocode_ai"  # PATH上
+            # 新しいワークスペースのパス
+            "../nekocode-workspace/target/debug/nekocode",
+            "../nekocode-workspace/target/release/nekocode",
+            "../../nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
+            "../../nekocode-rust-clean/nekocode-workspace/target/release/nekocode",
+            "/mnt/workdisk/public_share/nyacore-workspace/nekocode-cpp-github/nekocode-rust-clean/nekocode-workspace/target/debug/nekocode",
+            # releases フォルダ
+            "../releases/nekocode",
+            "../../nekocode-rust-clean/releases/nekocode",
+            # 旧パス（互換性）
+            "./bin/nekocode_ai",
+            "../bin/nekocode_ai",
         ]
         
         for path in possible_paths:
-            if os.path.exists(path) or subprocess.run(["which", path], capture_output=True, text=True).returncode == 0:
+            if os.path.exists(path):
                 return path
+            # whichで探す
+            result = subprocess.run(["which", path], capture_output=True, text=True)
+            if result.returncode == 0:
+                return path.strip()
         
-        raise FileNotFoundError("nekocode_ai binary not found")
+        # デバッグ情報を出力
+        print("❌ nekocode binary not found. Searched paths:")
+        for path in possible_paths:
+            print(f"   - {path}: {'✓' if os.path.exists(path) else '✗'}")
+        
+        raise FileNotFoundError("nekocode binary not found")
     
     def setup_tools(self):
-        """🎮 NekoCode MCP ツール整理版 - SESSION中心構造"""
+        """🎮 NekoCode MCP ツール整理版 - analyze_start中心構造"""
         
         # ========================
-        # 🎮 SESSION（メイン機能）
+        # 🚀 MAIN ENTRY POINT
         # ========================
         
+        self.server.add_tool(
+            "analyze_start",
+            """🚀 解析開始 - すべてはここから始まる！
+
+⭐ これが最初のコマンドです！ファイルでもフォルダでも、まずこれを実行してください。
+
+使い方:
+1. まず analyze_start でファイルまたはプロジェクトを指定
+2. セッションが自動作成され、記憶されます
+3. その後は他のコマンドをセッションID不要で実行可能
+
+例:
+  mcp__nekocode__analyze_start("/path/to/project")
+  → セッション作成＆記憶
+  → その後: mcp__nekocode__stats() でセッションID不要！
+
+💡 ヒント:
+- ファイルでもフォルダでもOK
+- セッションIDは自動で記憶
+- 次回からはセッションID省略可能""",
+            self.analyze_start,
+            {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "解析対象のファイルまたはプロジェクトパス"}
+                },
+                "required": ["path"]
+            }
+        )
+        
+        # ========================
+        # 📊 ANALYSIS COMMANDS（セッション自動使用）
+        # ========================
+        
+        self.server.add_tool(
+            "stats",
+            """📊 統計情報表示
+
+⚠️ 先に analyze_start を実行してください！
+セッションIDは自動で前回のものを使用します。
+
+明示的にセッションIDを指定することも可能です。""",
+            self.show_stats,
+            {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "セッションID（省略可）"}
+                }
+            }
+        )
+        
+        self.server.add_tool(
+            "deadcode",
+            """🔍 デッドコード検出
+
+⚠️ 先に analyze_start を実行してください！
+セッションIDは自動で前回のものを使用します。
+
+大規模プロジェクトではlimitを指定してください。""",
+            self.detect_deadcode,
+            {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "セッションID（省略可）"},
+                    "limit": {"type": "number", "description": "結果の最大数", "default": 20}
+                }
+            }
+        )
+        
+        self.server.add_tool(
+            "ast_stats",
+            """🌳 AST統計情報
+
+⚠️ 先に analyze_start を実行してください！
+セッションIDは自動で前回のものを使用します。""",
+            self.show_ast_stats,
+            {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "セッションID（省略可）"}
+                }
+            }
+        )
+        
+        self.server.add_tool(
+            "ast_query",
+            """🔍 AST検索
+
+⚠️ 先に analyze_start を実行してください！
+セッションIDは自動で前回のものを使用します。
+
+例: "MyClass", "handleRequest", "FileBoxProxy" など""",
+            self.ast_query,
+            {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "検索するシンボル名"},
+                    "session_id": {"type": "string", "description": "セッションID（省略可）"}
+                },
+                "required": ["path"]
+            }
+        )
+        
+        self.server.add_tool(
+            "ast_dump",
+            """📋 AST構造ダンプ
+
+⚠️ 先に analyze_start を実行してください！
+セッションIDは自動で前回のものを使用します。""",
+            self.ast_dump,
+            {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "セッションID（省略可）"},
+                    "format": {"type": "string", "description": "出力形式", "enum": ["tree", "json", "flat"], "default": "tree"},
+                    "limit": {"type": "number", "description": "出力行数制限", "default": 50}
+                }
+            }
+        )
+        
+        # 既存のsession_createは後方互換性のため残す
         self.server.add_tool(
             "session_create",
             """🎮 セッション作成（メイン機能）
@@ -326,8 +491,127 @@ Memory種類: auto🤖 memo📝 api🌐 cache💾""",
         
         return result
     
+    async def analyze_start(self, path: str) -> Dict:
+        """🚀 解析開始 - すべてはここから始まる"""
+        path = self._normalize_path(path)  # パス正規化
+        
+        # セッション作成
+        result = await self._run_nekocode(["session-create", path])
+        
+        # 出力からセッションIDを抽出
+        session_id = None
+        if "output" in result and "Created session" in result["output"]:
+            # "Created session: abc123" の形式からIDを抽出
+            import re
+            match = re.search(r'Created session:?\s+([a-f0-9]+)', result["output"])
+            if match:
+                session_id = match.group(1)
+        elif "session_id" in result:
+            session_id = result["session_id"]
+        
+        if session_id:
+            
+            # セッション情報を保存
+            self.sessions[session_id] = {
+                "path": path,
+                "created_at": asyncio.get_event_loop().time()
+            }
+            
+            # 設定ファイルに保存
+            self._save_current_session(session_id, path)
+            
+            # 基本統計も取得
+            stats_result = await self._run_nekocode(["session-stats", session_id])
+            
+            # 結果を統合
+            result.update({
+                "message": f"✨ 解析を開始しました！",
+                "session_id": session_id,
+                "path": path,
+                "stats": stats_result if "error" not in stats_result else None,
+                "next_commands": [
+                    "📊 統計: mcp__nekocode__stats()",
+                    "🔍 デッドコード: mcp__nekocode__deadcode(limit=10)",
+                    "🌳 AST: mcp__nekocode__ast_stats()",
+                    "📋 すべてセッションIDは自動で使用されます！"
+                ]
+            })
+        
+        return self._truncate_large_output(result)
+    
+    async def _get_session_id(self, session_id: Optional[str] = None) -> str:
+        """セッションIDを取得（指定なければ最後のものを使用）"""
+        if session_id:
+            return session_id
+        
+        if self.current_session_id:
+            return self.current_session_id
+        
+        raise ValueError("❌ セッションがありません。まず mcp__nekocode__analyze_start を実行してください！")
+    
+    async def show_stats(self, session_id: Optional[str] = None) -> Dict:
+        """統計情報表示（セッション自動使用）"""
+        try:
+            session_id = await self._get_session_id(session_id)
+            result = await self._run_nekocode(["session-stats", session_id])
+            result["used_session"] = f"📌 セッション {session_id} を使用"
+            return self._truncate_large_output(result)
+        except ValueError as e:
+            return {"error": str(e)}
+    
+    async def detect_deadcode(self, session_id: Optional[str] = None, limit: int = 20) -> Dict:
+        """デッドコード検出（セッション自動使用）"""
+        try:
+            session_id = await self._get_session_id(session_id)
+            
+            # デッドコード解析実行
+            result = await self._run_nekocode(["deadcode", session_id, "--min-confidence", "60", "--format", "text"])
+            
+            # 大きすぎる結果は制限
+            if "output" in result and len(result["output"]) > 10000:
+                lines = result["output"].split("\n")[:limit]
+                result["output"] = "\n".join(lines)
+                result["truncated"] = True
+                result["tip"] = f"💡 結果を{limit}件に制限しました。全件表示には limit パラメータを増やしてください"
+            
+            result["used_session"] = f"📌 セッション {session_id} を使用"
+            return self._truncate_large_output(result)
+        except ValueError as e:
+            return {"error": str(e)}
+    
+    async def show_ast_stats(self, session_id: Optional[str] = None) -> Dict:
+        """AST統計表示（セッション自動使用）"""
+        try:
+            session_id = await self._get_session_id(session_id)
+            result = await self._run_nekocode(["ast-stats", session_id])
+            result["used_session"] = f"📌 セッション {session_id} を使用"
+            return self._truncate_large_output(result)
+        except ValueError as e:
+            return {"error": str(e)}
+    
+    async def ast_query(self, path: str, session_id: Optional[str] = None) -> Dict:
+        """AST検索（セッション自動使用）"""
+        try:
+            session_id = await self._get_session_id(session_id)
+            result = await self._run_nekocode(["ast-query", session_id, path])
+            result["used_session"] = f"📌 セッション {session_id} を使用"
+            return self._truncate_large_output(result)
+        except ValueError as e:
+            return {"error": str(e)}
+    
+    async def ast_dump(self, session_id: Optional[str] = None, format: str = "tree", limit: int = 50) -> Dict:
+        """AST構造ダンプ（セッション自動使用）"""
+        try:
+            session_id = await self._get_session_id(session_id)
+            args = ["ast-dump", session_id, "--format", format, "--limit", str(limit)]
+            result = await self._run_nekocode(args)
+            result["used_session"] = f"📌 セッション {session_id} を使用"
+            return self._truncate_large_output(result)
+        except ValueError as e:
+            return {"error": str(e)}
+    
     async def create_session(self, path: str) -> Dict:
-        """セッション作成"""
+        """セッション作成（後方互換性）"""
         path = self._normalize_path(path)  # パス正規化
         result = await self._run_nekocode(["session-create", path])
         

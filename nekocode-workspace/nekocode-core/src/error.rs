@@ -21,6 +21,9 @@ pub enum NekocodeError {
     #[error("Configuration error: {0}")]
     Config(String),
     
+    #[error("Parse error: {0}")]
+    Parse(String),
+    
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     

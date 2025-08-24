@@ -4,18 +4,17 @@
 
 ### 1. **NekoCodeビルド確認**
 ```bash
-# NekoCodeがビルド済みか確認
-ls -la ../build/nekocode_ai
+# 新しいRust版のNekoCodeがビルド済みか確認
+ls -la ../nekocode-workspace/target/debug/nekocode
 
 # なければビルド
-cd ..
-mkdir -p build && cd build
-cmake .. && make -j
+cd ../nekocode-workspace
+cargo build  # または cargo build --release
 ```
 
 ### 2. **MCPサーバー権限設定**
 ```bash
-chmod +x mcp_server_real.py
+chmod +x mcp_server_nekocode.py
 ```
 
 ### 3. **Claude Code設定**
@@ -29,23 +28,40 @@ chmod +x mcp_server_real.py
   "mcpServers": {
     "nekocode": {
       "command": "python3",
-      "args": ["/絶対パス/nekocode-cpp-github/mcp-nekocode-server/mcp_server_real.py"],
+      "args": ["/絶対パス/nekocode-rust-clean/mcp-nekocode-server/mcp_server_nekocode.py"],
       "env": {
-        "NEKOCODE_BINARY_PATH": "/絶対パス/nekocode-cpp-github/build/nekocode_ai"
+        "NEKOCODE_BINARY_PATH": "/絶対パス/nekocode-rust-clean/nekocode-workspace/target/debug/nekocode"
       }
     }
   }
 }
 ```
 
+**重要な変更点:**
+- スクリプト: `mcp_server_nekocode.py`（新しい統一導線版）
+- バイナリ: `nekocode`（`_ai`なし）
+- パス: `nekocode-rust-clean/nekocode-workspace/`
+
 **⚠️ 重要**: パスは絶対パスで指定してください！
 
 ## 🧪 動作テスト
 
+### **新しい統一フローのテスト**
+```bash
+# 1. テストスクリプト実行
+cd test-workspace/test-mcp
+python3 test_unified_flow.py
+
+# 期待される結果:
+# ✅ セッション作成成功
+# ✅ 自動セッション使用（全コマンド）
+# ✨ 統一フローが正常動作
+```
+
 ### **手動テスト** (MCPプロトコル直接)
 ```bash
 # 1. サーバー起動
-python3 mcp_server_real.py
+python3 mcp_server_nekocode.py
 
 # 2. 初期化メッセージ送信
 echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}' | python3 mcp_server_real.py

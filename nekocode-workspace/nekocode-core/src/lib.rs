@@ -9,6 +9,7 @@
 
 pub mod session;
 pub mod sqlite_session;
+pub mod cli_session;
 pub mod config;
 pub mod types;
 pub mod io;
@@ -20,6 +21,7 @@ pub mod compact;
 // Re-exports for easy access
 pub use session::{SessionManager, SessionInfo, Session, SessionProvider};
 pub use sqlite_session::{SqliteSession, FileRecord, ChangedFile, ChangeType, SessionStats};
+pub use cli_session::{CliSessionConfig, CliSessionHelper, SessionHistoryEntry, CliSettings};
 pub use config::{Config, AnalysisConfig, GeneralConfig, MemoryConfig};
 pub use types::{Language, SymbolInfo, FunctionInfo, ClassInfo, FileInfo, AnalysisResult};
 pub use traits::{AnalysisProvider, LanguageSupport};
