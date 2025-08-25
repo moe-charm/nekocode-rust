@@ -1106,8 +1106,42 @@ class NekoCodeMCPServer:
         }
     
     async def handle_tools_list(self, params: Dict) -> Dict:
-        """ツール一覧ハンドラ"""
-        return {"tools": self.tools}
+        """ツール一覧ハンドラ（最小セットのみ提示）"""
+        tools = [
+            {"name": "session_create", "description": "🎮 セッション作成",
+             "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+            {"name": "ast_stats", "description": "📊 AST統計（session自動）",
+             "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}}}},
+            {"name": "ast_query", "description": "🔎 AST検索（path指定・session自動）",
+             "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "session_id": {"type": "string"}}, "required": ["path"]}},
+            {"name": "ast_dump", "description": "🌳 AST出力（tree/json/flat・session自動）",
+             "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "format": {"type": "string", "default": "tree"}, "limit": {"type": "integer"}}}},
+            {"name": "ast_outline", "description": "🗂️ 構造アウトライン（短縮表示）",
+             "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "limit": {"type": "integer", "default": 200}}}},
+            {"name": "replace", "description": "📝 置換（即時適用）",
+             "inputSchema": {"type": "object", "properties": {
+                 "file_path": {"type": "string"}, "pattern": {"type": "string"}, "replacement": {"type": "string"},
+                 "regex": {"type": "boolean", "default": False}, "ignore_case": {"type": "boolean", "default": False}, "whole_word": {"type": "boolean", "default": False}
+             }, "required": ["file_path", "pattern", "replacement"]}},
+            {"name": "insert", "description": "➕ 挿入（即時適用・セマンティック位置）",
+             "inputSchema": {"type": "object", "properties": {
+                 "file_path": {"type": "string"}, "content": {"type": "string"},
+                 "after_function": {"type": "string"}, "before_function": {"type": "string"},
+                 "in_imports": {"type": "boolean", "default": False}, "after_class": {"type": "string"},
+                 "position": {"type": "string"}
+             }, "required": ["file_path", "content"]}},
+            {"name": "movelines", "description": "🔀 行移動（即時適用）",
+             "inputSchema": {"type": "object", "properties": {
+                 "srcfile": {"type": "string"}, "start_line": {"type": "integer"}, "line_count": {"type": "integer"},
+                 "dstfile": {"type": "string"}, "insert_line": {"type": "integer"}
+             }, "required": ["srcfile", "start_line", "line_count", "dstfile", "insert_line"]}},
+            {"name": "moveclass", "description": "🚚 クラス/関数移動（即時適用）",
+             "inputSchema": {"type": "object", "properties": {
+                 "session_id": {"type": "string"}, "symbol_id": {"type": "string"}, "target": {"type": "string"},
+                 "update_imports": {"type": "boolean", "default": True}
+             }, "required": ["session_id", "symbol_id", "target"]}},
+        ]
+        return {"tools": tools}
     
     async def handle_resources_list(self, params: Dict) -> Dict:
         """リソース一覧ハンドラ"""
@@ -1198,6 +1232,8 @@ class NekoCodeMCPServer:
                 return await self._tool_scope_analysis(arguments)
             elif tool_name == "ast_dump":
                 return await self._tool_ast_dump(arguments)
+            elif tool_name == "ast_outline":
+                return await self._tool_ast_outline(arguments)
             elif tool_name == "moveclass_preview":
                 return await self._tool_moveclass_preview(arguments)
             elif tool_name == "moveclass_confirm":
@@ -2133,6 +2169,26 @@ class NekoCodeMCPServer:
             output_text = size_info + output_text
         
         return {"content": [{"type": "text", "text": output_text}]}
+
+    async def _tool_ast_outline(self, args: Dict) -> Dict:
+        """ASTアウトライン（短縮表示）"""
+        session_id = await self._resolve_session(args.get("session_id"))
+        if not session_id:
+            return {"content": [{"type": "text", "text": "セッションが見つかりません。先に session_create を実行してください。"}], "isError": True}
+        limit = int(args.get("limit", 200))
+        # tree形式でダンプし、短縮して返す
+        cmd = ["ast-dump", "--session-id", session_id, "--format", "tree", "--limit", str(max(10, limit))]
+        result = await self._run_nekocode(cmd)
+        text = result.get("output") if isinstance(result, dict) else str(result)
+        if not text:
+            text = json.dumps(result, indent=2, ensure_ascii=False)
+        # さらに短縮（安全側）
+        lines = text.split('\n')
+        max_lines = min(len(lines), limit)
+        out = '\n'.join(lines[:max_lines])
+        if len(lines) > max_lines:
+            out += f"\n... ({len(lines) - max_lines} lines truncated)"
+        return {"content": [{"type": "text", "text": out}]}
     
     # ========================================
     # 🔄 クラス移動ツール
