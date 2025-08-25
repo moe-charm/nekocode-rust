@@ -304,9 +304,12 @@ class NekoCodeMCPServer:
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "preview_id": {"type": "string", "description": "プレビューID"}
+                        "preview_id": {"type": "string", "description": "プレビューID（省略可）"},
+                        "file_path": {"type": "string", "description": "ファイルパス（プレビュー無しで直接実行する場合）"},
+                        "pattern": {"type": "string", "description": "検索パターン（プレビュー無しで直接実行）"},
+                        "replacement": {"type": "string", "description": "置換文字列（プレビュー無しで直接実行）"}
                     },
-                    "required": ["preview_id"]
+                    "required": []
                 }
             },
             {
@@ -949,6 +952,8 @@ class NekoCodeMCPServer:
                 return await self._tool_replace_preview(arguments)
             elif tool_name == "replace_confirm":
                 return await self._tool_replace_confirm(arguments)
+            elif tool_name == "replace":
+                return await self._tool_replace_direct(arguments)
             elif tool_name == "create_file":
                 return await self._tool_create_file(arguments)
             elif tool_name == "insert_preview":
@@ -1508,7 +1513,7 @@ class NekoCodeMCPServer:
                 replacement = self._last_replace_args["replacement"]
             else:
                 return {
-                    "content": [{"type": "text", "text": "プレビュー引数が見つかりません。先に replace_preview を実行してください。"}],
+                    "content": [{"type": "text", "text": "プレビュー情報がありません。replace(file_path, pattern, replacement) で直接実行してください。"}],
                     "isError": True
                 }
         
@@ -1518,6 +1523,14 @@ class NekoCodeMCPServer:
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
         }
+
+    async def _tool_replace_direct(self, args: Dict) -> Dict:
+        """置換（即時適用・プレビュー不要）"""
+        file_path = args["file_path"]
+        pattern = args["pattern"]
+        replacement = args["replacement"]
+        result = await self._run_nekorefactor(["replace", file_path, pattern, replacement])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_create_file(self, args: Dict) -> Dict:
         """新規ファイル作成"""
@@ -1722,14 +1735,22 @@ class NekoCodeMCPServer:
     async def _tool_ast_stats(self, args: Dict) -> Dict:
         """AST統計情報を取得"""
         session_id = args["session_id"]
-        result = await self._run_nekocode(["ast-stats", session_id])
+        # New style first
+        result = await self._run_nekocode(["ast-stats", "--session-id", session_id])
+        # Legacy fallback
+        if isinstance(result, dict) and result.get("error") and "unexpected argument '--session-id'" in result.get("error"):
+            result = await self._run_nekocode(["ast-stats", session_id])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_ast_query(self, args: Dict) -> Dict:
         """AST構造をクエリ"""
         session_id = args["session_id"]
         path = args["path"]
+        # New style first
         result = await self._run_nekocode(["ast-query", path, "--session-id", session_id])
+        # Legacy fallback
+        if isinstance(result, dict) and result.get("error") and "Usage: nekocode ast-query <SESSION_ID> <PATH>" in result.get("error"):
+            result = await self._run_nekocode(["ast-query", session_id, path])
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_scope_analysis(self, args: Dict) -> Dict:
@@ -1752,8 +1773,10 @@ class NekoCodeMCPServer:
         summary_threshold = token_config.get("summary_threshold", 1000)
         allow_force = token_config.get("allow_force_output", True)
         
-        # 🚨 まずast-statsでサイズ確認
+        # 🚨 まずast-statsでサイズ確認（フォールバック対応）
         stats_result = await self._run_nekocode(["ast-stats", "--session-id", session_id])
+        if isinstance(stats_result, dict) and stats_result.get("error") and "unexpected argument '--session-id'" in stats_result.get("error"):
+            stats_result = await self._run_nekocode(["ast-stats", session_id])
         
         # コマンドを正しい形式で構築
         cmd_args = ["ast-dump", "--session-id", session_id, "--format", format_type]
@@ -1761,8 +1784,16 @@ class NekoCodeMCPServer:
             cmd_args.extend(["--limit", str(line_limit)])
         if force:
             cmd_args.append("--force")
-        
+
         result = await self._run_nekocode(cmd_args)
+        if isinstance(result, dict) and result.get("error") and "Usage: nekocode ast-dump <SESSION_ID>" in result.get("error"):
+            # Legacy fallback (positional session_id)
+            cmd_args_legacy = ["ast-dump", session_id, "--format", format_type]
+            if line_limit:
+                cmd_args_legacy.extend(["--limit", str(line_limit)])
+            if force:
+                cmd_args_legacy.append("--force")
+            result = await self._run_nekocode(cmd_args_legacy)
         
         # 🔥 トークン制限チェック
         if isinstance(result, dict):
