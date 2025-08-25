@@ -1140,6 +1140,11 @@ class NekoCodeMCPServer:
                  "session_id": {"type": "string"}, "symbol_id": {"type": "string"}, "target": {"type": "string"},
                  "update_imports": {"type": "boolean", "default": True}
              }, "required": ["session_id", "symbol_id", "target"]}},
+            {"name": "deadcode", "description": "🧹 デッドコード検出（高精度: external=True 推奨 / まず session_create --complete）",
+             "inputSchema": {"type": "object", "properties": {
+                 "session_id": {"type": "string"}, "external": {"type": "boolean", "default": True},
+                 "min_confidence": {"type": "integer", "default": 85}, "format": {"type": "string", "default": "summary"}
+             }}}
         ]
         return {"tools": tools}
     
@@ -2326,10 +2331,12 @@ class NekoCodeMCPServer:
     
     async def _tool_deadcode(self, args: Dict) -> Dict:
         """🔍 デッドコード分析 - Rust: 90%精度"""
-        session_id = args["session_id"]
+        session_id = await self._resolve_session(args.get("session_id"))
+        if not session_id:
+            return {"content": [{"type": "text", "text": "セッションが見つかりません。先に session_create を実行してください。"}], "isError": True}
         external = args.get("external", True)
-        format_type = args.get("format", "text") 
-        min_confidence = args.get("min_confidence", 60)
+        format_type = args.get("format", "summary") 
+        min_confidence = args.get("min_confidence", 85)
         
         # コマンド構築
         cmd = ["deadcode", session_id]
@@ -2339,6 +2346,14 @@ class NekoCodeMCPServer:
         cmd.extend(["--min-confidence", str(min_confidence)])
         
         result = await self._run_nekocode(cmd)
+        # Guidance when external is false
+        if not external:
+            let_note = "\n⚠️ 内部解析のみだと精度は約60%です。\n💡 session_create --complete --external を先に実行すると90%+精度になります。";
+            if isinstance(result, dict) and "output" in result:
+                try:
+                    result["output"] = result.get("output", "") + let_note
+                except Exception:
+                    pass
         
         # 結果の整形
         if format_type == "text" and "output" in result:
