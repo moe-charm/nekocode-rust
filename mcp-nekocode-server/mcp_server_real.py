@@ -43,6 +43,10 @@ class NekoCodeMCPServer:
         self.sessions = {}
         self.tools = self._define_tools()
         self.config = self._load_config()
+        # Preview caches for confirm fallback
+        self._last_replace_args = None
+        self._last_insert_args = None
+        self._last_movelines_args = None
     
     def _find_nekocode_binary(self) -> str:
         """nekocode-rust バイナリの場所を特定"""
@@ -1475,9 +1479,15 @@ class NekoCodeMCPServer:
         pattern = args["pattern"]
         replacement = args["replacement"]
         
-        # 新コマンド構造: replace --preview
-        # route to nekorefactor (correct binary for editing)
+        # 新コマンド構造: replace --preview（nekorefactorにルーティング）
         result = await self._run_nekorefactor(["replace", file_path, pattern, replacement, "--preview"])
+
+        # Cache arguments for confirm fallback (when only preview_id is provided)
+        self._last_replace_args = {
+            "file_path": file_path,
+            "pattern": pattern,
+            "replacement": replacement,
+        }
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1491,11 +1501,16 @@ class NekoCodeMCPServer:
         replacement = args.get("replacement")
         
         if not all([file_path, pattern, replacement]):
-            # 後方互換性のため preview_id も受け付けるが、実際は直接実行を推奨
-            return {
-                "content": [{"type": "text", "text": "新設計では replace コマンドを直接実行してください（preview_id は廃止）"}],
-                "isError": True
-            }
+            # 後方互換: preview_idのみのケースは直前のプレビュー引数を再利用
+            if self._last_replace_args:
+                file_path = self._last_replace_args["file_path"]
+                pattern = self._last_replace_args["pattern"]
+                replacement = self._last_replace_args["replacement"]
+            else:
+                return {
+                    "content": [{"type": "text", "text": "プレビュー引数が見つかりません。先に replace_preview を実行してください。"}],
+                    "isError": True
+                }
         
         # 直接実行（デフォルト）
         result = await self._run_nekorefactor(["replace", file_path, pattern, replacement])
