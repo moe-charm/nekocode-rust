@@ -38,6 +38,32 @@ cargo build --release
 ./nekocode analyze . --type js
 ```
 
+## 🔧 Quick Install (WSL/Docker)
+
+### WSL Local (No Docker)
+- Clone and install user-level dependencies (no sudo):
+  - `git clone https://github.com/moe-charm/nekocode-rust.git && cd nekocode-rust`
+  - `bash nekocode-rust-clean/releases/install.sh`
+- Install PATH-safe wrappers:
+  - `python3 nekocode-rust-clean/releases/setup.py --install`
+  - `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
+- Run:
+  - `nekocode session-create . --complete --external --format summary`
+
+### Docker (Zero Local Dependencies)
+- Install Docker-backed wrappers:
+  - `python3 nekocode-rust-clean/releases/setup.py --install-docker`
+- Run:
+  - `nekocode session-create . --complete --external --format summary`
+
+### Claude MCP Registration
+- If Claude CLI is available in WSL:
+  - `claude mcp add nekocode -- mcp-nekocode --stdio`
+- Or register from Windows by calling WSL wrapper:
+  - Edit `C:\\Users\\<you>\\AppData\\Roaming\\Claude\\claude_desktop_config.json` and add:
+    - `"mcpServers": { "nekocode": { "command": "wsl", "args": ["bash","-lc","mcp-nekocode --stdio"] } }`
+  - Restart Claude
+
 ## 🎯 Core Features
 
 ### 1. **Complete Code Analysis** (Enhanced with Dead Code Detection!)
