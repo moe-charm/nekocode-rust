@@ -38,6 +38,18 @@ class NekoCodeMCPServer:
     """実際のMCPプロトコル実装"""
     
     def __init__(self):
+        # Ensure Rust toolchain binaries are available for child processes (cargo/clippy)
+        try:
+            cargo_bin = os.path.expanduser("~/.cargo/bin")
+            if os.path.isdir(cargo_bin):
+                cur = os.environ.get("PATH", "")
+                parts = cur.split(":") if cur else []
+                if cargo_bin not in parts:
+                    os.environ["PATH"] = f"{cargo_bin}:{cur}" if cur else cargo_bin
+        except Exception as e:
+            # Non-fatal: just log to stderr; MCP must keep running
+            sys.stderr.write(f"[nekocode-mcp] PATH setup warning: {e}\n")
+
         self.nekocode_path = self._find_nekocode_binary()
         self.nekorefactor_path = self._find_nekorefactor_binary()
         self.sessions = {}
