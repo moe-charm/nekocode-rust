@@ -4,6 +4,22 @@
 
 📋 **[完全コマンドリファレンスはこちら](../docs/CLI_MCP_REFERENCE.md)** - CLIとMCPの対応表、使用例、新機能説明
 
+## 🚀 まずはクイックガイド（最小セット）
+
+Claudeからは、次の最小ツールだけ覚えればOKです（session_idは省略で自動使用）:
+
+- セッション作成: `mcp__nekocode__session_create(path=".")`
+- 構造アウトライン: `mcp__nekocode__ast_outline(limit=200)`
+- AST検索: `mcp__nekocode__ast_query(path="MyClass::myMethod")`
+- AST統計/ダンプ: `mcp__nekocode__ast_stats()` / `mcp__nekocode__ast_dump(format="tree", limit=1000)`
+- 変更（直接実行）: `mcp__nekocode__replace` / `insert` / `movelines` / `moveclass`
+
+ポイント:
+- Bash直叩きよりMCPツール優先で。セッションIDは省略可（直近セッションを自動使用）
+- 旧CLIに当たっても、MCP側で互換フォールバックします（--session-id → 位置引数）
+
+---
+
 ## 🚀 特徴
 
 - **🎮 セッション機能**: 一度解析すれば、その後の操作は超高速（3ms）！

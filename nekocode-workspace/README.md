@@ -274,6 +274,20 @@ nekorefactor edit-rollback EDIT_ID                     # ロールバック
 nekorefactor edit-stats                                 # 統計表示
 ```
 
+## 🪓 分割ツール（nekosplit_rust）
+
+巨大ファイルの安全な分割に特化した軽量ツールです（Rust向けMVP）。
+
+- アウトライン: `nekosplit_rust outline <file> [--limit 200]`
+- 分割（個別）:
+  - `nekosplit_rust split <file> --symbol <Name> --kind fn|struct|enum|trait|impl --to <target.rs> --apply --update-mod --public`
+  - 先頭の use を重複回避でコピー（--copy-uses true 既定）/ 親mod.rsへ宣言追記
+- 自動候補（順次分割）:
+  - `nekosplit_rust suggest <file> --top 5 --min-loc 80 [--map "execute:execution/*,op:ops/*,model:models/*"]`
+  - `nekosplit_rust apply-suggest <file> --max-steps 1 --min-loc 100 --update-mod --public [--check]`
+
+注意: MVPでは必要useの最小化や高度なimpl検出は限定的です。まずは安全側（マーカー挿入/ロールバック）で運用し、必要に応じてsyn/Tree-sitterで強化してください。
+
 ### テストコマンド
 ```bash
 # セッション作成
@@ -315,6 +329,13 @@ await mcp__nekocode__moveclass_preview(
     session_id="<optional>", symbol_id="MyClass::method",
     target="src/target.rs", update_imports=True)
 await mcp__nekocode__moveclass_confirm()
+
+ミニチートシート（最小セット）:
+- セッション作成: `session_create(path=".")`
+- 構造アウトライン: `ast_outline(limit=200)`
+- AST検索: `ast_query(path="MyClass::myMethod")`
+- AST統計/ダンプ: `ast_stats()` / `ast_dump(format="tree", limit=1000)`
+- 変更（直接実行）: `replace` / `insert` / `movelines` / `moveclass`
 ```
 
 互換性メモ:
