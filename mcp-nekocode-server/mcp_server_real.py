@@ -47,6 +47,50 @@ class NekoCodeMCPServer:
         self._last_replace_args = None
         self._last_insert_args = None
         self._last_movelines_args = None
+        self._last_session_id = None
+
+    def _read_cli_session(self) -> Optional[Dict[str, Any]]:
+        try:
+            import pathlib
+            path = pathlib.Path.home() / ".nekocode" / "cli_session.json"
+            if path.exists():
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.debug(f"cli_session.json read error: {e}")
+        return None
+
+    async def _resolve_session(self, explicit: Optional[str] = None) -> Optional[str]:
+        # 1) explicit
+        if explicit:
+            return explicit
+        # 2) last created in this server
+        if self._last_session_id:
+            return self._last_session_id
+        # 3) CLI memory
+        cfg = self._read_cli_session() or {}
+        sid = cfg.get('current_session_id')
+        return sid
+
+    async def _get_session_path(self, session_id: str) -> Optional[str]:
+        # Try internal cache from session_create
+        if session_id in self.sessions and 'path' in self.sessions[session_id]:
+            return self.sessions[session_id]['path']
+        # Fallback: query session-info
+        res = await self._run_nekocode(["session-info", session_id])
+        out = res.get('output') if isinstance(res, dict) else None
+        if out and isinstance(out, str):
+            import re
+            m = re.search(r"Path:\s+(.+)", out)
+            if m:
+                return m.group(1).strip()
+        return None
+
+    async def _refresh_file_l1(self, session_id: str, file_path: str):
+        try:
+            await self._run_nekocode(["refresh", session_id, "--file", file_path])
+        except Exception as e:
+            logger.debug(f"L1 refresh failed: {e}")
     
     def _find_nekocode_binary(self) -> str:
         """nekocode-rust バイナリの場所を特定"""
@@ -650,7 +694,7 @@ class NekoCodeMCPServer:
                         "line": {"type": "integer", "description": "行番号（フォールバック）"},
                         "preview": {"type": "boolean", "description": "プレビューモード", "default": False}
                     },
-                    "required": ["session_id", "file_path", "content"]
+                    "required": ["file_path", "content"]
                 }
             },
             {
@@ -668,7 +712,7 @@ class NekoCodeMCPServer:
                         "regex": {"type": "boolean", "description": "正規表現モード", "default": False},
                         "preview": {"type": "boolean", "description": "プレビューモード", "default": False}
                     },
-                    "required": ["session_id", "file_path", "pattern", "replacement"]
+                    "required": ["file_path", "pattern", "replacement"]
                 }
             },
             {
@@ -683,7 +727,7 @@ class NekoCodeMCPServer:
                         "update_imports": {"type": "boolean", "description": "インポート自動更新", "default": True},
                         "preview": {"type": "boolean", "description": "プレビューモード", "default": False}
                     },
-                    "required": ["session_id", "symbol", "target_file"]
+                    "required": ["symbol", "target_file"]
                 }
             },
             {
@@ -1432,6 +1476,7 @@ class NekoCodeMCPServer:
             logger.info(f"✅ セッション作成完了: {session_id} -> {path}")
             # 互換性のため最小限の情報は保持（必須ではない）
             self.sessions[session_id] = {"path": path, "complete": complete}
+            self._last_session_id = session_id
         else:
             logger.warning(f"⚠️ セッションID抽出失敗: {result}")
         
@@ -2147,10 +2192,15 @@ class NekoCodeMCPServer:
     
     async def _tool_smart_insert(self, args: Dict) -> Dict:
         """Smart Insert（AST活用・セマンティック位置指定）"""
-        session_id = args["session_id"]
+        session_id = await self._resolve_session(args.get("session_id"))
+        if not session_id:
+            return {"content": [{"type": "text", "text": "セッションが見つかりません。先に session_create を実行してください。"}], "isError": True}
         file_path = args["file_path"]
         content = args["content"]
         preview = args.get("preview", False)
+
+        # L1 refresh before smart op
+        await self._refresh_file_l1(session_id, file_path)
         
         # Build command
         cmd_args = ["smart", "insert", session_id, file_path, content]
@@ -2183,11 +2233,15 @@ class NekoCodeMCPServer:
     
     async def _tool_smart_replace(self, args: Dict) -> Dict:
         """Smart Replace（AST活用・スコープ限定）"""
-        session_id = args["session_id"]
+        session_id = await self._resolve_session(args.get("session_id"))
+        if not session_id:
+            return {"content": [{"type": "text", "text": "セッションが見つかりません。先に session_create を実行してください。"}], "isError": True}
         file_path = args["file_path"]
         pattern = args["pattern"]
         replacement = args["replacement"]
         preview = args.get("preview", False)
+
+        await self._refresh_file_l1(session_id, file_path)
         
         # Build command
         cmd_args = ["smart", "replace", session_id, file_path, pattern, replacement]
@@ -2218,7 +2272,9 @@ class NekoCodeMCPServer:
     
     async def _tool_smart_move(self, args: Dict) -> Dict:
         """Smart Move（AST活用・シンボル移動）"""
-        session_id = args["session_id"]
+        session_id = await self._resolve_session(args.get("session_id"))
+        if not session_id:
+            return {"content": [{"type": "text", "text": "セッションが見つかりません。先に session_create を実行してください。"}], "isError": True}
         symbol = args["symbol"]
         target_file = args["target_file"]
         update_imports = args.get("update_imports", True)
