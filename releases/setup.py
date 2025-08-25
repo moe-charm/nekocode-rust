@@ -1,86 +1,169 @@
 #!/usr/bin/env python3
 """
-🐱 NekoCode Rust MCP セットアップ - 超シンプル版
+NekoCode installer and wrappers (WSL-friendly)
+
+Provides:
+- --install: install PATH-safe wrappers to ~/.local/bin
+- --install-docker: install Docker-backed wrappers to ~/.local/bin
+- default: print MCP setup help (legacy behavior)
 """
 import os
+import sys
+import stat
+from textwrap import dedent
+import shutil
+import subprocess
 
-# 現在のディレクトリ（bin/）を取得
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
 
-# NekoCodeバイナリパスを決定（優先順位順）
-possible_paths = [
-    os.path.join(project_root, "releases", "nekocode"),  # releases/nekocode (5分割版・最優先)
-    os.path.join(project_root, "target", "release", "nekocode"),  # target/release/nekocode (開発用)
-    os.path.join(current_dir, "nekocode_ai"),  # bin/nekocode_ai (レガシー)
-]
+def abs_paths():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    possible_bins = [
+        os.path.join(project_root, "releases", "nekocode"),
+        os.path.join(project_root, "target", "release", "nekocode"),
+    ]
+    nekocode_bin = None
+    for p in possible_bins:
+        if os.path.exists(p):
+            nekocode_bin = p
+            break
+    if nekocode_bin is None:
+        nekocode_bin = possible_bins[0]
 
-nekocode_path = None
-for path in possible_paths:
-    if os.path.exists(path):
-        nekocode_path = path
-        break
+    mcp_server = os.path.join(project_root, "mcp-nekocode-server", "mcp_server_real.py")
+    return os.path.abspath(nekocode_bin), os.path.abspath(mcp_server), project_root
 
-if not nekocode_path:
-    nekocode_path = possible_paths[0]  # デフォルトで bin/nekocode_ai
 
-mcp_server_path = os.path.join(project_root, "mcp-nekocode-server", "mcp_server_real.py")
+def ensure_local_bin():
+    user_base = subprocess.run([sys.executable, "-m", "site", "--user-base"],
+                               capture_output=True, text=True).stdout.strip() or os.path.expanduser("~/.local")
+    local_bin = os.path.join(user_base, "bin")
+    os.makedirs(local_bin, exist_ok=True)
+    return local_bin
 
-# 絶対パスに変換
-nekocode_abs = os.path.abspath(nekocode_path)
-mcp_server_abs = os.path.abspath(mcp_server_path)
 
-print(f"""
-🚀 NekoCode Rust MCP セットアップ (16倍高速版！)
-================================================
+def write_executable(path: str, content: str):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    # chmod +x
+    st = os.stat(path)
+    os.chmod(path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
-⚠️ 重要: 以下のコマンドは【あなたが解析したいプロジェクトのルート】で実行してください！
-        （Claude CodeがそのプロジェクトをNekoCodeで解析するため）
 
-1. あなたのプロジェクトに移動:
-   cd ~/your-awesome-project   # ← あなたが開発中のプロジェクト
-   
-   例: cd ~/my-react-app
-       cd ~/rust-project  
-       cd ~/python-app
-   
-   ※NekoCode Rustのディレクトリではありません！
+def install_wrappers():
+    nekocode_abs, mcp_server_abs, project_root = abs_paths()
+    local_bin = ensure_local_bin()
 
-2. そのプロジェクトのルートで以下を実行:
+    # PATH-safe wrapper for CLI
+    cli_path = os.path.join(local_bin, "nekocode")
+    cli_script = dedent(f"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+        # Prepend common user bins for external tools (cargo, vulture, etc.)
+        USER_BIN="$(python3 -m site --user-base 2>/dev/null)/bin"
+        if [[ -d "$USER_BIN" ]]; then export PATH="$USER_BIN:$PATH"; fi
+        if [[ -d "$HOME/.cargo/bin" ]]; then export PATH="$HOME/.cargo/bin:$PATH"; fi
+        NEKOCODE_BIN="{nekocode_abs}"
+        exec "$NEKOCODE_BIN" "$@"
+    """)
+    write_executable(cli_path, cli_script)
 
-claude mcp add nekocode \\
-  -e NEKOCODE_BINARY_PATH={nekocode_abs} \\
-  -- python3 {mcp_server_abs}
+    # PATH-safe wrapper for MCP (stdio by default)
+    mcp_path = os.path.join(local_bin, "mcp-nekocode")
+    mcp_script = dedent(f"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+        USER_BIN="$(python3 -m site --user-base 2>/dev/null)/bin"
+        if [[ -d "$USER_BIN" ]]; then export PATH="$USER_BIN:$PATH"; fi
+        if [[ -d "$HOME/.cargo/bin" ]]; then export PATH="$HOME/.cargo/bin:$PATH"; fi
+        export NEKOCODE_BINARY_PATH="{nekocode_abs}"
+        exec python3 "{mcp_server_abs}" "$@"
+    """)
+    write_executable(mcp_path, mcp_script)
 
-または、手動で設定ファイルに追加：
-~/.config/claude-desktop/config.json (Linux)
-~/Library/Application Support/Claude/claude_desktop_config.json (Mac)
+    print("✅ Installed wrappers:")
+    print(f"  - {cli_path}")
+    print(f"  - {mcp_path}")
+    print("\nNext steps:")
+    print("  - Ensure ~/.local/bin is on PATH (restart shell if needed)")
+    print("  - CLI: nekocode --help")
+    print("  - MCP (stdio): mcp-nekocode --stdio")
 
-{{
-  "mcpServers": {{
-    "nekocode": {{
-      "command": "python3",
-      "args": ["{mcp_server_abs}"],
-      "env": {{
-        "NEKOCODE_BINARY_PATH": "{nekocode_abs}"
-      }}
-    }}
-  }}
-}}
 
-設定後、Claude Codeを再起動してください！
+def install_docker_wrappers(image: str = "ghcr.io/moe-charm/nekocode:latest"):
+    local_bin = ensure_local_bin()
 
-========================================
-📝 まとめ:
-1. NekoCode Rustをインストール済み ✓
-2. あなたのプロジェクトフォルダに移動
-3. そこでclaude mcp addを実行
-4. Claude Code再起動
-5. そのプロジェクトでNekoCodeが使える！
+    docker_cli = os.path.join(local_bin, "nekocode")
+    docker_cli_script = dedent(f"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+        # Pass through TTY if interactive
+        DOCKER_TTY="-i"; if [ -t 1 ]; then DOCKER_TTY="-it"; fi
+        exec docker run --rm $DOCKER_TTY \
+          -v "$PWD":/work -w /work \
+          {image} \
+          nekocode "$@"
+    """)
+    write_executable(docker_cli, docker_cli_script)
 
-🎯 特徴:
-- 16倍高速 (C++版と比較)
-- 96%軽量 (9MB vs 235MB)
-- ビルド不要 (既にコンパイル済み)
-========================================
-""")
+    docker_mcp = os.path.join(local_bin, "mcp-nekocode")
+    docker_mcp_script = dedent(f"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+        exec docker run --rm -i \
+          -v "$PWD":/work -w /work \
+          {image} \
+          mcp-nekocode --stdio "$@"
+    """)
+    write_executable(docker_mcp, docker_mcp_script)
+
+    print("✅ Installed Docker-backed wrappers (no local deps needed):")
+    print(f"  - {docker_cli}")
+    print(f"  - {docker_mcp}")
+    print("\nUse:")
+    print("  - nekocode session-create . --complete --external --format summary")
+    print("  - mcp-nekocode --stdio (configure in your MCP-capable client)")
+
+
+def print_mcp_help():
+    nekocode_abs, mcp_server_abs, _ = abs_paths()
+    print(dedent(f"""
+    🚀 NekoCode Rust MCP セットアップ (ガイド)
+    ========================================
+    プロジェクトのルートで実行してください:
+
+      claude mcp add nekocode \
+        -e NEKOCODE_BINARY_PATH={nekocode_abs} \
+        -- python3 {mcp_server_abs}
+
+    もしくは setup.py --install で mcp-nekocode ラッパを導入後、
+      mcp-nekocode --stdio
+    をサーバコマンドに設定できます。
+    """))
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        print_mcp_help()
+        return
+
+    if "--install" in args:
+        install_wrappers()
+        return
+
+    if "--install-docker" in args:
+        # Optional: custom image via --image=<name>
+        image = "ghcr.io/moe-charm/nekocode:latest"
+        for a in args:
+            if a.startswith("--image="):
+                image = a.split("=", 1)[1].strip()
+        install_docker_wrappers(image)
+        return
+
+    # Fallback to help
+    print_mcp_help()
+
+
+if __name__ == "__main__":
+    main()
