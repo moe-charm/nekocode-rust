@@ -62,8 +62,35 @@ class NekoCodeMCPServer:
         self._last_session_id = None
 
     def _read_cli_session(self) -> Optional[Dict[str, Any]]:
+        """Read CLI session memory with same resolution as CLI.
+
+        Resolution order:
+          1) NEKOCODE_CONFIG_DIR/cli_session.json
+          2) XDG config dir (e.g., ~/.config/nekocode/cli_session.json)
+          3) ~/.nekocode/cli_session.json
+        """
         try:
             import pathlib
+
+            # 1) NEKOCODE_CONFIG_DIR
+            cfg_dir = os.environ.get("NEKOCODE_CONFIG_DIR")
+            if cfg_dir:
+                p = pathlib.Path(cfg_dir) / "cli_session.json"
+                if p.exists():
+                    with open(p, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+
+            # 2) XDG config dir
+            xdg = os.environ.get("XDG_CONFIG_HOME")
+            if xdg:
+                p = pathlib.Path(xdg) / "nekocode" / "cli_session.json"
+            else:
+                p = pathlib.Path.home() / ".config" / "nekocode" / "cli_session.json"
+            if p.exists():
+                with open(p, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+
+            # 3) Fallback: ~/.nekocode
             path = pathlib.Path.home() / ".nekocode" / "cli_session.json"
             if path.exists():
                 with open(path, 'r', encoding='utf-8') as f:
@@ -350,9 +377,9 @@ class NekoCodeMCPServer:
                         "file_path": {"type": "string", "description": "ファイルパス"},
                         "pattern": {"type": "string", "description": "検索パターン"},
                         "replacement": {"type": "string", "description": "置換文字列"},
-                        "regex": {"type": "boolean", "description": "正規表現を使用", "default": false},
-                        "ignore_case": {"type": "boolean", "description": "大文字小文字無視", "default": false},
-                        "whole_word": {"type": "boolean", "description": "単語全体に限定", "default": false}
+                        "regex": {"type": "boolean", "description": "正規表現を使用", "default": False},
+                        "ignore_case": {"type": "boolean", "description": "大文字小文字無視", "default": False},
+                        "whole_word": {"type": "boolean", "description": "単語全体に限定", "default": False}
                     },
                     "required": ["file_path", "pattern", "replacement"]
                 }
@@ -380,9 +407,9 @@ class NekoCodeMCPServer:
                         "file_path": {"type": "string", "description": "ファイルパス"},
                         "pattern": {"type": "string", "description": "検索パターン"},
                         "replacement": {"type": "string", "description": "置換文字列"},
-                        "regex": {"type": "boolean", "description": "正規表現を使用", "default": false},
-                        "ignore_case": {"type": "boolean", "description": "大文字小文字無視", "default": false},
-                        "whole_word": {"type": "boolean", "description": "単語全体に限定", "default": false}
+                        "regex": {"type": "boolean", "description": "正規表現を使用", "default": False},
+                        "ignore_case": {"type": "boolean", "description": "大文字小文字無視", "default": False},
+                        "whole_word": {"type": "boolean", "description": "単語全体に限定", "default": False}
                     },
                     "required": ["file_path", "pattern", "replacement"]
                 }
@@ -2350,8 +2377,10 @@ class NekoCodeMCPServer:
         format_type = args.get("format", "summary") 
         min_confidence = args.get("min_confidence", 85)
         
-        # コマンド構築
-        cmd = ["deadcode", session_id]
+        # コマンド構築（セッションIDはオプションとして渡す）
+        cmd = ["deadcode"]
+        if session_id:
+            cmd.extend(["--session-id", session_id])
         if external:
             cmd.append("--external")
         cmd.extend(["--format", format_type])
@@ -2360,10 +2389,10 @@ class NekoCodeMCPServer:
         result = await self._run_nekocode(cmd)
         # Guidance when external is false
         if not external:
-            let_note = "\n⚠️ 内部解析のみだと精度は約60%です。\n💡 session_create --complete --external を先に実行すると90%+精度になります。";
+            note = "\n⚠️ 内部解析のみだと精度は約60%です。\n💡 session_create --complete --external を先に実行すると90%+精度になります。"
             if isinstance(result, dict) and "output" in result:
                 try:
-                    result["output"] = result.get("output", "") + let_note
+                    result["output"] = result.get("output", "") + note
                 except Exception:
                     pass
         

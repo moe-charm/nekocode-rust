@@ -94,18 +94,47 @@ impl Default for CliSessionConfig {
 
 impl CliSessionConfig {
     /// Get the configuration file path
+    ///
+    /// Resolution order:
+    /// 1. `NEKOCODE_CONFIG_DIR` env var (useful for CI/sandboxed environments)
+    /// 2. XDG config dir (e.g., ~/.config/nekocode)
+    /// 3. Fallback to ~/.nekocode
     pub fn config_path() -> Result<PathBuf> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| NekocodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Could not find home directory"
-            )))?;
-        
+        // 1) Explicit override for sandbox/CI use cases
+        if let Ok(dir) = std::env::var("NEKOCODE_CONFIG_DIR") {
+            let path = PathBuf::from(dir);
+            if !path.exists() {
+                fs::create_dir_all(&path)?;
+            }
+            return Ok(path.join("cli_session.json"));
+        }
+
+        // 2) XDG config directory (if available)
+        if let Some(mut xdg_dir) = dirs::config_dir() {
+            xdg_dir = xdg_dir.join("nekocode");
+            if !xdg_dir.exists() {
+                if let Err(e) = fs::create_dir_all(&xdg_dir) {
+                    // Fall through to home fallback if we cannot create here
+                    log::debug!("Failed to create XDG config dir: {}", e);
+                } else {
+                    return Ok(xdg_dir.join("cli_session.json"));
+                }
+            } else {
+                return Ok(xdg_dir.join("cli_session.json"));
+            }
+        }
+
+        // 3) Fallback: ~/.nekocode
+        let home = dirs::home_dir().ok_or_else(|| NekocodeError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not find home directory",
+        )))?;
+
         let config_dir = home.join(".nekocode");
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir)?;
         }
-        
+
         Ok(config_dir.join("cli_session.json"))
     }
     

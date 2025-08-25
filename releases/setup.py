@@ -85,9 +85,24 @@ def install_wrappers():
     print(f"  - {cli_path}")
     print(f"  - {mcp_path}")
     print("\nNext steps:")
-    print("  - Ensure ~/.local/bin is on PATH (restart shell if needed)")
-    print("  - CLI: nekocode --help")
-    print("  - MCP (stdio): mcp-nekocode --stdio")
+    print("  1) Ensure ~/.local/bin is on PATH (current shell):")
+    print("     export PATH=\"$HOME/.local/bin:$PATH\"")
+    print("  2) Persist PATH (bash):")
+    print("     grep -qxF 'export PATH=\"$HOME/.local/bin:$PATH\"' ~/.bashrc || echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc")
+    print("     source ~/.bashrc")
+    print("  3) Test wrappers:")
+    print("     nekocode --version || nekocode --help")
+    print("     mcp-nekocode --stdio   # Ctrl+C to stop")
+    print("\nClaude MCP: add server")
+    print("  - WSL/Linux (recommended):")
+    print("    claude mcp add nekocode -- mcp-nekocode --stdio")
+    try:
+        home = os.path.expanduser("~")
+        abs_mcp = os.path.join(home, ".local", "bin", "mcp-nekocode")
+        print("  - Windows client → WSL server:")
+        print(f"    claude mcp add nekocode -- wsl.exe -e {abs_mcp} --stdio")
+    except Exception:
+        pass
 
 
 def install_docker_wrappers(image: str = "ghcr.io/moe-charm/nekocode:latest"):
