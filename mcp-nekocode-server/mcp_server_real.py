@@ -313,6 +313,19 @@ class NekoCodeMCPServer:
                 }
             },
             {
+                "name": "replace",
+                "description": "⚡ 置換（即時適用・プレビュー不要）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "ファイルパス"},
+                        "pattern": {"type": "string", "description": "検索パターン"},
+                        "replacement": {"type": "string", "description": "置換文字列"}
+                    },
+                    "required": ["file_path", "pattern", "replacement"]
+                }
+            },
+            {
                 "name": "create_file",
                 "description": "📄 新規ファイル作成（テンプレート対応）",
                 "inputSchema": {
@@ -354,6 +367,23 @@ class NekoCodeMCPServer:
                 }
             },
             {
+                "name": "insert",
+                "description": "⚡ 挿入（即時適用・プレビュー不要・セマンティック位置対応）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "ファイルパス"},
+                        "content": {"type": "string", "description": "挿入内容"},
+                        "position": {"type": "string", "description": "挿入位置（start/end/行番号）"},
+                        "after_function": {"type": "string", "description": "指定関数の後に挿入"},
+                        "before_function": {"type": "string", "description": "指定関数の前に挿入"},
+                        "in_imports": {"type": "boolean", "description": "インポートセクションに挿入"},
+                        "after_class": {"type": "string", "description": "指定クラスの後に挿入"}
+                    },
+                    "required": ["file_path", "content"]
+                }
+            },
+            {
                 "name": "movelines_preview",
                 "description": "🔄 行移動プレビュー（セッション不要・ファイル間移動）",
                 "inputSchema": {
@@ -377,6 +407,35 @@ class NekoCodeMCPServer:
                         "preview_id": {"type": "string", "description": "プレビューID"}
                     },
                     "required": ["preview_id"]
+                }
+            },
+            {
+                "name": "moveclass",
+                "description": "⚡ クラス/関数移動（即時適用・プレビュー不要）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "セッションID"},
+                        "symbol_id": {"type": "string", "description": "移動対象シンボル"},
+                        "target": {"type": "string", "description": "宛先ファイルパス"},
+                        "update_imports": {"type": "boolean", "description": "インポート更新", "default": True}
+                    },
+                    "required": ["session_id", "symbol_id", "target"]
+                }
+            },
+            {
+                "name": "movelines",
+                "description": "⚡ 行移動（即時適用・プレビュー不要）",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "srcfile": {"type": "string", "description": "ソースファイルパス"},
+                        "start_line": {"type": "integer", "description": "開始行番号（1ベース）"},
+                        "line_count": {"type": "integer", "description": "移動行数"},
+                        "dstfile": {"type": "string", "description": "宛先ファイルパス"},
+                        "insert_line": {"type": "integer", "description": "挿入行番号（1ベース）"}
+                    },
+                    "required": ["srcfile", "start_line", "line_count", "dstfile", "insert_line"]
                 }
             },
             {
@@ -960,10 +1019,14 @@ class NekoCodeMCPServer:
                 return await self._tool_insert_preview(arguments)
             elif tool_name == "insert_confirm":
                 return await self._tool_insert_confirm(arguments)
+            elif tool_name == "insert":
+                return await self._tool_insert_direct(arguments)
             elif tool_name == "movelines_preview":
                 return await self._tool_movelines_preview(arguments)
             elif tool_name == "movelines_confirm":
                 return await self._tool_movelines_confirm(arguments)
+            elif tool_name == "movelines":
+                return await self._tool_movelines_direct(arguments)
             elif tool_name == "edit_history":
                 return await self._tool_edit_history(arguments)
             elif tool_name == "edit_show":
@@ -980,6 +1043,8 @@ class NekoCodeMCPServer:
                 return await self._tool_moveclass_preview(arguments)
             elif tool_name == "moveclass_confirm":
                 return await self._tool_moveclass_confirm(arguments)
+            elif tool_name == "moveclass":
+                return await self._tool_moveclass_direct(arguments)
             elif tool_name == "memory_save":
                 return await self._tool_memory_save(arguments)
             elif tool_name == "memory_load":
@@ -1603,10 +1668,28 @@ class NekoCodeMCPServer:
         
         # 直接実行（プレビューなし）
         result = await self._run_nekorefactor(cmd_args)
-        
+
         return {
             "content": [{"type": "text", "text": json.dumps(result.get("output", result), indent=2, ensure_ascii=False)}]
         }
+
+    async def _tool_insert_direct(self, args: Dict) -> Dict:
+        """挿入（即時適用・プレビュー不要・セマンティック位置対応）"""
+        file_path = args["file_path"]
+        content = args["content"]
+        cmd_args = ["insert", file_path, content]
+        if "after_function" in args:
+            cmd_args.extend(["--after-function", args["after_function"]])
+        elif "before_function" in args:
+            cmd_args.extend(["--before-function", args["before_function"]])
+        elif args.get("in_imports", False):
+            cmd_args.append("--in-imports")
+        elif "after_class" in args:
+            cmd_args.extend(["--after-class", args["after_class"]])
+        elif "position" in args:
+            cmd_args.append(args["position"])
+        result = await self._run_nekorefactor(cmd_args)
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_movelines_preview(self, args: Dict) -> Dict:
         """行移動プレビュー（セッション不要）"""
@@ -1644,10 +1727,22 @@ class NekoCodeMCPServer:
         result = await self._run_nekorefactor([
             "move-lines", srcfile, str(start_line), str(line_count), dstfile, str(insert_line)
         ])
-        
+
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
         }
+
+    async def _tool_movelines_direct(self, args: Dict) -> Dict:
+        """行移動（即時適用・プレビュー不要）"""
+        srcfile = args["srcfile"]
+        start_line = str(args["start_line"])
+        line_count = str(args["line_count"])
+        dstfile = args["dstfile"]
+        insert_line = str(args["insert_line"])
+        result = await self._run_nekorefactor([
+            "move-lines", srcfile, start_line, line_count, dstfile, insert_line
+        ])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_edit_history(self, args: Dict) -> Dict:
         """編集履歴表示（セッション不要）"""
@@ -1886,6 +1981,18 @@ class NekoCodeMCPServer:
         
         # 直接実行（デフォルト）
         result = await self._run_nekocode(["move-class", session_id, symbol_id, target])
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
+
+    async def _tool_moveclass_direct(self, args: Dict) -> Dict:
+        """クラス移動（即時適用・プレビュー不要）"""
+        session_id = args["session_id"]
+        symbol_id = args["symbol_id"]
+        target = args["target"]
+        update_imports = args.get("update_imports", True)
+        cmd = ["move-class", session_id, symbol_id, target]
+        if update_imports:
+            cmd.append("--update-imports")
+        result = await self._run_nekocode(cmd)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     # ========================================
