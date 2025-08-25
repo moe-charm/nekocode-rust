@@ -293,7 +293,10 @@ class NekoCodeMCPServer:
                     "properties": {
                         "file_path": {"type": "string", "description": "ファイルパス"},
                         "pattern": {"type": "string", "description": "検索パターン"},
-                        "replacement": {"type": "string", "description": "置換文字列"}
+                        "replacement": {"type": "string", "description": "置換文字列"},
+                        "regex": {"type": "boolean", "description": "正規表現を使用", "default": false},
+                        "ignore_case": {"type": "boolean", "description": "大文字小文字無視", "default": false},
+                        "whole_word": {"type": "boolean", "description": "単語全体に限定", "default": false}
                     },
                     "required": ["file_path", "pattern", "replacement"]
                 }
@@ -320,7 +323,10 @@ class NekoCodeMCPServer:
                     "properties": {
                         "file_path": {"type": "string", "description": "ファイルパス"},
                         "pattern": {"type": "string", "description": "検索パターン"},
-                        "replacement": {"type": "string", "description": "置換文字列"}
+                        "replacement": {"type": "string", "description": "置換文字列"},
+                        "regex": {"type": "boolean", "description": "正規表現を使用", "default": false},
+                        "ignore_case": {"type": "boolean", "description": "大文字小文字無視", "default": false},
+                        "whole_word": {"type": "boolean", "description": "単語全体に限定", "default": false}
                     },
                     "required": ["file_path", "pattern", "replacement"]
                 }
@@ -1550,7 +1556,14 @@ class NekoCodeMCPServer:
         replacement = args["replacement"]
         
         # 新コマンド構造: replace --preview（nekorefactorにルーティング）
-        result = await self._run_nekorefactor(["replace", file_path, pattern, replacement, "--preview"])
+        cmd = ["replace", file_path, pattern, replacement, "--preview"]
+        if args.get("regex"):
+            cmd.append("--regex")
+        if args.get("ignore_case"):
+            cmd.append("--ignore-case")
+        if args.get("whole_word"):
+            cmd.append("--whole-word")
+        result = await self._run_nekorefactor(cmd)
 
         # Cache arguments for confirm fallback (when only preview_id is provided)
         self._last_replace_args = {
@@ -1583,7 +1596,14 @@ class NekoCodeMCPServer:
                 }
         
         # 直接実行（デフォルト）
-        result = await self._run_nekorefactor(["replace", file_path, pattern, replacement])
+        cmd = ["replace", file_path, pattern, replacement]
+        if args.get("regex"):
+            cmd.append("--regex")
+        if args.get("ignore_case"):
+            cmd.append("--ignore-case")
+        if args.get("whole_word"):
+            cmd.append("--whole-word")
+        result = await self._run_nekorefactor(cmd)
         
         return {
             "content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]
@@ -1594,7 +1614,14 @@ class NekoCodeMCPServer:
         file_path = args["file_path"]
         pattern = args["pattern"]
         replacement = args["replacement"]
-        result = await self._run_nekorefactor(["replace", file_path, pattern, replacement])
+        cmd = ["replace", file_path, pattern, replacement]
+        if args.get("regex"):
+            cmd.append("--regex")
+        if args.get("ignore_case"):
+            cmd.append("--ignore-case")
+        if args.get("whole_word"):
+            cmd.append("--whole-word")
+        result = await self._run_nekorefactor(cmd)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2, ensure_ascii=False)}]}
     
     async def _tool_create_file(self, args: Dict) -> Dict:
