@@ -159,6 +159,75 @@ def print_mcp_help():
     """))
 
 
+def resolve_binaries(prefer: str | None = None):
+    """Resolve binaries for direct python3 registration.
+
+    prefer: 'bin' | 'releases' | None
+    """
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+
+    # Candidate orders
+    nekocode_candidates_bin = [
+        os.path.join(project_root, "bin", "nekocode"),
+        os.path.join(project_root, "releases", "nekocode"),
+        os.path.join(project_root, "nekocode-workspace", "target", "release", "nekocode"),
+        os.path.join(project_root, "nekocode-workspace", "target", "debug", "nekocode"),
+    ]
+    nekocode_candidates_rel = [
+        os.path.join(project_root, "releases", "nekocode"),
+        os.path.join(project_root, "bin", "nekocode"),
+        os.path.join(project_root, "nekocode-workspace", "target", "release", "nekocode"),
+        os.path.join(project_root, "nekocode-workspace", "target", "debug", "nekocode"),
+    ]
+    nekorefactor_candidates_bin = [
+        os.path.join(project_root, "bin", "nekorefactor"),
+        os.path.join(project_root, "releases", "nekorefactor"),
+        os.path.join(project_root, "nekocode-workspace", "target", "release", "nekorefactor"),
+        os.path.join(project_root, "nekocode-workspace", "target", "debug", "nekorefactor"),
+    ]
+    nekorefactor_candidates_rel = [
+        os.path.join(project_root, "releases", "nekorefactor"),
+        os.path.join(project_root, "bin", "nekorefactor"),
+        os.path.join(project_root, "nekocode-workspace", "target", "release", "nekorefactor"),
+        os.path.join(project_root, "nekocode-workspace", "target", "debug", "nekorefactor"),
+    ]
+
+    def first_existing(paths):
+        for p in paths:
+            if os.path.exists(p):
+                return os.path.abspath(p)
+        # Fallback to first candidate
+        return os.path.abspath(paths[0])
+
+    if prefer == "releases":
+        nekocode_abs = first_existing(nekocode_candidates_rel)
+        nekorefactor_abs = first_existing(nekorefactor_candidates_rel)
+    else:
+        # default to bin preference
+        nekocode_abs = first_existing(nekocode_candidates_bin)
+        nekorefactor_abs = first_existing(nekorefactor_candidates_bin)
+
+    mcp_server_abs = os.path.abspath(os.path.join(project_root, "mcp-nekocode-server", "mcp_server_real.py"))
+    return nekocode_abs, nekorefactor_abs, mcp_server_abs, project_root
+
+
+def build_direct_json(prefer: str | None = None) -> str:
+    """Build JSON payload for `claude mcp add-json` (python3 direct)."""
+    import json
+    nekocode_abs, nekorefactor_abs, mcp_server_abs, _ = resolve_binaries(prefer)
+    payload = {
+        "command": "python3",
+        "args": [mcp_server_abs],
+        "env": {
+            "PYTHONUNBUFFERED": "1",
+            "NEKOCODE_BINARY_PATH": nekocode_abs,
+            "NEKOREFACTOR_BINARY_PATH": nekorefactor_abs,
+        },
+    }
+    return json.dumps(payload)
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -176,6 +245,35 @@ def main():
             if a.startswith("--image="):
                 image = a.split("=", 1)[1].strip()
         install_docker_wrappers(image)
+        return
+
+    # Print direct registration JSON for Claude MCP (python3 direct)
+    # Usage: --direct-json [--prefer=bin|releases]
+    if "--direct-json" in args:
+        prefer = None
+        for a in args:
+            if a.startswith("--prefer="):
+                prefer = a.split("=", 1)[1].strip()
+        js = build_direct_json(prefer)
+        print("# Register MCP server with python3 direct (copy/paste):")
+        print("claude mcp add-json nekocode '" + js + "'")
+        return
+
+    # Install direct registration via claude CLI (if available)
+    # Usage: --install-direct [--prefer=bin|releases]
+    if "--install-direct" in args:
+        prefer = None
+        for a in args:
+            if a.startswith("--prefer="):
+                prefer = a.split("=", 1)[1].strip()
+        js = build_direct_json(prefer)
+        try:
+            subprocess.run(["claude", "mcp", "add-json", "nekocode", js], check=True)
+            print("✅ Registered MCP server 'nekocode' (python3 direct)")
+        except Exception as e:
+            print(f"⚠️ Failed to auto-register via claude CLI: {e}")
+            print("You can register manually with:")
+            print("  claude mcp add-json nekocode '" + js + "'")
         return
 
     # Fallback to help
