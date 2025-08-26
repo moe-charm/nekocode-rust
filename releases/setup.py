@@ -77,7 +77,9 @@ def install_wrappers():
         if [[ -d "$USER_BIN" ]]; then export PATH="$USER_BIN:$PATH"; fi
         if [[ -d "$HOME/.cargo/bin" ]]; then export PATH="$HOME/.cargo/bin:$PATH"; fi
         export NEKOCODE_BINARY_PATH="{nekocode_abs}"
-        exec python3 "{mcp_server_abs}" "$@"
+        # Ensure unbuffered stdio for robust MCP handshakes
+        export PYTHONUNBUFFERED=1
+        exec python3 -u "{mcp_server_abs}" "$@"
     """)
     write_executable(mcp_path, mcp_script)
 
