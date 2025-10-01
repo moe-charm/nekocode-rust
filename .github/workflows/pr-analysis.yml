@@ -56,7 +56,7 @@ jobs:
           
       - name: 📝 Post Analysis Results (disabled; replaced by Impact Diff workflow)
         if: false
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Disabled in favor of .github/workflows/impact-diff.yml upsert comment
