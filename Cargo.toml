@@ -23,7 +23,7 @@ thiserror = "1.0"
 async-trait = "0.1"
 
 # Parsing dependencies
-pest = "2.7"
+pest = "2.8"
 pest_derive = "2.7"
 
 # 🚀 Tree-sitter - Ultra-fast parsing (100x faster than PEST!)
