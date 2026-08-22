@@ -1,12 +1,17 @@
-# 🦀 NekoCode - Ultra-fast Multi-language Code Analyzer
+# 🦀 NekoCode - Rust-first Code Context Layer
+
+> **Rust-first reset (2026-08-23)**: 現在の正規MVPは、`nekocode-workspace` の `nekocode` CLIからCargo workspace構造とGit差分を根拠付きJSONとしてAI/MCPへ返す `index` / `context` です。旧来の多言語・多機能セクションは移行中のlegacy情報であり、対応言語数や精度パーセントを保証しません。詳細は [`docs/RUST_FIRST_MVP.md`](docs/RUST_FIRST_MVP.md) を参照してください。
+
+正規workspaceとlegacy境界の整理方針は [`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md) にあります。
+ソースから試す場合は `cd nekocode-workspace && cargo run -p nekocode -- index .` を使ってください。ルートの旧Cargo packageはlegacyです。
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tree-sitter](https://img.shields.io/badge/Tree--sitter-20232A?style=for-the-badge&logo=tree-sitter&logoColor=white)](https://tree-sitter.github.io/)
 [![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)
 
-> **16x faster than traditional parsers** • **8 languages supported** • **GitHub PR automation ready**
+> Legacy tagline (historical and unverified): 16x faster / 8 languages / PR automation.
 
-## 🚀 What NekoCode Does
+## 🗃️ Legacy feature history (not the current contract)
 
 - **⚡ Lightning-fast analysis**: Analyze 1000+ files in seconds using Tree-sitter
 - **🔍 PR Impact Detection**: Automatically detect breaking changes in Pull Requests  
@@ -83,15 +88,14 @@ cargo build --release
 ✅ Import/export dependencies
 ✅ Complexity metrics and line counts
 ✅ Cross-file references and calls
-🆕 Dead code detection (Rust: 90% accuracy with external tools)
+🆕 Dead code detection (legacy path; accuracy unverified)
 🆕 Unused dependencies analysis (cargo-machete integration)
 ```
 
-### 🆕 **Dead Code Detection** - ⚠️ **Use --external for Accuracy!**
+### 🗃️ **Legacy Dead Code Detection** - ⚠️ **Accuracy claims removed**
 
-**🚨 IMPORTANT: Accuracy Difference**
-- **With --external flag**: 90%+ accuracy using external tools ✅
-- **Without --external**: 60% accuracy with many false positives ❌
+**🚨 IMPORTANT:** This legacy path has no measured accuracy claim. Use the
+Rust-first `context --diagnostics` path for compiler-confirmed diagnostics.
 
 **Correct Usage (High Accuracy):**
 ```bash
@@ -106,11 +110,11 @@ cargo build --release
 **External Tools by Language:**
 | Language | Tool | Accuracy | What it Detects |
 |----------|------|----------|-----------------|
-| **Rust** | cargo clippy | 95% | Functions, structs, variables |
-| **Rust** | cargo-machete | 85% | Unused dependencies |
-| **Python** | vulture | 90% | Unused code, imports |
-| **Go** | staticcheck | 90% | Dead code, bugs |
-| **JavaScript/TypeScript** | Internal only | 60% | Basic unused detection |
+| **Rust** | cargo clippy | unverified | Functions, structs, variables |
+| **Rust** | cargo-machete | unverified | Unused dependencies |
+| **Python** | vulture | unverified | Unused code, imports |
+| **Go** | staticcheck | unverified | Dead code, bugs |
+| **JavaScript/TypeScript** | Internal only | unverified | Basic unused detection |
 
 **Installation for Better Accuracy:**
 ```bash

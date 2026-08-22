@@ -1,4 +1,68 @@
-# 📋 Current Task - NekoCode スマートセッション実装
+# 📌 Current Task — Rust-first 再構築（2026-08-23）
+
+> この節が現在の正規方針です。以下に残る2025年の計画は履歴であり、矛盾する項目（多言語同時拡張、未検証の精度宣言、42個のMCPコマンド追加など）は実行しません。
+
+## 目的
+
+NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの結果を永続化し、Git差分とともにAI/MCPへ返すローカルコード・コンテキスト層へ再定義する。
+
+## 決定事項
+
+- Rustを唯一のTier 1対応言語とする。
+- `rustc`、`cargo check`、Clippy、rust-analyzer、Cargo metadataを正しさの情報源とする。
+- NekoCode独自の役割は、スナップショット、差分、根拠、履歴、AI向け圧縮に限定する。
+- 旧単一バイナリ版と旧5バイナリ版を同時に正規実装として保守しない。
+- まず読み取り専用で安定させ、編集・分割・常駐監視は凍結する。
+- 精度は未測定のパーセントで表さず、`tool-confirmed` / `semantic-resolved` / `syntax-only` / `incomplete` の証拠レベルで表す。
+
+## MVPの利用面
+
+1. `index PATH` — Rust workspaceのCargo構造をスナップショット化（実装済み）
+2. `context PATH --compare-ref REF --budget N` — Git変更と診断をAI向けに圧縮（実装済み）
+3. `query SYMBOL` — 参照・関連ファイルを返す意味解析入口（semantic backend後に実装）
+
+## 実行順序
+
+1. 現在の実装をlegacyブランチ/タグとして固定し、既存の未コミット変更を保護する。
+2. 正規Cargo workspace、README、CI、Makefile、Release導線を一本化する。
+3. Rust専用のgolden fixtureと回帰テストを先に作る。
+4. Rust MVPを実装し、`cargo test`、`cargo fmt --check`、`cargo clippy -- -D warnings`、実CLI smoke testを通す。
+5. Rustの精度・速度・JSON schemaが基準を満たした後に、PythonまたはJavaScriptを一言語ずつexperimental backendとして追加する。
+
+## 物理アーカイブ計画
+
+- 現在は論理アーカイブ段階。旧root package・旧5バイナリを移動/削除せず、canonicalを`nekocode-workspace`に限定する。
+- Rust MVPのJSON schema、golden fixture、CLI smoke testが安定したら、作業ツリーをcommitし`legacy-2026-pre-rust-first`タグ（または専用branch）を作る。
+- その後、release/MCP/setup scriptの旧パス参照を検査し、依存がないことを確認してから旧実装を`archive/legacy`または別branchへ移す。
+- 移動後もcanonicalのclean checkoutで`cargo test`・`cargo check`・CLI smokeを実行し、問題があればタグから復旧する。
+- 物理移動の完了までは、旧実装を「保守対象」ではなく「復旧用legacy」として扱う。
+
+## Rust昇格ゲート
+
+- `trait`、`impl`、macro、`cfg`、feature、workspace、tests/examples、同名シンボルを含むfixtureがある。
+- シンボル名、span、visibility、参照、解析エラーを期待値比較する。
+- false positive / false negativeを記録し、精度の分母・分子を説明できる。
+- 解析失敗、対象toolchain、features、target、workspace範囲をJSONに記録する。
+- 変更影響を断定する前に、`cargo check`等の一次情報を提示する。
+
+## 凍結する機能
+
+独自dead-code判定、未実装security/quality/circular/graph、smart move/refactor、split-file、strip-comments、memory、常駐watch、クラウド構想、未検証の性能・精度宣伝。
+
+## 作業状態
+
+- Phase 0（方針とcurrent_taskの更新）: 完了
+- Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み）
+- Phase 2（Rust MVP）: index/contextの最小入口とCargo features/toolchain provenanceを実装済み。semantic backendは未着手
+- Phase 3（追加言語）: Rust昇格ゲート通過後
+
+検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
+
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage B（tag/clean checkout/dependency audit）とStage C（物理移動）はRust MVPゲート後。
+
+---
+
+# 📋 Legacy Task History - NekoCode スマートセッション実装
 
 **最終更新**: 2025-08-24 15:45
 

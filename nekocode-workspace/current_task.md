@@ -1,4 +1,55 @@
-# 🚨 NekoCode 緊急修正タスク - 2025-08-25
+# 📌 Current Task — Rust-first 再構築（2026-08-23）
+
+> この節が現在の正規方針です。以下に残る2025年の計画は履歴であり、矛盾する項目（analyze復活、多言語同時拡張、未検証の精度宣言など）は実行しません。
+
+## 目的
+
+Rustの公式・定番ツールを正しさの情報源として使い、NekoCodeは永続スナップショット、Git差分、根拠付きAI/MCPコンテキストの提供に集中する。
+
+## 決定事項
+
+- Rustを唯一のTier 1対応言語とする。他言語はgolden fixture整備後のexperimental backend。
+- 正規MVPは `index PATH`、`context PATH --compare-ref REF --budget N`。`query SYMBOL`はsemantic backend後に追加する。
+- 旧単一バイナリ版と5バイナリ版を同時に正規実装として扱わない。
+- 未測定の60%/90%/95%精度や「完全対応」「商用グレード」表記を使わない。
+- 独自dead-code判定、smart refactor、split、strip-comments、watch、security/quality/circularは凍結する。
+- 編集機能は、意味解析・atomic patch・`cargo check/test`・rollbackが揃うまで読み取り専用とする。
+
+## 実行順序
+
+1. 現在の実装をlegacyブランチ/タグとして固定する。
+2. 正規workspace、README、CI、Makefile、Releaseを一本化する。
+3. Rust fixtureと回帰テストを作る（trait、impl、macro、cfg、feature、workspace、tests/examples、同名シンボル）。
+4. Rust MVPを実装し、test/fmt/Clippy/CLI smoke testを通す。
+5. Rustの昇格ゲート通過後、PythonまたはJavaScriptを一言語ずつ追加する。
+
+## 物理アーカイブ計画
+
+- 現在は論理アーカイブ段階。旧root package・旧5バイナリを移動/削除せず、canonicalをこのworkspaceに限定する。
+- Rust MVPのJSON schema、golden fixture、CLI smoke testが安定したら、作業ツリーをcommitし`legacy-2026-pre-rust-first`タグ（または専用branch）を作る。
+- release/MCP/setup scriptの旧パス参照を検査し、依存がないことを確認してから旧実装を`archive/legacy`または別branchへ移す。
+- 移動後もclean checkoutで`cargo test`・`cargo check`・CLI smokeを実行し、問題があればタグから復旧する。
+
+物理移動の完了までは、旧実装を「保守対象」ではなく「復旧用legacy」として扱う。
+
+## 証拠レベル
+
+出力には `tool-confirmed`、`semantic-resolved`、`syntax-only`、`incomplete` と、toolchain/features/target/workspace/失敗情報を記録する。
+
+## 作業状態
+
+- Phase 0（方針とcurrent_taskの更新）: 完了
+- Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み）
+- Phase 2（Rust MVP）: index/contextの最小入口とCargo features/toolchain provenanceを実装済み。semantic backendは未着手
+- Phase 3（追加言語）: Rust昇格ゲート通過後
+
+検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
+
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage B（tag/clean checkout/dependency audit）とStage C（物理移動）はRust MVPゲート後。
+
+---
+
+# 🚨 Legacy Task History - NekoCode 緊急修正タスク - 2025-08-25
 
 ## 📋 発見された重大な問題点
 

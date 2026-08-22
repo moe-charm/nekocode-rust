@@ -1,8 +1,10 @@
 # 🚀 NekoCode Workspace
 
-**Unix哲学に基づく高速多言語コード解析ツールチェーン**
+**旧Unix哲学ベースの多言語コード解析ツールチェーン（legacy）**
 
-## ✨ 新機能ハイライト
+> **Rust-first reset (2026-08-23)**: 正規MVPはこのworkspaceの `nekocode index` と `nekocode context` です。Cargo/Gitを一次情報として扱い、AI/MCP向けの根拠付きコンテキストを返します。以下の5バイナリ・多言語機能はlegacy/experimentalとして整理中で、完全対応や精度パーセントは保証しません。設計契約は [`../docs/RUST_FIRST_MVP.md`](../docs/RUST_FIRST_MVP.md) を参照してください。
+
+## 🗃️ Legacy feature history (not the current contract)
 
 ### 🔄 **統一Refreshコマンド + SQLite高速化** (2025-08-18実装完了)
 
@@ -31,7 +33,7 @@ nekocode refresh SESSION_ID --file parser.ts     # 2.2ms（従来19.4ms）
 
 ### 🔍 **Dead Code Detection** (2025-08-18実装完了)
 
-外部ツール統合による**商用グレード精度**の未使用コード検出！
+旧外部ツール統合の未使用コード検出（精度主張は未検証・MVP対象外）。
 
 ```bash
 # 完全解析 - セッション作成と同時に実行
@@ -45,10 +47,10 @@ nekocode deadcode SESSION_ID --external --min-confidence 85
 
 | ツール | 言語 | 精度 | 検出対象 |
 |--------|------|------|----------|
-| cargo clippy | Rust | 95% | 未使用関数・変数 |
-| cargo-machete | Rust | 85% | 未使用依存関係 |
-| vulture | Python | 90% | 未使用コード全般 |
-| 内部解析 | 全言語 | 60% | 基本的な未参照 |
+| cargo clippy | Rust | 未検証 | 未使用関数・変数 |
+| cargo-machete | Rust | 未検証 | 未使用依存関係 |
+| vulture | Python | 未検証 | 未使用コード全般 |
+| 内部解析 | 全言語 | 未検証 | 基本的な未参照 |
 
 ### 🎊 **Smart Refactoring** (2025-08-17実装完了)
 
@@ -109,8 +111,8 @@ nekorefactor strip-comments file.cpp --keep-important  # WARNING/FIXME保持
 
 | 特徴 | 従来ツール | NekoCode |
 |------|-----------|----------|
-| 文字列保護 | ❌ 誤削除あり | ✅ 100%安全 |
-| 言語対応 | 限定的 | 7言語完全対応 |
+| 文字列保護 | ❌ 誤削除あり | 未検証 |
+| 言語対応 | 限定的 | 旧主張（未検証） |
 | 選択的保護 | 基本的 | 🎯 高度フィルタ |
 | 履歴管理 | なし | 🔄 完全ロールバック |
 
@@ -221,7 +223,7 @@ nekocode session-prune --all
 
 ## 🌍 対応言語
 
-**Smart Refactoring対応**: 7言語完全対応
+**Smart Refactoring対応**: 旧主張（未検証、MVP対象外）
 - **Python**: PEP 8準拠（4スペース）
 - **JavaScript/TypeScript**: 2スペース標準
 - **Rust**: 4スペース・impl block対応
