@@ -12,6 +12,7 @@ The current Rust-first implementation lives under `nekocode-workspace/`:
 - `nekocode-core/tests/`: Rust fixture and integration coverage
 - `nekocode/src/cli.rs` and `nekocode/src/main.rs`: `index` and `context` CLI
 - `mcp-nekocode-server/mcp_server_rust_first.py`: read-only stdio MCP adapter
+- `scripts/update_rust_first_release.sh`: canonical CLI-only release staging
 - `.github/workflows/rust-first-mvp.yml`: focused verification workflow
 
 Use the nested workspace for development and CI:
