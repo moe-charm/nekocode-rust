@@ -11,6 +11,7 @@ The current Rust-first implementation lives under `nekocode-workspace/`:
 - `nekocode-core/src/rust_context.rs`: Cargo/Git/diagnostic context model
 - `nekocode-core/tests/`: Rust fixture and integration coverage
 - `nekocode/src/cli.rs` and `nekocode/src/main.rs`: `index` and `context` CLI
+- `mcp-nekocode-server/mcp_server_rust_first.py`: read-only stdio MCP adapter
 - `.github/workflows/rust-first-mvp.yml`: focused verification workflow
 
 Use the nested workspace for development and CI:
@@ -36,5 +37,6 @@ CLI smoke tests pass on a clean checkout.
 
 Current status: Stage A (logical archive and canonical workspace selection) is
 complete. The dependency audit is recorded in [`LEGACY_DEPENDENCY_AUDIT.md`](LEGACY_DEPENDENCY_AUDIT.md).
-Stage B still requires a baseline tag and clean-checkout verification; Stage C
-(physical move) follows the root/MCP/distribution migration.
+Stage B's clean-checkout gate and Rust-first MCP smoke are covered by the
+focused workflow; a baseline tag and old route switch are still required.
+Stage C (physical move) follows the root/MCP/distribution migration.

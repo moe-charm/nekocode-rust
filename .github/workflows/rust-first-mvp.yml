@@ -8,6 +8,9 @@ on:
       - 'nekocode-workspace/nekocode/**'
       - 'nekocode-workspace/Cargo.toml'
       - 'nekocode-workspace/Cargo.lock'
+      - 'mcp-nekocode-server/mcp_server_rust_first.py'
+      - 'mcp-nekocode-server/README_RUST_FIRST.md'
+      - 'mcp-nekocode-server/tests/**'
       - '.github/workflows/rust-first-mvp.yml'
   pull_request:
     paths:
@@ -15,6 +18,9 @@ on:
       - 'nekocode-workspace/nekocode/**'
       - 'nekocode-workspace/Cargo.toml'
       - 'nekocode-workspace/Cargo.lock'
+      - 'mcp-nekocode-server/mcp_server_rust_first.py'
+      - 'mcp-nekocode-server/README_RUST_FIRST.md'
+      - 'mcp-nekocode-server/tests/**'
       - '.github/workflows/rust-first-mvp.yml'
 
 env:
@@ -48,3 +54,7 @@ jobs:
 
       - name: Smoke-test bounded Git context output
         run: cargo run -q -p nekocode -- context . --compare-ref HEAD^ --budget 2000 --diagnostics > /tmp/nekocode-rust-context.json && test -s /tmp/nekocode-rust-context.json
+
+      - name: Smoke-test Rust-first MCP gateway
+        working-directory: .
+        run: python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
