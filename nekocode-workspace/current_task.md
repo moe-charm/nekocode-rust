@@ -45,9 +45,9 @@ Rustの公式・定番ツールを正しさの情報源として使い、NekoCod
 
 検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
 
-アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage B（tag/clean checkout/dependency audit）とStage C（物理移動）はRust MVPゲート後。
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency auditとclean checkout検証まで完了、baseline tagと旧導線切替が残る。Stage C（物理移動）はその後。
 
-監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureを追加済み。物理移動前に旧導線の切替が必要。
+監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureとclean checkout（core 9 tests、CLI check/index）を検証済み。物理移動前に旧導線の切替が必要。
 
 ---
 

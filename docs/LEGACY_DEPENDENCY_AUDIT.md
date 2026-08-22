@@ -34,4 +34,4 @@
 5. clean checkoutでcore test、CLI index/context、MCP smokeを通す。
 6. その後にroot package、legacy crates、配布ELFをarchive branchまたは`archive/legacy`へ移す。
 
-現時点では依存監査まで完了。物理移動は、上記導線の切り替えとMCP smokeが完了するまで実施しない。
+現時点では依存監査と、コミット済みHEADのclean checkout（core 9 tests、CLI check/index）まで完了。物理移動は、上記導線の切り替えとMCP smokeが完了するまで実施しない。
