@@ -32,7 +32,7 @@ NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの�
 ## 物理アーカイブ計画
 
 - 現在は論理アーカイブ段階。旧root package・旧5バイナリを移動/削除せず、canonicalを`nekocode-workspace`に限定する。
-- Rust MVPのJSON schema、golden fixture、CLI smoke testが安定したら、作業ツリーをcommitし`legacy-2026-pre-rust-first`タグ（または専用branch）を作る。
+- Rust MVPのJSON schema、golden fixture、CLI smoke testが安定したため、移行前commit `c4bb63d` に`legacy-2026-pre-rust-first`タグを作成した。現行Rust-first実装は後続commitで追跡する。
 - その後、release/MCP/setup scriptの旧パス参照を検査し、依存がないことを確認してから旧実装を`archive/legacy`または別branchへ移す。
 - 移動後もcanonicalのclean checkoutで`cargo test`・`cargo check`・CLI smokeを実行し、問題があればタグから復旧する。
 - 物理移動の完了までは、旧実装を「保守対象」ではなく「復旧用legacy」として扱う。
@@ -52,13 +52,13 @@ NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの�
 ## 作業状態
 
 - Phase 0（方針とcurrent_taskの更新）: 完了
-- Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み）
+- Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み。旧build/release/PR workflowはmanual-onlyへ隔離済み）
 - Phase 2（Rust MVP）: index/contextの最小入口とCargo features/toolchain provenanceを実装済み。semantic backendは未着手
 - Phase 3（追加言語）: Rust昇格ゲート通過後
 
 検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
 
-アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency auditとclean checkout検証まで完了、baseline tagと旧導線切替が残る。Stage C（物理移動）はその後。
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency audit、baseline tag、clean checkout検証、旧build/release/PR workflowのmanual-only切替まで完了。5-binaryのbuild/setup/Docker導線とsecurityのroot監査切替が残り、Stage C（物理移動）はその後。
 
 監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureとclean checkout（core 9 tests、CLI check/index）を検証済み。物理移動前に旧導線の切替が必要。
 

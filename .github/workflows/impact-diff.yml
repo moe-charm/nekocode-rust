@@ -1,8 +1,7 @@
-name: Impact Diff
+name: Legacy Impact Diff (manual)
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   impact:
@@ -70,4 +69,3 @@ jobs:
         with:
           name: impact-diff
           path: impact.md
-

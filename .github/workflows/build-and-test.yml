@@ -1,23 +1,10 @@
-# 🦀 NekoCode Rust - Build and Test
-# Builds the project and runs comprehensive tests
+# 🦀 Legacy NekoCode Rust - Build and Test
+# Manual recovery workflow for the pre-Rust-first root package.
 
-name: 🚀 Build & Test
+name: 🗃️ Legacy Build & Test (manual)
 
 on:
-  push:
-    branches: [ main, master, develop ]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/**'
-  pull_request:
-    branches: [ main, master, develop ]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/**'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always

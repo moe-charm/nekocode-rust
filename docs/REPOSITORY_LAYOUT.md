@@ -37,6 +37,8 @@ CLI smoke tests pass on a clean checkout.
 
 Current status: Stage A (logical archive and canonical workspace selection) is
 complete. The dependency audit is recorded in [`LEGACY_DEPENDENCY_AUDIT.md`](LEGACY_DEPENDENCY_AUDIT.md).
-Stage B's clean-checkout gate and Rust-first MCP smoke are covered by the
-focused workflow; a baseline tag and old route switch are still required.
+Stage B's clean-checkout gate, Rust-first MCP smoke, the legacy recovery tag
+`legacy-2026-pre-rust-first`, and manual-only isolation of old build/release/PR
+workflows are complete. The five-binary build/setup/Docker route and the root
+security audit still need switching before Stage C.
 Stage C (physical move) follows the root/MCP/distribution migration.

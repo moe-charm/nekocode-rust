@@ -1,9 +1,7 @@
-name: NekoCode PR Impact Analysis
+name: Legacy NekoCode PR Impact Analysis (manual)
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [master]
+  workflow_dispatch:
 
 jobs:
   nekocode-analysis:

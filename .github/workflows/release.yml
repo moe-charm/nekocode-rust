@@ -1,12 +1,9 @@
-# 🚀 NekoCode Rust - Release
-# Creates GitHub releases with binaries for multiple platforms
+# 🚀 Legacy NekoCode Rust - Release
+# Manual recovery workflow for the pre-Rust-first root package.
 
-name: 📦 Release
+name: 🗃️ Legacy Release (manual)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
