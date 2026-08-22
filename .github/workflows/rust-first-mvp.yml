@@ -1,0 +1,50 @@
+name: Rust-first MVP
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'nekocode-workspace/nekocode-core/**'
+      - 'nekocode-workspace/nekocode/**'
+      - 'nekocode-workspace/Cargo.toml'
+      - 'nekocode-workspace/Cargo.lock'
+      - '.github/workflows/rust-first-mvp.yml'
+  pull_request:
+    paths:
+      - 'nekocode-workspace/nekocode-core/**'
+      - 'nekocode-workspace/nekocode/**'
+      - 'nekocode-workspace/Cargo.toml'
+      - 'nekocode-workspace/Cargo.lock'
+      - '.github/workflows/rust-first-mvp.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: nekocode-workspace
+
+jobs:
+  verify:
+    name: Verify Rust-first context MVP
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test context library
+        run: cargo test -p nekocode-core
+
+      - name: Check canonical CLI package
+        run: cargo check -p nekocode
+
+      - name: Smoke-test Cargo index output
+        run: cargo run -q -p nekocode -- index . --output /tmp/nekocode-rust-index.json && test -s /tmp/nekocode-rust-index.json
+
+      - name: Smoke-test bounded Git context output
+        run: cargo run -q -p nekocode -- context . --compare-ref HEAD^ --budget 2000 --diagnostics > /tmp/nekocode-rust-context.json && test -s /tmp/nekocode-rust-context.json

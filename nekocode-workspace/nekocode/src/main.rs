@@ -41,6 +41,14 @@ async fn async_main(cli: Cli) -> Result<()> {
     
     // Execute command
     match cli.command {
+        Commands::Index { path, output } => {
+            handle_rust_index_command(path, output)?;
+        }
+
+        Commands::Context { path, compare_ref, budget, diagnostics, output } => {
+            handle_rust_context_command(path, compare_ref, budget, diagnostics, output)?;
+        }
+
         Commands::SessionCreate { path, name, complete, format, output, min_confidence, external } => {
             handle_session_create_command(path, name, complete, format, output, min_confidence, external).await?;
         }
@@ -302,6 +310,46 @@ async fn async_main(cli: Cli) -> Result<()> {
     Ok(())
 }
 
+/// Emit the Rust-first Cargo workspace snapshot.
+fn handle_rust_index_command(
+    path: std::path::PathBuf,
+    output: Option<std::path::PathBuf>,
+) -> Result<()> {
+    let snapshot = nekocode_core::index_rust_workspace(&path)?;
+    let json = serde_json::to_string_pretty(&snapshot)?;
+    if let Some(output_path) = output {
+        fs::write(&output_path, json)?;
+        println!("✅ Rust workspace snapshot written to {}", output_path.display());
+    } else {
+        println!("{}", json);
+    }
+    Ok(())
+}
+
+/// Emit a bounded, evidence-backed Rust context pack for MCP/AI consumers.
+fn handle_rust_context_command(
+    path: std::path::PathBuf,
+    compare_ref: Option<String>,
+    budget: usize,
+    diagnostics: bool,
+    output: Option<std::path::PathBuf>,
+) -> Result<()> {
+    let pack = nekocode_core::build_rust_context_with_options(
+        &path,
+        compare_ref.as_deref(),
+        budget,
+        diagnostics,
+    )?;
+    let json = serde_json::to_string_pretty(&pack)?;
+    if let Some(output_path) = output {
+        fs::write(&output_path, json)?;
+        println!("✅ Rust context pack written to {}", output_path.display());
+    } else {
+        println!("{}", json);
+    }
+    Ok(())
+}
+
 
 /// Handle deadcode analysis command
 async fn handle_deadcode_command(
@@ -355,16 +403,16 @@ async fn handle_deadcode_command(
     if !external {
         let tools = ExternalToolManager::check_tools();
         if tools.has_any_tool() {
-            eprintln!("💡 Tip: External tools detected! Use --external flag for better accuracy:");
+            eprintln!("💡 Tip: External tools detected; --external enables the legacy experimental path:");
             eprintln!("      nekocode deadcode {} --external", session_id);
-            eprintln!("      External tools provide 90%+ accuracy vs 60% for internal analysis");
+            eprintln!("      No accuracy benchmark is currently claimed for either path");
             eprintln!("");
         }
-        eprintln!("⚠️  Using internal analysis (60% accuracy). May have false positives.");
+        eprintln!("⚠️  Using legacy internal heuristics; results are unbenchmarked and may contain false positives.");
         eprintln!("    Especially for: public APIs, trait implementations, test utilities");
         eprintln!("");
     } else {
-        println!("✅ Using external tools for high-accuracy analysis (90%+ confidence)");
+        println!("✅ Using legacy external tools (experimental; no measured accuracy claim)");
     }
     
     // Create analyzer
@@ -464,9 +512,9 @@ async fn handle_session_create_command(
         let tools = ExternalToolManager::check_tools();
         
         if !external && tools.has_any_tool() {
-            eprintln!("💡 Tip: External tools detected! Add --external flag for better accuracy:");
+            eprintln!("💡 Tip: External tools detected; --external enables the legacy experimental path:");
             eprintln!("      nekocode session-create {} --complete --external", path.display());
-            eprintln!("      External tools provide 90%+ accuracy vs 60% for internal analysis");
+            eprintln!("      No accuracy benchmark is currently claimed for either path");
             eprintln!("");
         }
         
@@ -474,10 +522,10 @@ async fn handle_session_create_command(
             if !tools.has_any_tool() {
                 println!("⚠️ No external tools found!");
             } else {
-                println!("✅ Using external tools for high-accuracy analysis (90%+ confidence)");
+                println!("✅ Using legacy external tools (experimental; no measured accuracy claim)");
             }
         } else {
-            eprintln!("⚠️  Using internal analysis (60% accuracy). May have false positives.");
+            eprintln!("⚠️  Using legacy internal heuristics; results are unbenchmarked and may contain false positives.");
             eprintln!("    Especially for: public APIs, trait implementations, test utilities");
         }
         

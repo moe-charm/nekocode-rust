@@ -15,6 +15,41 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Index a Rust workspace using Cargo metadata.
+    ///
+    /// This is the Rust-first MVP entry point. It records workspace/package
+    /// structure without pretending to replace rustc or rust-analyzer.
+    Index {
+        /// Path to a Rust workspace or Cargo.toml
+        path: PathBuf,
+
+        /// Write the JSON snapshot to a file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Build a bounded, Git-diff-focused Rust context pack.
+    Context {
+        /// Path to a Rust workspace or Cargo.toml
+        path: PathBuf,
+
+        /// Git ref to compare with HEAD (for example, origin/main)
+        #[arg(long)]
+        compare_ref: Option<String>,
+
+        /// Approximate token budget for the JSON context pack
+        #[arg(long, default_value = "8000")]
+        budget: usize,
+
+        /// Include cargo check diagnostics from all workspace targets
+        #[arg(long)]
+        diagnostics: bool,
+
+        /// Write the JSON context pack to a file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
     /// Create a new analysis session
     /// 
     /// Examples:
@@ -44,14 +79,12 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
         
-        /// Minimum confidence threshold for dead code detection (0-100)
+        /// Legacy heuristic filter threshold (0-100; not a measured accuracy)
         #[arg(long, default_value = "60")]
         min_confidence: u8,
         
-        /// Use external tools for 90%+ accuracy (strongly recommended with --complete)
-        /// Without this: 60% accuracy with many false positives
-        /// With this: 90%+ accuracy using cargo clippy, vulture, etc.
-        #[arg(long, help = "Use external tools for accurate dead code detection (90%+ vs 60%)")]
+        /// Use legacy external dead-code tools; results are experimental and unbenchmarked
+        #[arg(long, help = "Use legacy external dead-code tools (experimental)")]
         external: bool,
     },
     
@@ -272,16 +305,15 @@ pub enum Commands {
         #[arg(short, long)]
         session_id: Option<String>,
         
-        /// Use external tools for higher accuracy (90%+ vs 60% internal)
-        /// Recommended: cargo clippy (Rust), vulture (Python), staticcheck (Go)
-        #[arg(long, help = "Use external tools for 90%+ accuracy (recommended)")]
+        /// Use legacy external dead-code tools; results are experimental and unbenchmarked
+        #[arg(long, help = "Use legacy external dead-code tools (experimental)")]
         external: bool,
         
         /// Output format (text, json, github-comment, csv, summary)
         #[arg(short, long, default_value = "text")]
         format: String,
         
-        /// Minimum confidence threshold (0-100)
+        /// Legacy heuristic filter threshold (0-100; not a measured accuracy)
         #[arg(long, default_value = "60")]
         min_confidence: u8,
         

@@ -17,6 +17,7 @@ pub mod memory;
 pub mod traits;
 pub mod error;
 pub mod compact;
+pub mod rust_context;
 
 // Re-exports for easy access
 pub use session::{SessionManager, SessionInfo, Session, SessionProvider};
@@ -29,6 +30,11 @@ pub use error::{NekocodeError, Result};
 pub use io::{FileProcessor, PathUtils};
 pub use memory::{MemoryManager, MemoryType, MemoryEntry};
 pub use compact::{OutputMode, CompactSerializer, HumanFormatter};
+pub use rust_context::{
+    build_rust_context, build_rust_context_with_options, index_rust_workspace,
+    ChangedRustFile, EvidenceLevel, RustContextPack, RustDiagnostic, RustDiagnosticRun,
+    RustPackage, RustToolchainInfo, RustWorkspaceSnapshot,
+};
 
 /// NekoCode Core version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
