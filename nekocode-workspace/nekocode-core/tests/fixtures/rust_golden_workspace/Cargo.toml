@@ -1,0 +1,3 @@
+[workspace]
+members = ["model", "consumer", "compile_error"]
+resolver = "2"

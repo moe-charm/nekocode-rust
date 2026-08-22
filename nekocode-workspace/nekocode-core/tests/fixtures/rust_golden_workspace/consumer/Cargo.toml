@@ -1,0 +1,7 @@
+[package]
+name = "golden-consumer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+golden-model = { path = "../model", features = ["feature_probe"] }
