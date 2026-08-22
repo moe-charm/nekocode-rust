@@ -60,6 +60,8 @@ NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの�
 
 アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage B（tag/clean checkout/dependency audit）とStage C（物理移動）はRust MVPゲート後。
 
+監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureを追加済み。物理移動前に旧導線の切替が必要。
+
 ---
 
 # 📋 Legacy Task History - NekoCode スマートセッション実装

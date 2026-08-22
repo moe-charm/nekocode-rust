@@ -35,5 +35,6 @@ The migration gate is: Rust fixtures pass, the JSON schema is stable, and the
 CLI smoke tests pass on a clean checkout.
 
 Current status: Stage A (logical archive and canonical workspace selection) is
-complete. Stage B (baseline tag, clean-checkout verification, and dependency
-audit) comes after the Rust MVP gate; Stage C (physical move) follows Stage B.
+complete. The dependency audit is recorded in [`LEGACY_DEPENDENCY_AUDIT.md`](LEGACY_DEPENDENCY_AUDIT.md).
+Stage B still requires a baseline tag and clean-checkout verification; Stage C
+(physical move) follows the root/MCP/distribution migration.
