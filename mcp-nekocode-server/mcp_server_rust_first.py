@@ -232,7 +232,7 @@ class RustFirstMCPServer:
                         },
                         "all_features": {
                             "type": "boolean",
-                            "description": "Run cargo check with all workspace features.",
+                            "description": "Run cargo check with all workspace features; requires diagnostics.",
                             "default": False,
                         },
                         "excerpt_lines": {
@@ -297,6 +297,8 @@ class RustFirstMCPServer:
         all_features = args.get("all_features", False)
         if not isinstance(all_features, bool):
             raise ToolInputError("'all_features' must be a boolean")
+        if all_features and not diagnostics:
+            raise ToolInputError("'all_features' requires 'diagnostics'")
         if all_features:
             command.append("--all-features")
         excerpt_lines = args.get("excerpt_lines", 8)

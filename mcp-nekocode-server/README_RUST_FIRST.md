@@ -67,7 +67,8 @@ diagnostic delta only when the baseline is comparable. A missing diagnostic
 baseline is `baseline_missing`; incompatible toolchain/features/targets are
 `not_comparable`. Untracked contents remain markers unless
 `include_untracked_content` is explicitly set with `working_tree`. Clients
-must not infer a compiler delta from `compare_ref`.
+must not infer a compiler delta from `compare_ref`. `all_features` requires
+`diagnostics`; the gateway rejects the option instead of silently ignoring it.
 
 ## Safety and parity
 

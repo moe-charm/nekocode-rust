@@ -1,7 +1,7 @@
 use nekocode_core::{
     build_rust_context_with_config, build_rust_snapshot, format_context_summary,
     sanitize_context_for_output, sanitize_snapshot_for_output, AnalysisMode, ComparisonStatus,
-    RustContextOptions,
+    EvidenceLevel, RustContextOptions,
 };
 use std::fs;
 use std::path::Path;
@@ -50,6 +50,7 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     assert_eq!(pack.contract_version, "context-v1");
     assert_eq!(pack.artifact_kind, "context");
     assert_eq!(pack.comparison_status, ComparisonStatus::Comparable);
+    assert_eq!(pack.evidence, EvidenceLevel::ToolConfirmed);
     assert_eq!(pack.execution_policy.workspace_trust, "not_required");
     assert_eq!(
         pack.execution_policy.process_network_isolation,
@@ -104,6 +105,18 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     assert!(summary.contains("- ?? src/untracked.rs"));
     assert!(summary.contains("Diagnostics: not run"));
     assert_eq!(summary, format_context_summary(&pack));
+
+    let mut omitted_patch_pack = pack.clone();
+    let omitted_diff = omitted_patch_pack
+        .diff
+        .as_mut()
+        .expect("working-tree context should contain diff metadata");
+    omitted_diff.patch.clear();
+    omitted_diff.patch_truncated = true;
+    omitted_diff.omitted_patch_bytes = 12_345;
+    let omitted_summary = format_context_summary(&omitted_patch_pack);
+    assert!(omitted_summary.contains("Visible patch: omitted to fit budget; 12345 bytes omitted"));
+    assert!(!omitted_summary.contains("Visible patch: +0/-0 lines"));
 
     let mut content_options = RustContextOptions::new(Some("HEAD".to_string()), 8_000);
     content_options.include_working_tree = true;

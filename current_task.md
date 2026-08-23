@@ -38,6 +38,9 @@ workflow and stop conditions.
 - a read-only Nyash repository probe using its nested `src` path, confirming
   workspace discovery, readable Japanese paths, incomplete offline-failure
   evidence, and an unchanged target Git status;
+- independent AI review follow-up for evidence/limitation separation,
+  `--all-features` validation across core/CLI/MCP, and explicit fully omitted
+  patch presentation;
 - Codex Skill v0;
 - final legacy recovery tag and archive branch;
 - physical removal of the old root crate, multi-binary workspace, analyzers,
@@ -50,9 +53,11 @@ Recovery points:
 
 ## Next implementation focus
 
-1. Stabilize and validate schema v1 golden artifacts.
-2. Strengthen diagnostic fingerprint fields and comparability fixtures.
-3. Add property tests for byte/item/line budget invariants.
-4. Evaluate the local Skill workflow; do not add MCP tools or another language.
+1. Re-run the same read-only Nyash and NekoCode review and require unchanged
+   Git status hashes plus no remaining findings for those three cases.
+2. Stabilize and validate schema v1 golden artifacts.
+3. Strengthen diagnostic fingerprint fields and comparability fixtures.
+4. Add property tests for byte/item/line budget invariants.
+5. Evaluate the local Skill workflow; do not add MCP tools or another language.
 
 The authoritative decisions are under `docs/`.

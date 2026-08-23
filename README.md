@@ -67,6 +67,8 @@ limitations. `--output` writes whichever format was selected.
 The summary is deterministic presentation, not a second analysis path. It does
 not invent a semantic explanation, resolve symbols, or declare breaking
 impact. JSON remains the machine contract used by MCP and durable artifacts.
+If the byte budget removes the whole patch body, the summary says it was
+omitted instead of displaying `+0/-0` visible lines.
 
 ### Snapshots and diagnostic deltas
 
@@ -93,6 +95,8 @@ The JSON delta preserves repeated error/warning observations as a multiset;
 the human summary condenses identical fingerprints and labels its counts as
 unique. Auxiliary rustc note/help messages remain in the diagnostic run but do
 not inflate the delta. External baseline paths are redacted in public output.
+`--all-features` is accepted by `context` only together with `--diagnostics`;
+otherwise the CLI returns a configuration error instead of ignoring it.
 
 ### What the JSON contains
 
@@ -109,7 +113,9 @@ symbol resolution. Untracked contents are markers by default and require
 `--include-untracked-content`. Git filenames are collected with NUL-delimited
 output so UTF-8 names are preserved without Git's octal quoting. An operational
 Cargo failure, timeout, or output limit produces `evidence: incomplete`, never
-`tool-confirmed`.
+`tool-confirmed`. Explanatory `limitations` alone do not downgrade evidence:
+the default marker-only handling of untracked files remains `tool-confirmed`
+when the requested Git observation completed without omissions.
 
 ### MCP and workflow integrations
 
@@ -218,7 +224,8 @@ budget・省略・制限を表示します。`--output`には選択した形式�
 
 このサマリーは同じ根拠の決定論的な表示であり、別の解析器ではありません。
 意味を推測した説明、symbol解決、breaking impact判定は追加しません。MCPと保存用の
-機械契約は引き続きJSONです。
+機械契約は引き続きJSONです。byte budgetによりpatch本文が全て省略された場合は、
+`+0/-0`ではなくpatchが省略されたことを明示します。
 
 `compare_ref`はGitの変更範囲を指定するだけで、過去commitのcompiler結果を
 再現しません。diagnostic deltaは、保存したbaselineと現在のtoolchain・features・
@@ -226,13 +233,16 @@ targetsが互換する場合だけ比較し、`added`・`resolved`・`persisting
 JSONのdeltaは同じerror/warningが複数回観測された回数を保持し、人向けサマリーでは
 同じfingerprintを1件へまとめて`unique`と明示します。rustcの補足note/helpは元の
 diagnostic runへ保持しますが、delta件数には混ぜません。workspace外のbaseline
-絶対パスは公開出力でredactします。
+絶対パスは公開出力でredactします。`context --all-features`は`--diagnostics`との
+同時指定だけを許可し、単独指定は黙って無視せずconfiguration errorにします。
 予算超過時は省略数と`limitations`をJSONへ残します。source excerptはGit hunk周辺の
 表示補助であり、symbol/reference解決ではありません。cargo-checkはtrusted
 workspaceでのみ明示的に実行し、応答の`execution_policy`にoffline・環境allowlist・
 専用target・未実装のOS network isolationを記録します。Git pathはNUL区切りで取得し、
 日本語などのUTF-8 filenameを8進escapeへ変えず保持します。Cargoの実行失敗・timeout・
-出力上限到達時は`evidence: incomplete`とし、`tool-confirmed`にはしません。
+出力上限到達時は`evidence: incomplete`とし、`tool-confirmed`にはしません。説明用の
+`limitations`が存在するだけではevidenceを格下げしません。未追跡fileをmarkerだけで
+返す既定modeも、Git観測が省略なく完了すれば`tool-confirmed`です。
 
 ### MCP・Skill・Pluginの境界
 

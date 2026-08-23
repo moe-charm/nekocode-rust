@@ -234,6 +234,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                         "budget": 1200,
                         "working_tree": True,
                         "include_untracked_content": True,
+                        "diagnostics": True,
                         "all_features": True,
                         "excerpt_lines": 12,
                         "baseline": "/tmp/baseline.json",
@@ -250,6 +251,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertIn("1200", argv)
         self.assertIn("--working-tree", argv)
         self.assertIn("--include-untracked-content", argv)
+        self.assertIn("--diagnostics", argv)
         self.assertIn("--all-features", argv)
         self.assertIn("--excerpt-lines", argv)
         self.assertIn("12", argv)
@@ -274,6 +276,26 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                         "path": ".",
                         "include_untracked_content": True,
                     },
+                }
+            )
+        self.assertTrue(result["isError"])
+        self.assertIn("requires", result["content"][0]["text"])
+
+    def test_all_features_requires_context_diagnostics(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(
+                workspace_dir=temp / "missing", binary_path=fake_cli
+            )
+            result = server.handle_tool_call(
+                {
+                    "name": "nekocode_context",
+                    "arguments": {"path": ".", "all_features": True},
                 }
             )
         self.assertTrue(result["isError"])

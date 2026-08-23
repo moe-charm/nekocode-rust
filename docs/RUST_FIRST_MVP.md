@@ -95,7 +95,13 @@ JSON is the canonical machine artifact and remains the default output.
 `--format summary` renders a deterministic human-readable projection of that
 same `ContextV1`: file/hunk counts, visible patch line counts, diagnostics and
 delta, comparability, budget, omissions, and limitations. The formatter must
-not add semantic inference or become a second contract.
+not add semantic inference or become a second contract. When the byte budget
+removes the complete patch body, the summary reports it as omitted instead of
+displaying a misleading `+0/-0` line count.
+
+`--all-features` changes only a compiler observation. It is rejected for
+`context` unless `--diagnostics` is also present, matching the snapshot rule
+that requires `--analysis cargo-check`.
 
 ## Diagnostic comparability
 
@@ -149,6 +155,12 @@ Evidence levels are:
 - `incomplete`: unavailable, incompatible, failed, or budget-truncated data.
 
 These levels are evidence categories, not accuracy percentages.
+Explanatory `limitations` can describe a deliberately selected scope without
+making the returned facts incomplete. Marker-only reporting of untracked files
+is the default requested mode and remains `tool-confirmed` when Git completed
+and no evidence was omitted. Failed/partial tools, unavailable or incompatible
+diagnostic comparisons, and actual budget omissions still produce
+`incomplete`.
 
 ## Execution trust
 

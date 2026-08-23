@@ -44,6 +44,19 @@ fn diagnostic_snapshot(root: &Path, output_path: &Path) -> Output {
 }
 
 #[test]
+fn all_features_requires_context_diagnostics() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nekocode"))
+        .args(["context", ".", "--all-features"])
+        .output()
+        .expect("nekocode CLI should run");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--all-features requires --diagnostics")
+    );
+}
+
+#[test]
 fn summary_is_readable_and_json_remains_the_default_contract() {
     let directory = tempdir().expect("temporary workspace");
     let root = directory.path();

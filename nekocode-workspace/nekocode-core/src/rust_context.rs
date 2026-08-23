@@ -460,16 +460,25 @@ pub fn format_context_summary(pack: &ContextV1) -> String {
     )
     .expect("write to String");
     if let Some(diff) = &pack.diff {
-        let truncation = if diff.patch_truncated {
-            format!("; truncated, {} bytes omitted", diff.omitted_patch_bytes)
+        if diff.patch_truncated && diff.patch.trim().is_empty() {
+            writeln!(
+                output,
+                "Visible patch: omitted to fit budget; {} bytes omitted",
+                diff.omitted_patch_bytes
+            )
+            .expect("write to String");
         } else {
-            String::new()
-        };
-        writeln!(
-            output,
-            "Visible patch: +{additions}/-{deletions} lines{truncation}"
-        )
-        .expect("write to String");
+            let truncation = if diff.patch_truncated {
+                format!("; truncated, {} bytes omitted", diff.omitted_patch_bytes)
+            } else {
+                String::new()
+            };
+            writeln!(
+                output,
+                "Visible patch: +{additions}/-{deletions} lines{truncation}"
+            )
+            .expect("write to String");
+        }
     } else {
         writeln!(output, "Visible patch: not requested").expect("write to String");
     }
@@ -1219,6 +1228,11 @@ pub fn build_rust_context_with_config(
             "context budget must be greater than zero".to_string(),
         ));
     }
+    if options.all_features && !options.include_diagnostics {
+        return Err(NekocodeError::Config(
+            "--all-features requires --diagnostics".to_string(),
+        ));
+    }
 
     let workspace = index_rust_workspace(path)?;
     let wants_git =
@@ -1467,12 +1481,11 @@ pub fn build_rust_context_with_config(
         .diagnostics
         .as_ref()
         .is_some_and(|run| !diagnostic_run_is_complete(run));
-    let baseline_incomplete = pack.comparison_status != ComparisonStatus::Comparable
+    let comparison_incomplete = pack.comparison_status != ComparisonStatus::Comparable
         || pack
             .diagnostic_delta
             .as_ref()
-            .is_some_and(|delta| !delta.compatible)
-        || !extra_limitations.is_empty();
+            .is_some_and(|delta| !delta.compatible);
     if pack.omitted_changed_files > 0
         || pack.omitted_excerpts > 0
         || pack.omitted_diagnostics > 0
@@ -1480,7 +1493,7 @@ pub fn build_rust_context_with_config(
         || pack.omitted_diff_bytes > 0
         || pack.budget_exceeded
         || diagnostic_failed
-        || baseline_incomplete
+        || comparison_incomplete
     {
         pack.evidence = EvidenceLevel::Incomplete;
     }
@@ -2975,6 +2988,17 @@ mod tests {
     fn rejects_zero_budget() {
         let error = build_rust_context(".", None, 0).expect_err("zero budget must fail");
         assert!(error.to_string().contains("budget"));
+    }
+
+    #[test]
+    fn rejects_all_features_without_diagnostics() {
+        let mut options = RustContextOptions::new(None, 8_000);
+        options.all_features = true;
+        let error = build_rust_context_with_config(".", options)
+            .expect_err("feature selection without compiler diagnostics must fail");
+        assert!(error
+            .to_string()
+            .contains("--all-features requires --diagnostics"));
     }
 
     #[test]

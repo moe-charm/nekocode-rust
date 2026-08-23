@@ -88,6 +88,11 @@ fn context(
             "--include-untracked-content requires --working-tree".into(),
         ));
     }
+    if request.all_features && !request.diagnostics {
+        return Err(NekocodeError::Config(
+            "--all-features requires --diagnostics".into(),
+        ));
+    }
     let artifact =
         nekocode_core::sanitize_context_for_output(&nekocode_core::build_context(&request)?)?;
     let rendered = match format {

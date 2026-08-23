@@ -59,6 +59,12 @@ may project fields from the completed core artifact, but it must not infer new
 facts, define adapter-specific statuses, or change the underlying artifact.
 The summary must make truncated patch counts, omissions, incomplete evidence,
 and non-comparability visible.
+If every patch body line is removed by the byte budget, the summary says the
+patch was omitted; it must not present the retained line count as `+0/-0`.
+
+Feature selection is meaningful only for compiler diagnostics. A context
+request with `all_features=true` and diagnostics disabled is invalid rather
+than a silently ignored option.
 
 ## Comparability
 
@@ -108,6 +114,12 @@ Every omitted group has a reason, count, and priority. Silent truncation and
 an incomplete artifact labelled complete are forbidden.
 Operational diagnostic failures, timeouts, output limits, and partial runs set
 the enclosing artifact evidence to `incomplete` and record a limitation.
+`limitations` also records requested scope and safety boundaries. Its presence
+alone does not make evidence incomplete. In particular, the default choice to
+report untracked files as markers without reading their contents is a complete
+observation of that requested mode. Evidence is downgraded only for an actual
+failed/partial observation, unavailable or incompatible diagnostic comparison,
+or recorded omission/truncation.
 
 ## Versioning and parity
 
