@@ -39,7 +39,8 @@ impl<'a> DeadCodeAnalyzer<'a> {
             self.analyze_internal_references(&all_symbols)?
         };
         
-        // Step 3: Generate report
+        // Step 3: Normalize (deduplicate, filter noise) and generate report
+        let dead_items = Self::normalize_dead_items(dead_items);
         Ok(DeadCodeReport {
             session_id: self.session.id().to_string(),
             total_symbols: all_symbols.len(),
@@ -117,8 +118,31 @@ impl<'a> DeadCodeAnalyzer<'a> {
                     python::PythonDeadCodeAnalyzer::analyze_with_vulture(&files).await?
                 }
                 Language::JavaScript | Language::TypeScript => {
-                    // Use internal analysis for JS/TS for now
-                    Vec::new()
+                    // Prefer external ESLint if available; otherwise fall back to internal references
+                    let tools = external::ExternalToolManager::check_tools();
+                    if tools.eslint {
+                        external::ExternalToolManager::run_tool(
+                            external::ExternalTool::ESLint,
+                            self.session.info.path.as_path(),
+                            &files
+                        ).await.unwrap_or_default()
+                    } else {
+                        // Fallback: basic internal analysis (better than empty)
+                        self.analyze_internal_references(&self.collect_all_symbols()?)?
+                    }
+                }
+                Language::Cpp | Language::C => {
+                    let tools = external::ExternalToolManager::check_tools();
+                    if tools.clang_tidy {
+                        external::ExternalToolManager::run_tool(
+                            external::ExternalTool::ClangTidy,
+                            self.session.info.path.as_path(),
+                            &files
+                        ).await.unwrap_or_default()
+                    } else {
+                        // Fallback to internal heuristic if clang-tidy not available
+                        self.analyze_internal_references(&self.collect_all_symbols()?)?
+                    }
                 }
                 _ => Vec::new(),
             };
@@ -196,6 +220,45 @@ impl<'a> DeadCodeAnalyzer<'a> {
         } else {
             60 // Internal analysis is basic
         }
+    }
+
+    /// Remove obvious noise items and merge duplicates
+    fn normalize_dead_items(items: Vec<DeadItem>) -> Vec<DeadItem> {
+        use std::collections::{HashMap, HashSet};
+
+        // Helper: language-specific noise tokens to ignore
+        fn is_noise_token(language: Language, name: &str) -> bool {
+            match language {
+                Language::Python => matches!(name, "if" | "cls" | "self"),
+                _ => false,
+            }
+        }
+
+        let mut map: HashMap<(std::path::PathBuf, String, u32, SymbolType), DeadItem> = HashMap::new();
+
+        for mut item in items.into_iter() {
+            if is_noise_token(item.language, &item.name) {
+                continue;
+            }
+            let key = (item.file_path.clone(), item.name.clone(), item.line_start, item.symbol_type);
+            if let Some(existing) = map.get_mut(&key) {
+                // Keep highest confidence and merge reasons
+                if item.confidence > existing.confidence { existing.confidence = item.confidence; }
+                if item.reason != existing.reason {
+                    let mut reasons: HashSet<String> = existing
+                        .reason
+                        .split(" | ")
+                        .map(|s| s.to_string())
+                        .collect();
+                    reasons.insert(item.reason.clone());
+                    existing.reason = reasons.into_iter().collect::<Vec<_>>().join(" | ");
+                }
+            } else {
+                map.insert(key, item);
+            }
+        }
+
+        map.into_values().collect()
     }
 }
 

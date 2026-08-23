@@ -3,12 +3,37 @@
 use nekocode_core::{Result, NekocodeError, Language};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::env;
 use crate::deadcode::{DeadItem, SymbolType};
 
 /// External tool manager with user-friendly guidance
 pub struct ExternalToolManager;
 
 impl ExternalToolManager {
+    fn cargo_path() -> String {
+        // Priority: explicit env overrides → ~/.cargo/bin/cargo → cargo in PATH
+        if let Ok(p) = env::var("NEKOCODE_CARGO_BIN") { if !p.is_empty() { return p; } }
+        if let Ok(p) = env::var("CARGO_BIN") { if !p.is_empty() { return p; } }
+        if let Ok(home) = env::var("HOME") {
+            let candidate = format!("{}/.cargo/bin/cargo", home);
+            if std::path::Path::new(&candidate).exists() { return candidate; }
+        }
+        "cargo".to_string()
+    }
+
+    fn command_with_env(cmd: &str) -> Command {
+        let mut c = if cmd == "cargo" { Command::new(Self::cargo_path()) } else { Command::new(cmd) };
+        // Ensure ~/.cargo/bin is on PATH for child processes as a safety net
+        if let Ok(home) = env::var("HOME") {
+            let cargo_bin = format!("{}/.cargo/bin", home);
+            if std::path::Path::new(&cargo_bin).is_dir() {
+                let cur = env::var("PATH").unwrap_or_default();
+                let new_path = if cur.is_empty() { cargo_bin } else { format!("{}:{}", cargo_bin, cur) };
+                c.env("PATH", new_path);
+            }
+        }
+        c
+    }
     /// Check if external tools are available
     pub fn check_tools() -> ToolAvailability {
         ToolAvailability {
@@ -23,7 +48,7 @@ impl ExternalToolManager {
 
     /// Check if a command is available
     fn check_command(cmd: &str, args: &[&str]) -> bool {
-        Command::new(cmd)
+        Self::command_with_env(cmd)
             .args(args)
             .output()
             .map(|output| output.status.success())
@@ -60,7 +85,7 @@ impl ExternalToolManager {
 
     /// Run cargo clippy for Rust projects
     async fn run_cargo_clippy(project_dir: &Path) -> Result<Vec<DeadItem>> {
-        let output = Command::new("cargo")
+        let output = Self::command_with_env("cargo")
             .current_dir(project_dir)
             .args(&["clippy", "--", "-W", "dead-code", "-A", "clippy::all"])
             .output()
@@ -121,7 +146,7 @@ impl ExternalToolManager {
 
     /// Run vulture for Python projects
     async fn run_vulture(project_dir: &Path, files: &[PathBuf]) -> Result<Vec<DeadItem>> {
-        let mut cmd = Command::new("vulture");
+        let mut cmd = Self::command_with_env("vulture");
         cmd.current_dir(project_dir);
         
         // Add file arguments
@@ -206,7 +231,7 @@ impl ExternalToolManager {
 
     /// Run staticcheck for Go projects
     async fn run_staticcheck(project_dir: &Path) -> Result<Vec<DeadItem>> {
-        let output = Command::new("staticcheck")
+        let output = Self::command_with_env("staticcheck")
             .current_dir(project_dir)
             .arg("./...")
             .output()
@@ -267,17 +292,167 @@ impl ExternalToolManager {
     }
 
     /// Run ESLint for JavaScript/TypeScript
-    async fn run_eslint(_project_dir: &Path, _files: &[PathBuf]) -> Result<Vec<DeadItem>> {
-        // ESLint no-unused-vars rule implementation
-        // For now, return empty - this would require ESLint configuration
-        Ok(Vec::new())
+    async fn run_eslint(project_dir: &Path, files: &[PathBuf]) -> Result<Vec<DeadItem>> {
+        // Build ESLint command with JSON output
+        let mut cmd = Command::new("eslint");
+        cmd.current_dir(project_dir)
+            .arg("--format").arg("json");
+
+        let mut any = false;
+        for f in files {
+            if let Some(ext) = f.extension().and_then(|s| s.to_str()) {
+                let ext = ext.to_ascii_lowercase();
+                if matches!(ext.as_str(), "js" | "jsx" | "mjs" | "ts" | "tsx") {
+                    cmd.arg(f);
+                    any = true;
+                }
+            }
+        }
+        if !any {
+            return Ok(Vec::new());
+        }
+
+        let output = cmd
+            .output()
+            .map_err(|e| NekocodeError::External(format!("Failed to run ESLint: {}", e)))?;
+
+        // Non-zero exit indicates lint errors; still parse stdout
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed: serde_json::Value = match serde_json::from_str(&stdout) {
+            Ok(v) => v,
+            Err(_) => return Ok(Vec::new()),
+        };
+
+        let mut items = Vec::new();
+        let results = parsed.as_array().cloned().unwrap_or_default();
+        for file_result in results {
+            let file_path = file_result.get("filePath").and_then(|v| v.as_str()).unwrap_or("");
+            let messages = file_result.get("messages").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            for msg in messages {
+                let rule_id = msg.get("ruleId").and_then(|v| v.as_str()).unwrap_or("");
+                let message = msg.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                let line = msg.get("line").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let end_line = msg.get("endLine").and_then(|v| v.as_u64()).unwrap_or(line as u64) as u32;
+
+                // Focus on unused rules/messages
+                let is_unused = rule_id.contains("no-unused")
+                    || message.contains("never used")
+                    || message.contains("defined but never used")
+                    || message.contains("assigned a value but never used");
+                if !is_unused { continue; }
+
+                let name = extract_eslint_name(message).unwrap_or_else(|| "<unused>".to_string());
+                items.push(DeadItem {
+                    name,
+                    symbol_type: SymbolType::Variable,
+                    file_path: PathBuf::from(file_path),
+                    line_start: line,
+                    line_end: end_line,
+                    language: Language::JavaScript,
+                    confidence: 80,
+                    reason: format!("eslint {}: {}", rule_id, message),
+                });
+            }
+        }
+
+        Ok(items)
     }
 
     /// Run clang-tidy for C/C++
-    async fn run_clang_tidy(_files: &[PathBuf]) -> Result<Vec<DeadItem>> {
-        // Clang-tidy dead code analysis
-        // For now, return empty - this requires compilation database
-        Ok(Vec::new())
+    async fn run_clang_tidy(files: &[PathBuf]) -> Result<Vec<DeadItem>> {
+        let mut items = Vec::new();
+
+        for file in files {
+            // Only run for C/C++ extensions
+            let ext = file.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+            if !matches!(ext.as_str(), "c" | "cc" | "cpp" | "cxx" | "c++" | "h" | "hpp" | "hh" | "hxx") {
+                continue;
+            }
+
+            // Build clang-tidy command focusing on unused warnings
+            // Note: clang-tidy may require compile_commands.json; if missing, it might still emit some diagnostics.
+            let output = Command::new("clang-tidy")
+                .arg("-quiet")
+                .arg("-checks=-*,clang-diagnostic-unused-*,cppcoreguidelines-*,modernize-*,readability-*,performance-*")
+                .arg(file)
+                // Try to set a sane default language standard to reduce noise
+                .arg("--")
+                .arg("-std=c++17")
+                .output();
+
+            let output = match output {
+                Ok(o) => o,
+                Err(_) => continue, // clang-tidy not available or failed to execute for this file
+            };
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let combined = format!("{}\n{}", stdout, stderr);
+
+            for line in combined.lines() {
+                if let Some(item) = Self::parse_clang_tidy_line(line, file) {
+                    items.push(item);
+                }
+            }
+        }
+
+        Ok(items)
+    }
+
+    /// Parse a single clang-tidy diagnostic line for unused-related issues
+    fn parse_clang_tidy_line(line: &str, file_hint: &Path) -> Option<DeadItem> {
+        // Typical formats include:
+        //   path/to/file.cpp:12:7: warning: unused variable 'x' [-Wunused-variable]
+        //   path/to/file.cpp:45:1: warning: function 'foo' is not needed and will not be emitted
+        //   warning: unused parameter 'bar' [-Wunused-parameter]
+        // We key on "unused" substring and attempt to classify.
+        let l = line.to_lowercase();
+        if !l.contains("unused") { return None; }
+
+        // Extract file:line if present
+        let mut file_path = PathBuf::from(file_hint);
+        let mut line_no: u32 = 0;
+        if let Some(colon_pos) = line.find(':') {
+            // heuristic split: file:line:...
+            let (prefix, rest) = line.split_at(colon_pos);
+            if Path::new(prefix).exists() || prefix.contains('/') || prefix.contains('\\') {
+                file_path = PathBuf::from(prefix);
+                let rest = &rest[1..];
+                if let Some(colon2) = rest.find(':') {
+                    let num_str = &rest[..colon2];
+                    if let Ok(n) = num_str.parse::<u32>() { line_no = n; }
+                }
+            }
+        }
+
+        let (symbol_type, name) = if l.contains("unused variable") {
+            (SymbolType::Variable, extract_between_quotes(line).unwrap_or_else(|| "<var>".to_string()))
+        } else if l.contains("unused parameter") {
+            (SymbolType::Variable, extract_between_quotes(line).unwrap_or_else(|| "<param>".to_string()))
+        } else if l.contains("unused function") || l.contains("function") && l.contains("unused") {
+            (SymbolType::Function, extract_between_quotes(line).unwrap_or_else(|| "<func>".to_string()))
+        } else if l.contains("unused struct") || l.contains("unused class") {
+            (SymbolType::Class, extract_between_quotes(line).unwrap_or_else(|| "<type>".to_string()))
+        } else {
+            // Fallback classification
+            (SymbolType::Variable, extract_between_quotes(line).unwrap_or_else(|| "<unused>".to_string()))
+        };
+
+        let language = match file_path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase().as_str() {
+            "c" | "h" => Language::C,
+            _ => Language::Cpp,
+        };
+
+        Some(DeadItem {
+            name,
+            symbol_type,
+            file_path,
+            line_start: line_no,
+            line_end: line_no,
+            language,
+            confidence: 80,
+            reason: line.to_string(),
+        })
     }
 
     /// Run cargo-machete for unused dependencies
@@ -321,6 +496,28 @@ impl ExternalToolManager {
         // This would need to be implemented based on actual output format
         None
     }
+}
+
+/// Best-effort extractor for ESLint message symbol names
+fn extract_eslint_name(message: &str) -> Option<String> {
+    if let Some(start) = message.find('\'') {
+        let rest = &message[start + 1..];
+        if let Some(end) = rest.find('\'') {
+            return Some(rest[..end].to_string());
+        }
+    }
+    None
+}
+
+/// Extract name between single quotes: "'name' ..."
+fn extract_between_quotes(text: &str) -> Option<String> {
+    if let Some(start) = text.find('\'') {
+        let rest = &text[start + 1..];
+        if let Some(end) = rest.find('\'') {
+            return Some(rest[..end].to_string());
+        }
+    }
+    None
 }
 
 /// Available external tools
