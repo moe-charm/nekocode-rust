@@ -60,6 +60,10 @@ pub enum Commands {
         #[arg(long, default_value = "main")]
         compare_ref: String,
         
+        /// Include working tree (unstaged/staged) changes in addition to <ref>..HEAD
+        #[arg(long, default_value_t = false)]
+        include_working: bool,
+
         /// Output format
         #[arg(short = 'f', long, default_value = "github-comment")]
         format: String,

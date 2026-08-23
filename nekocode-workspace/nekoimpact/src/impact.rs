@@ -162,6 +162,287 @@ impl ImpactAnalyzer {
             session_manager: SessionManager::new()?,
         })
     }
+
+    /// Analyze impact against a Git reference for a given session (diff-based)
+    pub async fn diff_against_ref(
+        &mut self,
+        session_id: &str,
+        compare_ref: &str,
+        include_working: bool,
+    ) -> Result<ImpactResult> {
+        use std::process::Command;
+
+        // Load session info and analysis results
+        let (base_path, analysis_results) = {
+            let session = self.session_manager.get_session_mut(session_id)?;
+            (session.info.path.clone(), session.info.analysis_results.clone())
+        };
+
+        // 1) Collect changed file sets, statuses, and changed line ranges via git
+        let mut changed_files: Vec<std::path::PathBuf> = Vec::new();
+        let mut changes_by_file: std::collections::HashMap<std::path::PathBuf, Vec<(u32, u32)>> = std::collections::HashMap::new();
+        let mut added_files: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
+        let mut deleted_files: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
+
+        // Helper to parse unified diff and populate ranges (new file side)
+        fn parse_unified_ranges(diff_text: &str) -> Vec<(u32, u32)> {
+            let mut ranges = Vec::new();
+            for line in diff_text.lines() {
+                if line.starts_with("@@") {
+                    // Example: @@ -12,0 +13,5 @@
+                    if let Some(pos_plus) = line.find("+") {
+                        let rest = &line[pos_plus + 1..];
+                        // rest like: 13,5 @@
+                        let parts: Vec<&str> = rest.split_whitespace().collect();
+                        if let Some(h) = parts.first() {
+                            let nums: Vec<&str> = h.split(',').collect();
+                            if !nums.is_empty() {
+                                let start: u32 = nums[0].parse().unwrap_or(0);
+                                let count: u32 = if nums.len() > 1 { nums[1].parse().unwrap_or(1) } else { 1 };
+                                let end = if count == 0 { start } else { start.saturating_add(count.saturating_sub(1)) };
+                                if start > 0 { ranges.push((start, end)); }
+                            }
+                        }
+                    }
+                }
+            }
+            ranges
+        }
+
+        // Get ref..HEAD changed files + ranges
+        let out_names = Command::new("git")
+            .current_dir(&base_path)
+            .args(["diff", &format!("{}..HEAD", compare_ref), "--name-only"])
+            .output().ok();
+        if let Some(out) = out_names {
+            for l in String::from_utf8_lossy(&out.stdout).lines() {
+                let t = l.trim();
+                if !t.is_empty() { changed_files.push(base_path.join(t)); }
+            }
+        }
+        // Name-status for ref..HEAD
+        let out_status = Command::new("git")
+            .current_dir(&base_path)
+            .args(["diff", &format!("{}..HEAD", compare_ref), "--name-status"])
+            .output().ok();
+        if let Some(out) = out_status {
+            for l in String::from_utf8_lossy(&out.stdout).lines() {
+                // e.g., "A\tsrc/foo.rs" or "D\tsrc/bar.rs" or "R100\told\tnew"
+                let parts: Vec<&str> = l.split('\t').collect();
+                if parts.is_empty() { continue; }
+                let code = parts[0];
+                if code.starts_with('A') && parts.len() >= 2 {
+                    added_files.insert(base_path.join(parts[1]));
+                } else if code.starts_with('D') && parts.len() >= 2 {
+                    deleted_files.insert(base_path.join(parts[1]));
+                } else if code.starts_with('R') && parts.len() >= 3 {
+                    // Rename: treat as modified of new path
+                    changed_files.push(base_path.join(parts[2]));
+                }
+            }
+        }
+
+        let out_unified = Command::new("git")
+            .current_dir(&base_path)
+            .args(["diff", &format!("{}..HEAD", compare_ref), "--unified=0"])
+            .output().ok();
+        let unified_text = out_unified.map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+        // Split diff by file markers
+        let mut current_file: Option<std::path::PathBuf> = None;
+        for line in unified_text.lines() {
+            if line.starts_with("+++ b/") {
+                let path = line.trim_start_matches("+++ b/").trim();
+                current_file = Some(base_path.join(path));
+            } else if line.starts_with("@@") {
+                if let Some(cf) = current_file.clone() {
+                    let ranges = parse_unified_ranges(line);
+                    if !ranges.is_empty() {
+                        changes_by_file.entry(cf).or_default().extend(ranges);
+                    }
+                }
+            }
+        }
+
+        // Include working tree changes if requested (unstaged + staged)
+        if include_working {
+            let out_w_names = Command::new("git").current_dir(&base_path)
+                .args(["diff", "--name-only"]).output().ok();
+            if let Some(out) = out_w_names {
+                for l in String::from_utf8_lossy(&out.stdout).lines() {
+                    let t = l.trim();
+                    if !t.is_empty() { changed_files.push(base_path.join(t)); }
+                }
+            }
+            let out_wc_names = Command::new("git").current_dir(&base_path)
+                .args(["diff", "--cached", "--name-only"]).output().ok();
+            if let Some(out) = out_wc_names {
+                for l in String::from_utf8_lossy(&out.stdout).lines() {
+                    let t = l.trim();
+                    if !t.is_empty() { changed_files.push(base_path.join(t)); }
+                }
+            }
+            let out_w_unified = Command::new("git").current_dir(&base_path)
+                .args(["diff", "--unified=0"]).output().ok();
+            let w_text = out_w_unified.map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+            let mut current_file2: Option<std::path::PathBuf> = None;
+            for line in w_text.lines() {
+                if line.starts_with("+++ b/") {
+                    let path = line.trim_start_matches("+++ b/").trim();
+                    current_file2 = Some(base_path.join(path));
+                } else if line.starts_with("@@") {
+                    if let Some(cf) = current_file2.clone() {
+                        let ranges = parse_unified_ranges(line);
+                        if !ranges.is_empty() {
+                            changes_by_file.entry(cf).or_default().extend(ranges);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2) Map changed files to session analysis results
+        let mut changed_symbols = Vec::new();
+        let mut affected_files = HashSet::new();
+        let mut breaking_changes = Vec::new();
+        let changed_set: HashSet<_> = changed_files.iter().collect();
+
+        for result in &analysis_results {
+            if changed_set.contains(&result.file_info.path) {
+                affected_files.insert(result.file_info.path.clone());
+                // If we have line ranges, only mark overlapping functions
+                let ranges = changes_by_file.get(&result.file_info.path);
+                if let Some(ranges) = ranges {
+                    for func in &result.functions {
+                        let f_start = func.symbol.line_start;
+                        let f_end = func.symbol.line_end;
+                        let overlaps = ranges.iter().any(|(s, e)| !(f_end < *s || f_start > *e));
+                        if overlaps {
+                            // Heuristic: if header line overlapped, treat as signature change
+                            let header_hit = ranges.iter().any(|(s, e)| *s <= f_start && f_start <= *e);
+                            let ctype = if header_hit { ChangeType::SignatureChanged } else { ChangeType::FunctionModified };
+                            let change = self.create_changed_symbol(func, ctype);
+                            if change.breaking_change {
+                                breaking_changes.push(BreakingChange {
+                                    symbol: change.name.clone(),
+                                    change_type: change.change_type.clone(),
+                                    file_path: change.file_path.clone(),
+                                    line_number: change.line_number,
+                                    description: match change.change_type {
+                                        ChangeType::SignatureChanged => format!("{} signature changed", change.name),
+                                        ChangeType::FunctionRemoved => format!("Function {} was removed", change.name),
+                                        _ => format!("{} was modified", change.name),
+                                    },
+                                    affected_files: vec![],
+                                });
+                            }
+                            changed_symbols.push(change);
+                        }
+                    }
+                    // Also check class/struct ranges
+                    for class in &result.classes {
+                        let c_start = class.symbol.line_start;
+                        let c_end = class.symbol.line_end;
+                        let overlaps = ranges.iter().any(|(s, e)| !(c_end < *s || c_start > *e));
+                        if overlaps {
+                            changed_symbols.push(ChangedSymbol {
+                                name: class.symbol.name.clone(),
+                                symbol_type: "class".to_string(),
+                                file_path: result.file_info.path.clone(),
+                                line_number: class.symbol.line_start,
+                                change_type: ChangeType::ClassModified,
+                                signature_before: None,
+                                signature_after: None,
+                                references: vec![],
+                                risk_level: if class.is_public { RiskLevel::Medium } else { RiskLevel::Low },
+                                breaking_change: false,
+                            });
+                        }
+                    }
+                } else {
+                    // Fallback: mark all functions
+                    for func in &result.functions {
+                        let change = self.create_changed_symbol(func, ChangeType::FunctionModified);
+                        if change.breaking_change {
+                            breaking_changes.push(BreakingChange {
+                                symbol: change.name.clone(),
+                                change_type: change.change_type.clone(),
+                                file_path: change.file_path.clone(),
+                                line_number: change.line_number,
+                                description: format!("{} was modified", change.name),
+                                affected_files: vec![],
+                            });
+                        }
+                        changed_symbols.push(change);
+                    }
+                    // Fallback: mark class modified
+                    for class in &result.classes {
+                        changed_symbols.push(ChangedSymbol {
+                            name: class.symbol.name.clone(),
+                            symbol_type: "class".to_string(),
+                            file_path: result.file_info.path.clone(),
+                            line_number: class.symbol.line_start,
+                            change_type: ChangeType::ClassModified,
+                            signature_before: None,
+                            signature_after: None,
+                            references: vec![],
+                            risk_level: if class.is_public { RiskLevel::Medium } else { RiskLevel::Low },
+                            breaking_change: false,
+                        });
+                    }
+                }
+            }
+            // Mark additions: if file is added in this diff and exists in session
+            if added_files.contains(&result.file_info.path) {
+                affected_files.insert(result.file_info.path.clone());
+                for func in &result.functions {
+                    changed_symbols.push(ChangedSymbol {
+                        name: func.symbol.name.clone(),
+                        symbol_type: "function".to_string(),
+                        file_path: result.file_info.path.clone(),
+                        line_number: func.symbol.line_start,
+                        change_type: ChangeType::FunctionAdded,
+                        signature_before: None,
+                        signature_after: Some(self.get_function_signature(func)),
+                        references: vec![],
+                        risk_level: if func.is_public { RiskLevel::Low } else { RiskLevel::Low },
+                        breaking_change: false,
+                    });
+                }
+            }
+        }
+
+        // Mark deletions: files present in deleted set but not in session results
+        // We cannot parse base file structurally here; report file-level breaking changes
+        for d in deleted_files {
+            affected_files.insert(d.clone());
+            breaking_changes.push(BreakingChange {
+                symbol: d.file_name().and_then(|s| s.to_str()).unwrap_or("<deleted>").to_string(),
+                change_type: ChangeType::FunctionRemoved,
+                file_path: d.clone(),
+                line_number: 0,
+                description: format!("File removed: {} (potential API removals)", d.display()),
+                affected_files: vec![],
+            });
+        }
+
+        // 3) Aggregate
+        let total_references = changed_symbols
+            .iter()
+            .map(|s| s.references.len())
+            .sum();
+
+        let mut risk_assessment = self.assess_risk(&changed_symbols, &breaking_changes);
+        risk_assessment.affected_file_count = affected_files.len();
+
+        Ok(ImpactResult {
+            changed_symbols,
+            affected_files,
+            total_references,
+            risk_assessment,
+            breaking_changes,
+            analyzed_at: Utc::now(),
+        })
+    }
     
     /// Analyze impact of changes in a session
     pub async fn analyze_session(&mut self, session_id: &str) -> Result<ImpactResult> {
@@ -466,6 +747,17 @@ impl ImpactAnalyzer {
     
     /// Create changed symbol from function info
     fn create_changed_symbol(&self, func: &FunctionInfo, change_type: ChangeType) -> ChangedSymbol {
+        // Heuristic risk: public APIs are riskier even on modification
+        let risk = if func.is_public {
+            match change_type {
+                ChangeType::FunctionRemoved | ChangeType::SignatureChanged => RiskLevel::High,
+                ChangeType::FunctionModified => RiskLevel::Medium,
+                _ => RiskLevel::Low,
+            }
+        } else {
+            RiskLevel::from_change_count(0)
+        };
+
         ChangedSymbol {
             name: func.symbol.name.clone(),
             symbol_type: "function".to_string(),
@@ -475,7 +767,7 @@ impl ImpactAnalyzer {
             signature_before: None,
             signature_after: Some(self.get_function_signature(func)),
             references: vec![],
-            risk_level: RiskLevel::from_change_count(0),
+            risk_level: risk,
             breaking_change: change_type.is_breaking(),
         }
     }

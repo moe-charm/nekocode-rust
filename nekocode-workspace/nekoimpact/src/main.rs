@@ -39,13 +39,12 @@ async fn main() -> Result<()> {
             print_result(&result, output_format, cli.verbose);
         }
         
-        Commands::Diff { session_id, compare_ref, format } => {
+        Commands::Diff { session_id, compare_ref, include_working, format } => {
             let output_format = OutputFormat::from_str(&format)
                 .ok_or_else(|| NekocodeError::Config(format!("Invalid format: {}", format)))?;
             
-            // TODO: Implement Git integration
-            println!("Git diff analysis not yet implemented");
-            println!("Session: {}, Compare ref: {}", session_id, compare_ref);
+            let result = analyzer.diff_against_ref(&session_id, &compare_ref, include_working).await?;
+            print_result(&result, output_format, cli.verbose);
         }
         
         Commands::Graph { session_id, output, graph_format } => {
