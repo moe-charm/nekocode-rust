@@ -1,4 +1,5 @@
-# NekoCode all-in-one image (CLI + MCP + external tools)
+# LEGACY NekoCode all-in-one image (CLI + MCP + external tools)
+# Rust-first users should build Dockerfile.rust-first instead.
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -41,4 +42,3 @@ RUN printf '%s\n' '#!/usr/bin/env bash' \
 
 # Default to help
 CMD ["nekocode", "--help"]
-

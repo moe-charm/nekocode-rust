@@ -58,7 +58,7 @@ NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの�
 
 検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
 
-アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency audit、baseline tag、clean checkout検証、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging、prebuilt CLI MCP/Docker入口、securityの主要artifact切替、cargo-deny/CodeQLのcanonical build指定、setup/buildのRust-first既定化まで完了。legacy Dockerfileと明示的legacy 5-binary routeの隔離が残り、Stage C（物理移動）はその後。
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency audit、baseline tag、clean checkout検証、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging、prebuilt CLI MCP/Docker入口、securityの主要artifact切替、cargo-deny/CodeQLのcanonical build指定、setup/buildのRust-first既定化、legacy Dockerfileの明示化まで完了。明示的legacy 5-binary routeの物理移動判断が残り、Stage C（物理移動）はその後。
 
 監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureとclean checkout（core 9 tests、CLI check/index）を検証済み。物理移動前に旧導線の切替が必要。
 

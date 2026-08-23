@@ -14,6 +14,7 @@ The current Rust-first implementation lives under `nekocode-workspace/`:
 - `mcp-nekocode-server/mcp_server_rust_first.py`: read-only stdio MCP adapter
 - `scripts/update_rust_first_release.sh`: canonical CLI-only release staging
 - `Dockerfile.rust-first`: prebuilt CLI + minimal MCP image
+- `Dockerfile`: legacy all-in-one image retained only for recovery
 - `.github/workflows/rust-first-mvp.yml`: focused verification workflow
 
 Use the nested workspace for development and CI:
