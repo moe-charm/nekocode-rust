@@ -3,10 +3,10 @@
 NekoCode installer and wrappers (WSL-friendly)
 
 Provides:
-- --install: install PATH-safe wrappers to ~/.local/bin
-- --install-rust-first: install only the canonical Rust-first nekocode wrapper
-- --install-docker: install Docker-backed wrappers to ~/.local/bin
-- default: print MCP setup help (legacy behavior)
+- --install: install canonical Rust-first CLI/MCP wrappers to ~/.local/bin
+- --install-legacy: install the historical five-binary wrappers
+- --install-docker: install the historical all-in-one Docker wrappers
+- default: print Rust-first MCP setup help
 """
 import os
 import sys
@@ -21,6 +21,7 @@ def abs_paths():
     project_root = os.path.dirname(current_dir)
     possible_bins = [
         os.path.join(project_root, "releases", "nekocode"),
+        os.path.join(project_root, "nekocode-workspace", "target", "release", "nekocode"),
         os.path.join(project_root, "target", "release", "nekocode"),
     ]
     nekocode_bin = None
@@ -109,13 +110,14 @@ def install_wrappers():
 
 
 def install_rust_first_wrapper():
-    """Install only the canonical Rust-first CLI wrapper.
+    """Install canonical Rust-first CLI and MCP wrappers.
 
-    This deliberately leaves the legacy MCP wrapper untouched. The binary is
+    This deliberately leaves the legacy five-binary wrapper files untouched. The binary is
     staged by ``scripts/update_rust_first_release.sh`` or supplied separately
     by a release package.
     """
-    nekocode_abs, _, _ = abs_paths()
+    nekocode_abs, _, project_root = abs_paths()
+    gateway_abs = os.path.join(project_root, "mcp-nekocode-server", "mcp_server_rust_first.py")
     local_bin = ensure_local_bin()
     cli_path = os.path.join(local_bin, "nekocode")
     cli_script = dedent(f"""
@@ -129,9 +131,28 @@ def install_rust_first_wrapper():
         exec "{nekocode_abs}" "$@"
     """)
     write_executable(cli_path, cli_script)
+
+    mcp_path = os.path.join(local_bin, "mcp-nekocode")
+    mcp_script = dedent(f"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ ! -x "{nekocode_abs}" ]]; then
+          echo "nekocode binary not found: {nekocode_abs}" >&2
+          echo "Run make rust-first-release first, or install a Rust-first release package." >&2
+          exit 1
+        fi
+        export NEKOCODE_BINARY_PATH="{nekocode_abs}"
+        export NEKOCODE_CLI_CWD="${{NEKOCODE_CLI_CWD:-$PWD}}"
+        export PYTHONUNBUFFERED=1
+        exec python3 -u "{gateway_abs}" "$@"
+    """)
+    write_executable(mcp_path, mcp_script)
+
     print("✅ Installed Rust-first CLI wrapper:")
     print(f"  - {cli_path}")
-    print("  (legacy MCP and five-binary wrappers were not changed)")
+    print("✅ Installed Rust-first MCP wrapper:")
+    print(f"  - {mcp_path}")
+    print("  (legacy five-binary sources and artifacts were not changed)")
 
 
 def install_docker_wrappers(image: str = "ghcr.io/moe-charm/nekocode:latest"):
@@ -170,20 +191,39 @@ def install_docker_wrappers(image: str = "ghcr.io/moe-charm/nekocode:latest"):
 
 
 def print_mcp_help():
-    nekocode_abs, mcp_server_abs, _ = abs_paths()
+    nekocode_abs, _, project_root = abs_paths()
+    gateway_abs = os.path.abspath(os.path.join(project_root, "mcp-nekocode-server", "mcp_server_rust_first.py"))
     print(dedent(f"""
-    🚀 NekoCode Rust MCP セットアップ (ガイド)
+    🚀 NekoCode Rust-first MCP セットアップ (ガイド)
     ========================================
     プロジェクトのルートで実行してください:
 
-      claude mcp add nekocode \
-        -e NEKOCODE_BINARY_PATH={nekocode_abs} \
-        -- python3 {mcp_server_abs}
+      claude mcp add nekocode -- python3 -u {gateway_abs}
 
-    もしくは setup.py --install で mcp-nekocode ラッパを導入後、
+    もしくは setup.py --install でRust-firstラッパを導入後、
       mcp-nekocode --stdio
-    をサーバコマンドに設定できます。
+    をサーバコマンドに設定できます。CLI binaryは次の候補から解決されます:
+      {nekocode_abs}
+
+    旧5-binary導線が必要な場合だけ setup.py --install-legacy を使います。
     """))
+
+
+def build_rust_first_direct_json() -> str:
+    """Build JSON registration for the canonical stdio gateway."""
+    import json
+
+    nekocode_abs, _, project_root = abs_paths()
+    gateway_abs = os.path.abspath(os.path.join(project_root, "mcp-nekocode-server", "mcp_server_rust_first.py"))
+    payload = {
+        "command": "python3",
+        "args": ["-u", gateway_abs],
+        "env": {
+            "PYTHONUNBUFFERED": "1",
+            "NEKOCODE_BINARY_PATH": nekocode_abs,
+        },
+    }
+    return json.dumps(payload)
 
 
 def resolve_binaries(prefer: str | None = None):
@@ -261,11 +301,11 @@ def main():
         print_mcp_help()
         return
 
-    if "--install" in args:
+    if "--install-legacy" in args:
         install_wrappers()
         return
 
-    if "--install-rust-first" in args:
+    if "--install" in args or "--install-rust-first" in args:
         install_rust_first_wrapper()
         return
 
@@ -278,29 +318,46 @@ def main():
         install_docker_wrappers(image)
         return
 
-    # Print direct registration JSON for Claude MCP (python3 direct)
+    # Print direct registration JSON for Claude MCP (python3 direct).
     # Usage: --direct-json [--prefer=bin|releases]
-    if "--direct-json" in args:
+    if "--direct-json-legacy" in args:
         prefer = None
         for a in args:
             if a.startswith("--prefer="):
                 prefer = a.split("=", 1)[1].strip()
         js = build_direct_json(prefer)
-        print("# Register MCP server with python3 direct (copy/paste):")
+        print("# Register legacy MCP server with python3 direct (copy/paste):")
+        print("claude mcp add-json nekocode-legacy '" + js + "'")
+        return
+
+    if "--direct-json" in args:
+        js = build_rust_first_direct_json()
+        print("# Register Rust-first MCP server with python3 direct (copy/paste):")
         print("claude mcp add-json nekocode '" + js + "'")
         return
 
     # Install direct registration via claude CLI (if available)
     # Usage: --install-direct [--prefer=bin|releases]
-    if "--install-direct" in args:
+    if "--install-direct-legacy" in args:
         prefer = None
         for a in args:
             if a.startswith("--prefer="):
                 prefer = a.split("=", 1)[1].strip()
         js = build_direct_json(prefer)
         try:
+            subprocess.run(["claude", "mcp", "add-json", "nekocode-legacy", js], check=True)
+            print("✅ Registered legacy MCP server 'nekocode-legacy'")
+        except Exception as e:
+            print(f"⚠️ Failed to auto-register legacy MCP via claude CLI: {e}")
+            print("You can register manually with:")
+            print("  claude mcp add-json nekocode-legacy '" + js + "'")
+        return
+
+    if "--install-direct" in args:
+        js = build_rust_first_direct_json()
+        try:
             subprocess.run(["claude", "mcp", "add-json", "nekocode", js], check=True)
-            print("✅ Registered MCP server 'nekocode' (python3 direct)")
+            print("✅ Registered Rust-first MCP server 'nekocode' (python3 direct)")
         except Exception as e:
             print(f"⚠️ Failed to auto-register via claude CLI: {e}")
             print("You can register manually with:")

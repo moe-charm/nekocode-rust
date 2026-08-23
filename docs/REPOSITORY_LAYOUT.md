@@ -41,7 +41,7 @@ Current status: Stage A (logical archive and canonical workspace selection) is
 complete. The dependency audit is recorded in [`LEGACY_DEPENDENCY_AUDIT.md`](LEGACY_DEPENDENCY_AUDIT.md).
 Stage B's clean-checkout gate, Rust-first MCP smoke, the legacy recovery tag
 `legacy-2026-pre-rust-first`, manual-only isolation of old build/release/PR
-workflows, and the canonical CLI-only release/prebuilt-Docker path are complete.
-Five-binary setup/build, legacy Docker, and root cargo-deny/CodeQL checks still
-need switching before Stage C.
+workflows, the canonical CLI-only release/prebuilt-Docker path, and canonical
+cargo-deny/CodeQL build selection are complete. The legacy Dockerfile and
+explicit five-binary recovery route remain before Stage C.
 Stage C (physical move) follows the root/MCP/distribution migration.

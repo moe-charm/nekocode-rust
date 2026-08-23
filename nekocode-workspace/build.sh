@@ -1,12 +1,15 @@
 #!/bin/bash
-# 🚀 NekoCode ビルド＆自動リリース更新スクリプト
-# これを使えば必ずreleasesフォルダが最新になる！
+# 🚀 NekoCode Rust-first build/release staging
+# Use --legacy only for the historical five-binary copy behavior.
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-if [ "${1:-}" = "--rust-first" ]; then
-    shift
+if [ "${1:-}" != "--legacy" ]; then
+    if [ "${1:-}" = "--rust-first" ]; then
+        shift
+    fi
     exec "$SCRIPT_DIR/../scripts/update_rust_first_release.sh" "$@"
 fi
+shift
 
 echo "🔨 NekoCode ビルド開始..."
 cargo build --release

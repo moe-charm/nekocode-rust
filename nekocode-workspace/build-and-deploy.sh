@@ -1,14 +1,17 @@
 #!/bin/bash
-# 🚀 NekoCode Workspace Auto-Build and Deploy Script
-# Builds all binaries and automatically deploys to multiple locations
+# 🚀 NekoCode Rust-first build/deploy entry point
+# Use --legacy only for the historical five-binary deployment behavior.
 
 set -e  # Exit on any error
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-if [ "${1:-}" = "--rust-first" ]; then
-    shift
+if [ "${1:-}" != "--legacy" ]; then
+    if [ "${1:-}" = "--rust-first" ]; then
+        shift
+    fi
     exec "$SCRIPT_DIR/../scripts/update_rust_first_release.sh" "$@"
 fi
+shift
 
 # Colors for output
 RED='\033[0;31m'

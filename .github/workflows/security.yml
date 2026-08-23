@@ -47,6 +47,7 @@ jobs:
       - name: 🔍 Check licenses and dependencies
         uses: EmbarkStudios/cargo-deny-action@v1
         with:
+          manifest-path: nekocode-workspace/Cargo.toml
           log-level: warn
           command: check
           arguments: --all-features
@@ -86,9 +87,13 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          
-      - name: 🏗️ Autobuild
-        uses: github/codeql-action/autobuild@v3
+
+      - name: 🦀 Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 🏗️ Build canonical Rust package
+        working-directory: nekocode-workspace
+        run: cargo build -p nekocode --release
         
       - name: 🔍 Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
@@ -105,21 +110,7 @@ jobs:
         uses: actions/checkout@v4
         
       - name: 🏗️ Build minimal container
-        run: |
-          cat > Dockerfile.security << 'EOF'
-          FROM ubuntu:22.04
-          COPY releases/nekocode /usr/local/bin/nekocode
-          RUN chmod +x /usr/local/bin/nekocode
-          USER 1000:1000
-          ENTRYPOINT ["/usr/local/bin/nekocode"]
-          EOF
-
-          # Create dummy binary for scanning
-          mkdir -p releases/
-          echo '#!/bin/bash\necho "dummy"' > releases/nekocode
-          chmod +x releases/nekocode
-          
-          docker build -f Dockerfile.security -t nekocode-security-test .
+        run: docker build -f Dockerfile.rust-first -t nekocode-security-test .
           
       - name: 🔍 Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

@@ -43,6 +43,12 @@ scripts/update_rust_first_release.sh --skip-build --output /tmp/nekocode-release
 削除・上書きしない。自動commit/pushもしないため、成果物の確認後に明示的に
 コミットする。
 
+ルートの`make`、`nekocode-workspace/build.sh`、`build-and-deploy.sh`もこの
+Rust-first stagingを既定にする。旧5-binaryのbuild/copyが必要な復旧時だけ
+`make legacy-release`または各scriptの`--legacy`を明示する。`releases/setup.py
+--install`と`--direct-json`もRust-first CLI/MCPを登録し、旧登録は
+`--install-legacy` / `--direct-json-legacy`で分離している。
+
 現在の `index` / `context` はCargo構造、package features、rustc/cargoのtoolchain provenance、Git変更を返す。`--diagnostics`指定時は`cargo check --message-format=json`の診断を一次情報として追加する。予算に収まらない診断・変更は`omitted_diagnostics` / `omitted_changed_files`と`evidence: incomplete`で示す。シンボル参照やbreaking-change判定はまだ出力せず、JSONの`limitations`に明示する。
 
 ## 証拠レベル

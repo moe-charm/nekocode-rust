@@ -1,10 +1,10 @@
-# 🚀 NekoCode 5-Binary Toolchain - Modern Makefile
+# 🚀 NekoCode Rust-first Toolchain - Modern Makefile
 # Unix Philosophy: "Do One Thing and Do It Well" + Instant Usability
 
-.PHONY: all build debug release rust-first-release rust-first-install update-binaries setup test clean clean-all help install quick-test
+.PHONY: all build debug release legacy-release legacy-install rust-first-release rust-first-install update-binaries setup test clean clean-all help install quick-test
 
-# 🎯 Default target: Full 5-binary build + setup
-all: release
+# 🎯 Default target: canonical Rust-first CLI staging
+all: rust-first-release
 
 # 🔧 Debug build (5 binaries)
 debug:
@@ -27,6 +27,10 @@ release: build update-binaries setup
 	@echo "  ./bin/nekoimpact       - Change impact analysis (2.8MB)"
 	@echo "  ./bin/nekoinc          - Incremental analysis (3.1MB)"
 	@echo "  ./bin/nekomcp          - MCP integration (3.6MB)"
+
+# Explicit names for the historical five-binary route.
+legacy-release: release
+legacy-install: install
 
 # 🦀 Explicit Rust-first release: stage only the canonical nekocode CLI.
 # The historical five-binary targets above remain unchanged for compatibility.
@@ -81,7 +85,7 @@ test:
 	@cd nekocode-workspace && cargo test
 
 # 🚀 Quick functionality test of all 5 binaries
-quick-test: release
+quick-test: legacy-release
 	@echo "⚡ Testing 5-binary functionality..."
 	@echo "Testing nekocode..."
 	@./bin/nekocode --help >/dev/null && echo "  ✅ nekocode OK" || echo "  ❌ nekocode failed"
@@ -106,8 +110,8 @@ clean-all: clean
 	@rm -rf bin/* releases/*
 	@echo "✅ Complete cleanup done!"
 
-# 📥 Install all 5 binaries to ~/.local/bin
-install: release
+# 📥 Install all 5 legacy binaries to ~/.local/bin
+install: legacy-release
 	@echo "📥 Installing 5 binaries to ~/.local/bin/..."
 	@mkdir -p ~/.local/bin
 	@ln -sf $$(pwd)/bin/nekocode ~/.local/bin/nekocode
@@ -124,14 +128,15 @@ install: release
 
 # 📖 Help
 help:
-	@echo "🚀 NekoCode 5-Binary Toolchain - Build Commands"
+	@echo "🚀 NekoCode Rust-first Toolchain - Build Commands"
 	@echo ""
 	@echo "🎯 Main targets:"
-	@echo "  make               - Build all 5 binaries + setup (default)"
-	@echo "  make release       - Full release build with setup"
+	@echo "  make               - Stage canonical releases/nekocode (default)"
 	@echo "  make rust-first-release - Stage only canonical releases/nekocode"
 	@echo "  make rust-first-install - Install only the Rust-first CLI wrapper"
-	@echo "  make quick-test    - Build and test all binaries"
+	@echo "  make legacy-release - Full legacy 5-binary release build"
+	@echo "  make legacy-install - Install legacy 5-binary wrappers"
+	@echo "  make quick-test    - Build and test legacy binaries"
 	@echo ""
 	@echo "🔧 Development:"
 	@echo "  make debug         - Debug build"
@@ -145,7 +150,7 @@ help:
 	@echo "  make clean-all     - Clean everything including bin/"
 	@echo ""
 	@echo "📥 Installation:"
-	@echo "  make install       - Install to ~/.local/bin/"
+	@echo "  make install       - Legacy alias for legacy-install"
 	@echo ""
 	@echo "🎊 After 'make', use:"
 	@echo "  ./bin/nekocode --help"
