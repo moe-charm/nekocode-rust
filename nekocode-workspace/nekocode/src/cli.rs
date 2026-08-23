@@ -45,6 +45,14 @@ pub enum Commands {
         #[arg(long)]
         diagnostics: bool,
 
+        /// Include staged, unstaged, and untracked working-tree changes
+        #[arg(long)]
+        working_tree: bool,
+
+        /// Run cargo check with every declared workspace feature enabled
+        #[arg(long)]
+        all_features: bool,
+
         /// Write the JSON context pack to a file instead of stdout
         #[arg(short, long)]
         output: Option<PathBuf>,

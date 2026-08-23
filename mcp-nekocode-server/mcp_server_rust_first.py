@@ -131,6 +131,16 @@ class RustFirstMCPServer:
                             "type": "boolean",
                             "default": False,
                         },
+                        "working_tree": {
+                            "type": "boolean",
+                            "description": "Include staged, unstaged, and untracked changes.",
+                            "default": False,
+                        },
+                        "all_features": {
+                            "type": "boolean",
+                            "description": "Run cargo check with all workspace features.",
+                            "default": False,
+                        },
                     },
                     "required": ["path"],
                     "additionalProperties": False,
@@ -168,6 +178,16 @@ class RustFirstMCPServer:
             raise ToolInputError("'diagnostics' must be a boolean")
         if diagnostics:
             command.append("--diagnostics")
+        working_tree = args.get("working_tree", False)
+        if not isinstance(working_tree, bool):
+            raise ToolInputError("'working_tree' must be a boolean")
+        if working_tree:
+            command.append("--working-tree")
+        all_features = args.get("all_features", False)
+        if not isinstance(all_features, bool):
+            raise ToolInputError("'all_features' must be a boolean")
+        if all_features:
+            command.append("--all-features")
         return command
 
     def _run_cli(self, tool: str, args: Dict[str, Any]) -> Any:
@@ -226,7 +246,14 @@ class RustFirstMCPServer:
             return _tool_result({"error": "unknown tool; only index and context are available"}, True)
         if not isinstance(args, dict):
             return _tool_result({"error": "tool arguments must be an object"}, True)
-        if set(args) - {"path", "compare_ref", "budget", "diagnostics"}:
+        if set(args) - {
+            "path",
+            "compare_ref",
+            "budget",
+            "diagnostics",
+            "working_tree",
+            "all_features",
+        }:
             return _tool_result({"error": "unsupported tool argument"}, True)
         if name == "index" and set(args) - {"path"}:
             return _tool_result({"error": "index accepts only 'path'"}, True)

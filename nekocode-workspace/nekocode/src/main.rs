@@ -45,8 +45,24 @@ async fn async_main(cli: Cli) -> Result<()> {
             handle_rust_index_command(path, output)?;
         }
 
-        Commands::Context { path, compare_ref, budget, diagnostics, output } => {
-            handle_rust_context_command(path, compare_ref, budget, diagnostics, output)?;
+        Commands::Context {
+            path,
+            compare_ref,
+            budget,
+            diagnostics,
+            working_tree,
+            all_features,
+            output,
+        } => {
+            handle_rust_context_command(
+                path,
+                compare_ref,
+                budget,
+                diagnostics,
+                working_tree,
+                all_features,
+                output,
+            )?;
         }
 
         Commands::SessionCreate { path, name, complete, format, output, min_confidence, external } => {
@@ -332,14 +348,15 @@ fn handle_rust_context_command(
     compare_ref: Option<String>,
     budget: usize,
     diagnostics: bool,
+    working_tree: bool,
+    all_features: bool,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    let pack = nekocode_core::build_rust_context_with_options(
-        &path,
-        compare_ref.as_deref(),
-        budget,
-        diagnostics,
-    )?;
+    let mut options = nekocode_core::RustContextOptions::new(compare_ref, budget);
+    options.include_diagnostics = diagnostics;
+    options.include_working_tree = working_tree;
+    options.all_features = all_features;
+    let pack = nekocode_core::build_rust_context_with_config(&path, options)?;
     let json = serde_json::to_string_pretty(&pack)?;
     if let Some(output_path) = output {
         fs::write(&output_path, json)?;

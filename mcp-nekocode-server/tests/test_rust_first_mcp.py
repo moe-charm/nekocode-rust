@@ -89,6 +89,43 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertFalse(result["isError"])
         self.assertEqual(result["structuredContent"]["mode"], "prebuilt")
 
+    def test_context_forwards_working_tree_and_feature_options(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:]}))\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
+            result = server.handle_tool_call(
+                {
+                    "name": "context",
+                    "arguments": {
+                        "path": ".",
+                        "compare_ref": "HEAD~1",
+                        "budget": 1200,
+                        "working_tree": True,
+                        "all_features": True,
+                    },
+                }
+            )
+
+        self.assertFalse(result["isError"])
+        argv = result["structuredContent"]["argv"]
+        self.assertEqual(argv[:2], ["context", "."])
+        self.assertIn("--compare-ref", argv)
+        self.assertIn("HEAD~1", argv)
+        self.assertIn("--budget", argv)
+        self.assertIn("1200", argv)
+        self.assertIn("--working-tree", argv)
+        self.assertIn("--all-features", argv)
+
 
 if __name__ == "__main__":
     unittest.main()
