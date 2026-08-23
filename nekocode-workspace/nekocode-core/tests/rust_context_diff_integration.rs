@@ -1,7 +1,7 @@
 use nekocode_core::{
     build_rust_context_with_config, build_rust_snapshot, format_context_summary,
     sanitize_context_for_output, sanitize_snapshot_for_output, AnalysisMode, ComparisonStatus,
-    EvidenceLevel, RustContextOptions,
+    EvidenceLevel, GitChangeScope, LineCountStatus, RustContextOptions,
 };
 use std::fs;
 use std::path::Path;
@@ -87,6 +87,44 @@ fn context_contains_hunks_packages_and_working_tree_files() {
         .diff
         .as_ref()
         .is_some_and(|diff| !diff.patch.contains("new_file")));
+    let scopes = &pack.diff.as_ref().expect("diff metadata").change_scopes;
+    let revision = scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Revision)
+        .expect("revision scope");
+    assert_eq!(revision.file_count, 0);
+    let staged = scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Staged)
+        .expect("staged scope");
+    assert_eq!(staged.file_count, 0);
+    let unstaged = scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Unstaged)
+        .expect("unstaged scope");
+    assert_eq!((unstaged.file_count, unstaged.rust_file_count), (1, 1));
+    assert_eq!((unstaged.additions, unstaged.deletions), (1, 1));
+    assert_eq!(unstaged.counted_files, 1);
+    let untracked = scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Untracked)
+        .expect("untracked scope");
+    assert_eq!((untracked.file_count, untracked.rust_file_count), (1, 1));
+    assert_eq!(untracked.not_read_files, 1);
+    let tracked_file = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("src/lib.rs"))
+        .expect("tracked file");
+    assert_eq!(tracked_file.scope_changes.len(), 1);
+    assert_eq!(
+        tracked_file.scope_changes[0].scope,
+        GitChangeScope::Unstaged
+    );
+    assert_eq!(
+        tracked_file.scope_changes[0].line_count_status,
+        LineCountStatus::Counted
+    );
     let excerpt = pack
         .source_excerpts
         .iter()
@@ -100,6 +138,9 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     let summary = format_context_summary(&pack);
     assert!(summary.starts_with("NekoCode change summary\n"));
     assert!(summary.contains("Changes: 2 files (2 Rust), 1 hunk"));
+    assert!(summary.contains("Change scopes (pre-budget totals):"));
+    assert!(summary.contains("- unstaged: 1 file (1 Rust), +1/-1 counted lines across 1 file"));
+    assert!(summary.contains("- untracked: 1 file (1 Rust), +0/-0 counted lines across 0 files; unknown line counts: 1 not read"));
     assert!(summary.contains("Visible patch: +1/-1 lines"));
     assert!(summary.contains("- M src/lib.rs [context-fixture] (1 hunk)"));
     assert!(summary.contains("- ?? src/untracked.rs"));
@@ -127,6 +168,222 @@ fn context_contains_hunks_packages_and_working_tree_files() {
         .diff
         .as_ref()
         .is_some_and(|diff| diff.include_untracked_content && diff.patch.contains("new_file")));
+}
+
+#[test]
+fn change_scopes_preserve_mixed_index_binary_rename_and_budget_evidence() {
+    let directory = tempdir().expect("temporary repository");
+    let root = directory.path();
+    fs::create_dir_all(root.join("src")).expect("src directory");
+    fs::create_dir_all(root.join("assets")).expect("assets directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"scope-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(
+        root.join("src/lib.rs"),
+        "pub mod both;\npub mod deleted;\npub mod old;\npub mod revision;\n",
+    )
+    .expect("lib source");
+    fs::write(root.join("src/both.rs"), "pub fn value() -> u32 { 1 }\n").expect("mixed source");
+    fs::write(root.join("src/old.rs"), "pub fn moved() {}\n").expect("rename source");
+    fs::write(root.join("src/deleted.rs"), "pub fn removed() {}\n").expect("deleted source");
+    fs::write(
+        root.join("src/revision.rs"),
+        "pub fn committed() -> u32 { 1 }\n",
+    )
+    .expect("revision source");
+    fs::write(root.join("assets/blob.bin"), [0_u8, 1, 2, 3]).expect("binary fixture");
+
+    git(root, &["init", "-q"]);
+    git(root, &["config", "user.email", "context@example.invalid"]);
+    git(root, &["config", "user.name", "Context Fixture"]);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "initial"]);
+
+    fs::write(
+        root.join("src/revision.rs"),
+        "pub fn committed() -> u32 { 2 }\n",
+    )
+    .expect("committed revision source");
+    git(root, &["add", "src/revision.rs"]);
+    git(root, &["commit", "-qm", "revision change"]);
+
+    fs::write(root.join("src/both.rs"), "pub fn value() -> u32 { 2 }\n").expect("staged source");
+    git(root, &["add", "src/both.rs"]);
+    fs::write(
+        root.join("src/both.rs"),
+        "pub fn value() -> u32 { 3 }\npub fn extra() {}\n",
+    )
+    .expect("unstaged source");
+    git(root, &["mv", "src/old.rs", "src/new.rs"]);
+    fs::write(
+        root.join("src/new.rs"),
+        "pub fn moved() { let _changed = true; }\n",
+    )
+    .expect("unstaged edit after staged rename");
+    git(root, &["rm", "-q", "src/deleted.rs"]);
+    fs::write(root.join("assets/blob.bin"), [0_u8, 1, 2, 4, 5]).expect("modified binary");
+    fs::write(root.join("src/\u{8ffd}\u{52a0}.rs"), "pub fn added() {}\n")
+        .expect("untracked Unicode source");
+
+    let mut options = RustContextOptions::new(Some("HEAD~1".to_string()), 20_000);
+    options.include_working_tree = true;
+    let pack = build_rust_context_with_config(root, options).expect("context should build");
+    let diff = pack.diff.as_ref().expect("working-tree diff");
+
+    let revision = diff
+        .change_scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Revision)
+        .expect("revision scope");
+    assert_eq!((revision.file_count, revision.rust_file_count), (1, 1));
+    assert_eq!((revision.additions, revision.deletions), (1, 1));
+    assert_eq!(revision.counted_files, 1);
+
+    let staged = diff
+        .change_scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Staged)
+        .expect("staged scope");
+    assert_eq!((staged.file_count, staged.rust_file_count), (3, 3));
+    assert_eq!((staged.additions, staged.deletions), (1, 2));
+    assert_eq!(staged.counted_files, 3);
+
+    let unstaged = diff
+        .change_scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Unstaged)
+        .expect("unstaged scope");
+    assert_eq!((unstaged.file_count, unstaged.rust_file_count), (3, 2));
+    assert_eq!((unstaged.additions, unstaged.deletions), (3, 2));
+    assert_eq!((unstaged.counted_files, unstaged.binary_files), (2, 1));
+
+    let untracked = diff
+        .change_scopes
+        .iter()
+        .find(|scope| scope.scope == GitChangeScope::Untracked)
+        .expect("untracked scope");
+    assert_eq!((untracked.file_count, untracked.rust_file_count), (1, 1));
+    assert_eq!(untracked.not_read_files, 1);
+
+    let both = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("src/both.rs"))
+        .expect("mixed staged and unstaged path");
+    assert_eq!(both.scope_changes.len(), 2);
+    assert!(both
+        .scope_changes
+        .iter()
+        .any(|change| change.scope == GitChangeScope::Staged));
+    assert!(both
+        .scope_changes
+        .iter()
+        .any(|change| change.scope == GitChangeScope::Unstaged));
+    let renamed = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("src/new.rs"))
+        .expect("renamed path");
+    assert_eq!(renamed.old_path.as_deref(), Some(Path::new("src/old.rs")));
+    assert_eq!(renamed.scope_changes.len(), 2);
+    assert!(renamed.scope_changes.iter().any(|change| {
+        change.scope == GitChangeScope::Staged && change.status.starts_with('R')
+    }));
+    assert!(renamed
+        .scope_changes
+        .iter()
+        .any(|change| { change.scope == GitChangeScope::Unstaged && change.status == "M" }));
+    let deleted = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("src/deleted.rs"))
+        .expect("deleted path");
+    assert_eq!(deleted.status, "D");
+    assert_eq!(deleted.hunks.len(), 1);
+    assert_eq!(
+        deleted.scope_changes[0].deletions,
+        Some(1),
+        "deletion numstat should remain attached to the deleted path"
+    );
+    assert_eq!(
+        both.hunks.len(),
+        2,
+        "staged and unstaged hunks should not absorb the deletion hunk"
+    );
+    let binary = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("assets/blob.bin"))
+        .expect("binary path");
+    assert_eq!(
+        binary.scope_changes[0].line_count_status,
+        LineCountStatus::Binary
+    );
+
+    let expected_scopes = diff.change_scopes.clone();
+    let mut tiny_options = RustContextOptions::new(Some("HEAD~1".to_string()), 1);
+    tiny_options.include_working_tree = true;
+    let tiny = build_rust_context_with_config(root, tiny_options).expect("bounded context");
+    assert!(tiny.diff.as_ref().expect("bounded diff").patch_truncated);
+    assert!(tiny.changed_files.is_empty());
+    assert_eq!(
+        tiny.diff.as_ref().expect("bounded diff").change_scopes,
+        expected_scopes
+    );
+}
+
+#[test]
+fn working_tree_context_supports_an_unborn_head() {
+    let directory = tempdir().expect("temporary repository");
+    let root = directory.path();
+    fs::create_dir_all(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"unborn-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(root.join("src/lib.rs"), "pub fn staged() -> u32 { 1 }\n").expect("staged source");
+
+    git(root, &["init", "-q"]);
+    git(root, &["add", "Cargo.toml", "src/lib.rs"]);
+    fs::write(root.join("src/lib.rs"), "pub fn unstaged() -> u32 { 2 }\n")
+        .expect("unstaged source");
+    fs::write(root.join("src/new.rs"), "pub fn untracked() {}\n").expect("untracked source");
+
+    let mut options = RustContextOptions::new(None, 8_000);
+    options.include_working_tree = true;
+    let pack = build_rust_context_with_config(root, options)
+        .expect("an unborn HEAD should compare the index with the empty tree");
+    let diff = pack.diff.as_ref().expect("working-tree diff");
+    assert_eq!(diff.resolved_head, None);
+
+    let lib = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("src/lib.rs"))
+        .expect("source should be both staged and unstaged");
+    let staged = lib
+        .scope_changes
+        .iter()
+        .find(|change| change.scope == GitChangeScope::Staged)
+        .expect("staged source observation");
+    assert_eq!((staged.additions, staged.deletions), (Some(1), Some(0)));
+    let unstaged = lib
+        .scope_changes
+        .iter()
+        .find(|change| change.scope == GitChangeScope::Unstaged)
+        .expect("unstaged source observation");
+    assert_eq!((unstaged.additions, unstaged.deletions), (Some(1), Some(1)));
+    assert!(pack.changed_files.iter().any(|file| {
+        file.path == Path::new("src/new.rs")
+            && file
+                .scope_changes
+                .iter()
+                .any(|change| change.scope == GitChangeScope::Untracked)
+    }));
 }
 
 #[test]

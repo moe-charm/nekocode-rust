@@ -64,6 +64,13 @@ evidence. The summary shows changed files and hunks, visible patch line counts,
 compiler-diagnostic state and delta, comparability, budget use, omissions, and
 limitations. `--output` writes whichever format was selected.
 
+With `--working-tree`, NekoCode keeps staged, unstaged, and untracked changes
+separate. When `--compare-ref` is present, committed revision changes are a
+fourth scope. Git numstat totals are independent from retained patch text, so
+the summary still reports counted `+/-` lines when a large patch is omitted.
+Binary and marker-only untracked files are reported as unknown, not zero-line
+changes.
+
 The summary is deterministic presentation, not a second analysis path. It does
 not invent a semantic explanation, resolve symbols, or declare breaking
 impact. JSON remains the machine contract used by MCP and durable artifacts.
@@ -221,6 +228,11 @@ workspace rootをCargo/Git根拠の共通境界として使います。
 人が差分を素早く確認するときだけ`--format summary`を指定します。サマリーには
 変更ファイル・hunk・表示できたpatchの増減行数・compiler診断とdelta・比較可能性・
 budget・省略・制限を表示します。`--output`には選択した形式を書き込みます。
+
+`--working-tree`ではstaged・unstaged・untrackedを別々のscopeとして保持し、
+`--compare-ref`指定時はcommit済みrevision差分も分離します。Git numstatの集計は
+保持されたpatch本文に依存しないため、大きなpatchが省略されても数えられた`+/-`行を
+表示できます。binaryやmarkerのみの未追跡fileを0行とは扱わず、未知として明示します。
 
 このサマリーは同じ根拠の決定論的な表示であり、別の解析器ではありません。
 意味を推測した説明、symbol解決、breaking impact判定は追加しません。MCPと保存用の

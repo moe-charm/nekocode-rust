@@ -69,6 +69,10 @@ baseline is `baseline_missing`; incompatible toolchain/features/targets are
 `include_untracked_content` is explicitly set with `working_tree`. Clients
 must not infer a compiler delta from `compare_ref`. `all_features` requires
 `diagnostics`; the gateway rejects the option instead of silently ignoring it.
+The shared context payload also keeps revision, staged, unstaged, and untracked
+Git scopes distinct and reports numstat aggregates that do not disappear when
+the bounded patch body is omitted. MCP does not define a second DTO for these
+fields.
 
 ## Safety and parity
 

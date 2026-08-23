@@ -62,15 +62,128 @@
       "additionalProperties": false
     },
     "workspace": { "type": "object" },
-    "changed_files": { "type": "array", "items": { "type": "object" } },
+    "changed_files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/changed_file" }
+    },
     "include_untracked_content": { "type": "boolean" },
-    "diff": { "type": ["object", "null"] },
+    "diff": {
+      "type": ["object", "null"],
+      "properties": {
+        "compare_ref": { "type": ["string", "null"] },
+        "resolved_base": { "type": ["string", "null"] },
+        "resolved_head": { "type": ["string", "null"] },
+        "include_working_tree": { "type": "boolean" },
+        "include_untracked_content": { "type": "boolean" },
+        "patch": { "type": "string" },
+        "patch_truncated": { "type": "boolean" },
+        "omitted_patch_bytes": { "type": "integer", "minimum": 0 },
+        "change_scopes": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/change_scope_summary" }
+        },
+        "provenance": { "type": ["object", "null"] }
+      },
+      "additionalProperties": false
+    },
     "source_excerpts": { "type": "array", "items": { "type": "object" } },
     "diagnostics": { "type": ["object", "null"] },
     "diagnostic_delta": { "type": ["object", "null"] },
     "budget": { "type": "object" },
     "omissions": { "type": "array", "items": { "type": "object" } },
     "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "git_change_scope": {
+      "enum": ["revision", "staged", "unstaged", "untracked"]
+    },
+    "line_count_status": {
+      "enum": ["counted", "binary", "not_read"]
+    },
+    "file_scope_change": {
+      "type": "object",
+      "required": [
+        "scope",
+        "status",
+        "additions",
+        "deletions",
+        "line_count_status"
+      ],
+      "properties": {
+        "scope": { "$ref": "#/$defs/git_change_scope" },
+        "status": { "type": "string" },
+        "additions": { "type": ["integer", "null"], "minimum": 0 },
+        "deletions": { "type": ["integer", "null"], "minimum": 0 },
+        "line_count_status": { "$ref": "#/$defs/line_count_status" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "additions": { "type": "integer", "minimum": 0 },
+            "deletions": { "type": "integer", "minimum": 0 },
+            "line_count_status": { "const": "counted" }
+          }
+        },
+        {
+          "properties": {
+            "additions": { "type": "null" },
+            "deletions": { "type": "null" },
+            "line_count_status": { "enum": ["binary", "not_read"] }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "changed_file": {
+      "type": "object",
+      "required": [
+        "status",
+        "path",
+        "old_path",
+        "is_rust",
+        "package",
+        "hunks"
+      ],
+      "properties": {
+        "status": { "type": "string" },
+        "path": { "type": "string" },
+        "old_path": { "type": ["string", "null"] },
+        "is_rust": { "type": "boolean" },
+        "package": { "type": ["string", "null"] },
+        "hunks": { "type": "array", "items": { "type": "object" } },
+        "scope_changes": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/file_scope_change" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "change_scope_summary": {
+      "type": "object",
+      "required": [
+        "scope",
+        "file_count",
+        "rust_file_count",
+        "additions",
+        "deletions",
+        "counted_files",
+        "binary_files",
+        "not_read_files"
+      ],
+      "properties": {
+        "scope": { "$ref": "#/$defs/git_change_scope" },
+        "file_count": { "type": "integer", "minimum": 0 },
+        "rust_file_count": { "type": "integer", "minimum": 0 },
+        "additions": { "type": "integer", "minimum": 0 },
+        "deletions": { "type": "integer", "minimum": 0 },
+        "counted_files": { "type": "integer", "minimum": 0 },
+        "binary_files": { "type": "integer", "minimum": 0 },
+        "not_read_files": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": true
 }

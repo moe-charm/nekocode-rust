@@ -87,6 +87,18 @@ optional compiler diagnostics, and explicit status/provenance/budget fields.
 Git filename lists use NUL delimiters and patches disable non-ASCII path
 quoting, preserving UTF-8 paths and their hunk association.
 
+Change Scope v1 keeps four observations distinct: `revision`
+(`compare_ref...HEAD`), `staged` (`HEAD` to index), `unstaged` (index to working
+tree), and `untracked`. A file may participate in more than one scope. Git
+numstat supplies per-scope additions/deletions independently from the retained
+patch text; fixed-size scope aggregates survive patch/file budget truncation.
+Binary and deliberately unread files remain explicit unknowns rather than
+false `+0/-0` results.
+
+Before the first commit, staged evidence uses Git's native empty-tree index
+comparison; NekoCode does not require `HEAD` to exist or hard-code an object
+hash. Deleted-file hunks remain associated with the deleted workspace path.
+
 `compare_ref` selects a Git change set; it never recreates compiler output for
 an old commit. A diagnostic delta requires a saved snapshot containing a
 diagnostic observation under compatible conditions.
@@ -190,7 +202,8 @@ and procedural-macro execution evidence without claiming sandboxing.
 Before a semantic backend or a second language is promoted, fixtures must cover
 trait/impl/macro/cfg/features, workspaces and targets, toolchain/profile
 changes, diagnostics, UTF-8 boundaries, rename/delete/untracked/binary Git
-states, budget omissions, and CLI/MCP payload parity.
+states, mixed staged/unstaged changes, numstat totals that survive budget
+omissions, schema golden artifacts, and CLI/MCP payload parity.
 
 ## Legacy boundary
 

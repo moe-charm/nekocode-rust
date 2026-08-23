@@ -1,0 +1,134 @@
+{
+  "contract_version": "context-v1",
+  "artifact_kind": "context",
+  "status": "completed_clean",
+  "comparison_status": "comparable",
+  "schema_version": 3,
+  "evidence": "tool-confirmed",
+  "execution_policy": {
+    "mode": "metadata_only",
+    "workspace_trust": "not_required",
+    "cargo_registry_network": "not_used",
+    "process_network_isolation": "not_applicable",
+    "environment": "not_applicable",
+    "compiler_wrappers": "not_run",
+    "target_directory": "not_used"
+  },
+  "workspace": {},
+  "changed_files": [
+    {
+      "status": "M",
+      "path": "src/lib.rs",
+      "old_path": null,
+      "is_rust": true,
+      "package": "demo",
+      "hunks": [],
+      "scope_changes": [
+        {
+          "scope": "staged",
+          "status": "M",
+          "additions": 3,
+          "deletions": 1,
+          "line_count_status": "counted"
+        },
+        {
+          "scope": "unstaged",
+          "status": "M",
+          "additions": 2,
+          "deletions": 1,
+          "line_count_status": "counted"
+        }
+      ]
+    },
+    {
+      "status": "M",
+      "path": "assets/blob.bin",
+      "old_path": null,
+      "is_rust": false,
+      "package": null,
+      "hunks": [],
+      "scope_changes": [
+        {
+          "scope": "unstaged",
+          "status": "M",
+          "additions": null,
+          "deletions": null,
+          "line_count_status": "binary"
+        }
+      ]
+    },
+    {
+      "status": "??",
+      "path": "src/追加.rs",
+      "old_path": null,
+      "is_rust": true,
+      "package": "demo",
+      "hunks": [],
+      "scope_changes": [
+        {
+          "scope": "untracked",
+          "status": "??",
+          "additions": null,
+          "deletions": null,
+          "line_count_status": "not_read"
+        }
+      ]
+    }
+  ],
+  "include_untracked_content": false,
+  "diff": {
+    "compare_ref": "HEAD~1",
+    "resolved_base": "1111111111111111111111111111111111111111",
+    "resolved_head": "2222222222222222222222222222222222222222",
+    "include_working_tree": true,
+    "include_untracked_content": false,
+    "patch": "",
+    "patch_truncated": true,
+    "omitted_patch_bytes": 2048,
+    "change_scopes": [
+      {
+        "scope": "revision",
+        "file_count": 0,
+        "rust_file_count": 0,
+        "additions": 0,
+        "deletions": 0,
+        "counted_files": 0,
+        "binary_files": 0,
+        "not_read_files": 0
+      },
+      {
+        "scope": "staged",
+        "file_count": 1,
+        "rust_file_count": 1,
+        "additions": 3,
+        "deletions": 1,
+        "counted_files": 1,
+        "binary_files": 0,
+        "not_read_files": 0
+      },
+      {
+        "scope": "unstaged",
+        "file_count": 2,
+        "rust_file_count": 1,
+        "additions": 2,
+        "deletions": 1,
+        "counted_files": 1,
+        "binary_files": 1,
+        "not_read_files": 0
+      },
+      {
+        "scope": "untracked",
+        "file_count": 1,
+        "rust_file_count": 1,
+        "additions": 0,
+        "deletions": 0,
+        "counted_files": 0,
+        "binary_files": 0,
+        "not_read_files": 1
+      }
+    ],
+    "provenance": null
+  },
+  "budget": {},
+  "limitations": []
+}

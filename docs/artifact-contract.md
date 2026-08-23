@@ -47,6 +47,30 @@ with the current workspace observation. It may contain:
 - an exact diagnostic delta against a compatible saved snapshot;
 - status, provenance, budget, and omission information.
 
+### Git change scopes and line metrics
+
+When Git context is requested, `diff.change_scopes` is a bounded aggregate
+that remains present even if patch bodies or per-file details are removed by
+the output budget. Scope names and meanings are fixed:
+
+- `revision`: `compare_ref...HEAD`;
+- `staged`: `HEAD` to the index, or Git's empty-tree comparison when no first
+  commit exists yet;
+- `unstaged`: the index to the working tree;
+- `untracked`: paths not present in the index.
+
+Each scope reports file/Rust-file counts, counted additions/deletions, binary
+file count, and files whose contents were deliberately not read. Each included
+`changed_files` entry carries zero or more `scope_changes`; a path may contain
+both staged and unstaged observations. A single stage enum on the file is not
+sufficient and must not overwrite one scope with another.
+
+Line metrics come from NUL-delimited Git numstat output, not from the retained
+patch prefix. Binary files have unknown additions/deletions and are counted as
+`binary`. Untracked contents remain `not_read` unless an explicit future
+contract defines how their metrics are observed; marker-only mode does not
+silently claim zero changed lines. NekoCode never stages or edits files.
+
 The default Git base is explicit `HEAD` or a caller-provided ref. NekoCode does
 not infer a merge base. Untracked content is reported as a marker by default;
 reading it requires an explicit option.
@@ -127,4 +151,6 @@ The checked-in schemas under `schemas/` are the external contract. Core Rust
 types are the semantic source and schema validation is part of CI. CLI and MCP
 payloads must match for the same request except for transport fields and
 volatile timestamps. A breaking field or status change requires `v2`; additive
-optional fields remain within `v1`.
+optional fields remain within `v1`. Change Scope v1 fields are additive: older
+`context-v1` readers may ignore them, while golden artifacts verify that the
+current producer emits and validates them.

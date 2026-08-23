@@ -44,6 +44,22 @@ workflow and stop conditions.
 - read-only follow-up review of commit `f1f8f4c`: all three findings closed,
   no new findings, release-ready verdict, and unchanged NekoCode/Nyash Git
   status hashes;
+- next-feature consultation grounded in Nyash and the current implementation;
+  the selected vertical slice is budget-independent Git line metrics plus
+  explicit revision/staged/unstaged/untracked scopes;
+- Change Scope v1 implemented as additive `context-v1` fields: per-file
+  multi-scope observations plus fixed-size, pre-budget Git numstat aggregates;
+- regression coverage for non-empty revision changes, mixed staged/unstaged
+  changes on one path, rename, binary, UTF-8 untracked paths, tiny-budget
+  removal of patch/file details, schema golden validation, and live CLI schema
+  validation;
+- independent read-only implementation review followed by fixes for deleted
+  hunk association and pre-first-commit staged comparison, both covered by
+  integration tests;
+- read-only Nyash Change Scope probe: even with the patch and all 41 file
+  details omitted, the summary retained 16 unstaged files (`+288/-1663`) and
+  25 marker-only untracked files; the target Git status hash remained
+  unchanged;
 - Codex Skill v0;
 - final legacy recovery tag and archive branch;
 - physical removal of the old root crate, multi-binary workspace, analyzers,
@@ -56,9 +72,11 @@ Recovery points:
 
 ## Next implementation focus
 
-1. Stabilize and validate schema v1 golden artifacts.
-2. Strengthen diagnostic fingerprint fields and comparability fixtures.
-3. Add property tests for byte/item/line budget invariants.
-4. Evaluate the local Skill workflow; do not add MCP tools or another language.
+1. Add broader property tests for byte/item/line budget invariants.
+2. Evaluate the local Codex Skill against Change Scope v1, especially omitted
+   file details and explicit unknown line counts.
+3. Specify Clippy as an optional, independently comparable diagnostic producer
+   before implementing it; keep `cargo check` as the default diagnostic mode.
+4. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.

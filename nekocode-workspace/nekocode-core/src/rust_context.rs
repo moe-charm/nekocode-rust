@@ -266,7 +266,50 @@ pub struct RustContextSnapshot {
     pub omissions: Vec<Omission>,
 }
 
-/// A file reported by `git diff --name-status`.
+/// A disjoint Git observation used by Change Scope v1.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum GitChangeScope {
+    Revision,
+    Staged,
+    Unstaged,
+    Untracked,
+}
+
+/// Why additions/deletions are present or unknown for one scoped file change.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LineCountStatus {
+    Counted,
+    Binary,
+    NotRead,
+}
+
+/// One scope-specific observation for a possibly multi-scope changed path.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RustFileScopeChange {
+    pub scope: GitChangeScope,
+    pub status: String,
+    pub additions: Option<usize>,
+    pub deletions: Option<usize>,
+    pub line_count_status: LineCountStatus,
+}
+
+/// Fixed-size line/count aggregate retained independently from patch bodies.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RustChangeScopeSummary {
+    pub scope: GitChangeScope,
+    pub file_count: usize,
+    pub rust_file_count: usize,
+    pub additions: usize,
+    pub deletions: usize,
+    pub counted_files: usize,
+    pub binary_files: usize,
+    pub not_read_files: usize,
+}
+
+/// A file reported by Git, flattened for v1 compatibility while preserving
+/// every scope-specific observation in `scope_changes`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChangedRustFile {
     pub status: String,
@@ -275,6 +318,8 @@ pub struct ChangedRustFile {
     pub is_rust: bool,
     pub package: Option<String>,
     pub hunks: Vec<RustDiffHunk>,
+    #[serde(default)]
+    pub scope_changes: Vec<RustFileScopeChange>,
 }
 
 /// One unified-diff hunk on the old and new file sides.
@@ -299,6 +344,8 @@ pub struct RustDiffSummary {
     pub patch: String,
     pub patch_truncated: bool,
     pub omitted_patch_bytes: usize,
+    #[serde(default)]
+    pub change_scopes: Vec<RustChangeScopeSummary>,
     pub provenance: Option<ToolProvenance>,
 }
 
@@ -460,6 +507,35 @@ pub fn format_context_summary(pack: &ContextV1) -> String {
     )
     .expect("write to String");
     if let Some(diff) = &pack.diff {
+        if !diff.change_scopes.is_empty() {
+            writeln!(output, "Change scopes (pre-budget totals):").expect("write to String");
+            for scope in &diff.change_scopes {
+                let mut unknowns = Vec::new();
+                if scope.binary_files > 0 {
+                    unknowns.push(format!("{} binary", scope.binary_files));
+                }
+                if scope.not_read_files > 0 {
+                    unknowns.push(format!("{} not read", scope.not_read_files));
+                }
+                let unknowns = if unknowns.is_empty() {
+                    String::new()
+                } else {
+                    format!("; unknown line counts: {}", unknowns.join(", "))
+                };
+                writeln!(
+                    output,
+                    "- {}: {} ({} Rust), +{}/-{} counted lines across {}{}",
+                    git_change_scope_name(scope.scope),
+                    item_count(scope.file_count, "file", "files"),
+                    scope.rust_file_count,
+                    scope.additions,
+                    scope.deletions,
+                    item_count(scope.counted_files, "file", "files"),
+                    unknowns
+                )
+                .expect("write to String");
+            }
+        }
         if diff.patch_truncated && diff.patch.trim().is_empty() {
             writeln!(
                 output,
@@ -782,6 +858,15 @@ fn analysis_mode_name(mode: AnalysisMode) -> &'static str {
     match mode {
         AnalysisMode::MetadataOnly => "metadata_only",
         AnalysisMode::CargoCheck => "cargo_check",
+    }
+}
+
+fn git_change_scope_name(scope: GitChangeScope) -> &'static str {
+    match scope {
+        GitChangeScope::Revision => "revision",
+        GitChangeScope::Staged => "staged",
+        GitChangeScope::Unstaged => "unstaged",
+        GitChangeScope::Untracked => "untracked",
     }
 }
 
@@ -2054,7 +2139,7 @@ fn git_changed_files(root: &Path, compare_ref: &str) -> Result<Vec<ChangedRustFi
     Ok(files)
 }
 
-fn parse_name_status_z(bytes: &[u8]) -> Result<Vec<ChangedRustFile>> {
+fn parse_name_status_z(bytes: &[u8], scope: GitChangeScope) -> Result<Vec<ChangedRustFile>> {
     if bytes.is_empty() {
         return Ok(Vec::new());
     }
@@ -2099,9 +2184,155 @@ fn parse_name_status_z(bytes: &[u8]) -> Result<Vec<ChangedRustFile>> {
             old_path,
             package: None,
             hunks: Vec::new(),
+            scope_changes: vec![RustFileScopeChange {
+                scope,
+                status: status.to_string(),
+                additions: None,
+                deletions: None,
+                line_count_status: LineCountStatus::NotRead,
+            }],
         });
     }
     Ok(files)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GitNumstatRecord {
+    path: PathBuf,
+    old_path: Option<PathBuf>,
+    additions: Option<usize>,
+    deletions: Option<usize>,
+    line_count_status: LineCountStatus,
+}
+
+fn parse_numstat_z(bytes: &[u8]) -> Result<Vec<GitNumstatRecord>> {
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+    if !bytes.ends_with(&[0]) {
+        return Err(NekocodeError::External(
+            "malformed NUL-delimited git numstat output".to_string(),
+        ));
+    }
+
+    let mut fields = bytes[..bytes.len() - 1].split(|byte| *byte == 0);
+    let mut records = Vec::new();
+    while let Some(header) = fields.next() {
+        let mut columns = header.splitn(3, |byte| *byte == b'\t');
+        let additions = columns.next().ok_or_else(|| {
+            NekocodeError::External("git numstat entry has no additions column".to_string())
+        })?;
+        let deletions = columns.next().ok_or_else(|| {
+            NekocodeError::External("git numstat entry has no deletions column".to_string())
+        })?;
+        let path_field = columns.next().ok_or_else(|| {
+            NekocodeError::External("git numstat entry has no path column".to_string())
+        })?;
+
+        let (additions, deletions, line_count_status) = match (additions, deletions) {
+            (b"-", b"-") => (None, None, LineCountStatus::Binary),
+            (additions, deletions) => {
+                let additions = parse_numstat_count(additions, "additions")?;
+                let deletions = parse_numstat_count(deletions, "deletions")?;
+                (Some(additions), Some(deletions), LineCountStatus::Counted)
+            }
+        };
+
+        let (old_path, path) = if path_field.is_empty() {
+            let old_path = fields.next().ok_or_else(|| {
+                NekocodeError::External("git numstat rename or copy has no source path".to_string())
+            })?;
+            let path = fields.next().ok_or_else(|| {
+                NekocodeError::External(
+                    "git numstat rename or copy has no destination path".to_string(),
+                )
+            })?;
+            (
+                Some(git_path_from_bytes(old_path)?),
+                git_path_from_bytes(path)?,
+            )
+        } else {
+            (None, git_path_from_bytes(path_field)?)
+        };
+
+        records.push(GitNumstatRecord {
+            path,
+            old_path,
+            additions,
+            deletions,
+            line_count_status,
+        });
+    }
+    Ok(records)
+}
+
+fn parse_numstat_count(bytes: &[u8], label: &str) -> Result<usize> {
+    let value = std::str::from_utf8(bytes)
+        .map_err(|_| NekocodeError::External(format!("git numstat returned non-UTF-8 {label}")))?;
+    value.parse::<usize>().map_err(|_| {
+        NekocodeError::External(format!("git numstat returned invalid {label}: {value}"))
+    })
+}
+
+fn apply_numstat(
+    files: &mut [ChangedRustFile],
+    records: Vec<GitNumstatRecord>,
+    scope: GitChangeScope,
+) -> Result<()> {
+    for record in records {
+        let file = files
+            .iter_mut()
+            .find(|file| file.path == record.path)
+            .ok_or_else(|| {
+                NekocodeError::External(format!(
+                    "git numstat path was absent from name-status output: {}",
+                    record.path.display()
+                ))
+            })?;
+        if let (Some(name_status_old_path), Some(numstat_old_path)) =
+            (file.old_path.as_ref(), record.old_path.as_ref())
+        {
+            if name_status_old_path != numstat_old_path {
+                return Err(NekocodeError::External(format!(
+                    "git numstat rename source disagreed with name-status for {}",
+                    record.path.display()
+                )));
+            }
+        }
+        if file.old_path.is_none() && record.old_path.is_some() {
+            file.old_path = record.old_path;
+        }
+        let change = file
+            .scope_changes
+            .iter_mut()
+            .find(|change| change.scope == scope)
+            .ok_or_else(|| {
+                NekocodeError::External(format!(
+                    "git numstat scope was absent from name-status output: {}",
+                    record.path.display()
+                ))
+            })?;
+        if change.line_count_status != LineCountStatus::NotRead {
+            return Err(NekocodeError::External(format!(
+                "git numstat returned a duplicate path: {}",
+                record.path.display()
+            )));
+        }
+        change.additions = record.additions;
+        change.deletions = record.deletions;
+        change.line_count_status = record.line_count_status;
+    }
+    if let Some(file) = files.iter().find(|file| {
+        file.scope_changes.iter().any(|change| {
+            change.scope == scope && change.line_count_status == LineCountStatus::NotRead
+        })
+    }) {
+        return Err(NekocodeError::External(format!(
+            "git numstat omitted a path from name-status output: {}",
+            file.path.display()
+        )));
+    }
+    Ok(())
 }
 
 fn git_path_from_bytes(bytes: &[u8]) -> Result<PathBuf> {
@@ -2131,68 +2362,53 @@ fn git_context(
     let mut changed_files = Vec::new();
     let mut patch_parts = Vec::new();
     let mut commands = Vec::new();
+    let mut requested_scopes = Vec::new();
 
     if let Some(reference) = compare_ref {
         let spec = format!("{reference}...HEAD");
-        let args = vec![
-            "diff".to_string(),
-            "--relative".to_string(),
-            "--name-status".to_string(),
-            "-z".to_string(),
-            "--no-ext-diff".to_string(),
-            "--no-textconv".to_string(),
-            spec.clone(),
-        ];
-        changed_files.extend(parse_name_status_z(&run_git_bytes(
-            root, &args, "git diff",
-        )?)?);
-        commands.push(format!("git {}", args.join(" ")));
-        if include_patch {
-            let patch_args = vec![
-                "-c".to_string(),
-                "core.quotePath=false".to_string(),
-                "diff".to_string(),
-                "--relative".to_string(),
-                "--no-ext-diff".to_string(),
-                "--no-textconv".to_string(),
-                "--unified=3".to_string(),
-                spec,
-            ];
-            patch_parts.push(run_git(root, &patch_args, "git diff")?);
-            commands.push(format!("git {}", patch_args.join(" ")));
+        let collected = collect_git_diff_scope(
+            root,
+            GitChangeScope::Revision,
+            false,
+            Some(&spec),
+            include_patch,
+        )?;
+        requested_scopes.push(GitChangeScope::Revision);
+        changed_files.extend(collected.files);
+        if let Some(patch) = collected.patch {
+            patch_parts.push(patch);
         }
+        commands.extend(collected.commands);
     }
 
     if include_working_tree {
-        let base = compare_ref.unwrap_or("HEAD");
-        let args = vec![
-            "diff".to_string(),
-            "--relative".to_string(),
-            "--name-status".to_string(),
-            "-z".to_string(),
-            "--no-ext-diff".to_string(),
-            "--no-textconv".to_string(),
-            base.to_string(),
-        ];
-        changed_files.extend(parse_name_status_z(&run_git_bytes(
-            root, &args, "git diff",
-        )?)?);
-        commands.push(format!("git {}", args.join(" ")));
-        if include_patch {
-            let patch_args = vec![
-                "-c".to_string(),
-                "core.quotePath=false".to_string(),
-                "diff".to_string(),
-                "--relative".to_string(),
-                "--no-ext-diff".to_string(),
-                "--no-textconv".to_string(),
-                "--unified=3".to_string(),
-                base.to_string(),
-            ];
-            patch_parts.push(run_git(root, &patch_args, "git diff")?);
-            commands.push(format!("git {}", patch_args.join(" ")));
+        let staged_base = git_rev_parse(root, "HEAD");
+        let staged = collect_git_diff_scope(
+            root,
+            GitChangeScope::Staged,
+            true,
+            staged_base.as_deref(),
+            include_patch,
+        )?;
+        requested_scopes.push(GitChangeScope::Staged);
+        changed_files.extend(staged.files);
+        if let Some(patch) = staged.patch {
+            patch_parts.push(patch);
         }
+        commands.extend(staged.commands);
+
+        let unstaged =
+            collect_git_diff_scope(root, GitChangeScope::Unstaged, false, None, include_patch)?;
+        requested_scopes.push(GitChangeScope::Unstaged);
+        changed_files.extend(unstaged.files);
+        if let Some(patch) = unstaged.patch {
+            patch_parts.push(patch);
+        }
+        commands.extend(unstaged.commands);
+
+        requested_scopes.push(GitChangeScope::Untracked);
         let untracked = git_untracked_files(root)?;
+        commands.push("git ls-files --others --exclude-standard -z".to_string());
         for path in &untracked {
             changed_files.push(ChangedRustFile {
                 status: "??".to_string(),
@@ -2201,6 +2417,13 @@ fn git_context(
                 is_rust: is_rust_path(path),
                 package: None,
                 hunks: Vec::new(),
+                scope_changes: vec![RustFileScopeChange {
+                    scope: GitChangeScope::Untracked,
+                    status: "??".to_string(),
+                    additions: None,
+                    deletions: None,
+                    line_count_status: LineCountStatus::NotRead,
+                }],
             });
             if include_patch && include_untracked_content {
                 if let Some(patch) = untracked_patch(root, path) {
@@ -2211,6 +2434,7 @@ fn git_context(
     }
 
     changed_files = merge_changed_files(changed_files);
+    let change_scopes = summarize_change_scopes(&changed_files, &requested_scopes);
     let patch = patch_parts
         .into_iter()
         .filter(|part| !part.is_empty())
@@ -2232,6 +2456,7 @@ fn git_context(
         patch,
         patch_truncated: false,
         omitted_patch_bytes: 0,
+        change_scopes,
         provenance: Some(ToolProvenance {
             tool: "git diff".to_string(),
             command: if commands.is_empty() {
@@ -2245,6 +2470,90 @@ fn git_context(
         }),
     };
     Ok((changed_files, summary))
+}
+
+struct CollectedGitScope {
+    files: Vec<ChangedRustFile>,
+    patch: Option<String>,
+    commands: Vec<String>,
+}
+
+fn collect_git_diff_scope(
+    root: &Path,
+    scope: GitChangeScope,
+    cached: bool,
+    spec: Option<&str>,
+    include_patch: bool,
+) -> Result<CollectedGitScope> {
+    let mut name_status_args = vec!["diff".to_string()];
+    if cached {
+        name_status_args.push("--cached".to_string());
+    }
+    name_status_args.extend([
+        "--relative".to_string(),
+        "--name-status".to_string(),
+        "-z".to_string(),
+        "--no-ext-diff".to_string(),
+        "--no-textconv".to_string(),
+    ]);
+    if let Some(spec) = spec {
+        name_status_args.push(spec.to_string());
+    }
+    let mut files = parse_name_status_z(
+        &run_git_bytes(root, &name_status_args, "git diff --name-status")?,
+        scope,
+    )?;
+
+    let mut numstat_args = vec!["diff".to_string()];
+    if cached {
+        numstat_args.push("--cached".to_string());
+    }
+    numstat_args.extend([
+        "--relative".to_string(),
+        "--numstat".to_string(),
+        "-z".to_string(),
+        "--no-ext-diff".to_string(),
+        "--no-textconv".to_string(),
+    ]);
+    if let Some(spec) = spec {
+        numstat_args.push(spec.to_string());
+    }
+    let numstat = parse_numstat_z(&run_git_bytes(root, &numstat_args, "git diff --numstat")?)?;
+    apply_numstat(&mut files, numstat, scope)?;
+
+    let mut commands = vec![
+        format!("git {}", name_status_args.join(" ")),
+        format!("git {}", numstat_args.join(" ")),
+    ];
+    let patch = if include_patch {
+        let mut patch_args = vec![
+            "-c".to_string(),
+            "core.quotePath=false".to_string(),
+            "diff".to_string(),
+        ];
+        if cached {
+            patch_args.push("--cached".to_string());
+        }
+        patch_args.extend([
+            "--relative".to_string(),
+            "--no-ext-diff".to_string(),
+            "--no-textconv".to_string(),
+            "--unified=3".to_string(),
+        ]);
+        if let Some(spec) = spec {
+            patch_args.push(spec.to_string());
+        }
+        commands.push(format!("git {}", patch_args.join(" ")));
+        Some(run_git(root, &patch_args, "git diff")?)
+    } else {
+        None
+    };
+
+    Ok(CollectedGitScope {
+        files,
+        patch,
+        commands,
+    })
 }
 
 fn run_git_bytes(root: &Path, args: &[String], label: &str) -> Result<Vec<u8>> {
@@ -2298,7 +2607,7 @@ fn git_untracked_files(root: &Path) -> Result<Vec<PathBuf>> {
 
 fn merge_changed_files(files: Vec<ChangedRustFile>) -> Vec<ChangedRustFile> {
     let mut merged = Vec::new();
-    for file in files {
+    for mut file in files {
         if let Some(existing) = merged
             .iter_mut()
             .find(|item: &&mut ChangedRustFile| item.path == file.path)
@@ -2307,6 +2616,17 @@ fn merge_changed_files(files: Vec<ChangedRustFile>) -> Vec<ChangedRustFile> {
             if file.old_path.is_some() {
                 existing.old_path = file.old_path;
             }
+            for change in file.scope_changes.drain(..) {
+                if let Some(existing_change) = existing
+                    .scope_changes
+                    .iter_mut()
+                    .find(|candidate| candidate.scope == change.scope)
+                {
+                    *existing_change = change;
+                } else {
+                    existing.scope_changes.push(change);
+                }
+            }
             continue;
         }
         merged.push(file);
@@ -2314,22 +2634,79 @@ fn merge_changed_files(files: Vec<ChangedRustFile>) -> Vec<ChangedRustFile> {
     merged
 }
 
+fn summarize_change_scopes(
+    files: &[ChangedRustFile],
+    requested_scopes: &[GitChangeScope],
+) -> Vec<RustChangeScopeSummary> {
+    requested_scopes
+        .iter()
+        .copied()
+        .map(|scope| {
+            let mut summary = RustChangeScopeSummary {
+                scope,
+                file_count: 0,
+                rust_file_count: 0,
+                additions: 0,
+                deletions: 0,
+                counted_files: 0,
+                binary_files: 0,
+                not_read_files: 0,
+            };
+            for file in files {
+                let Some(change) = file
+                    .scope_changes
+                    .iter()
+                    .find(|change| change.scope == scope)
+                else {
+                    continue;
+                };
+                summary.file_count += 1;
+                summary.rust_file_count += usize::from(file.is_rust);
+                match change.line_count_status {
+                    LineCountStatus::Counted => {
+                        summary.counted_files += 1;
+                        summary.additions += change.additions.unwrap_or(0);
+                        summary.deletions += change.deletions.unwrap_or(0);
+                    }
+                    LineCountStatus::Binary => summary.binary_files += 1,
+                    LineCountStatus::NotRead => summary.not_read_files += 1,
+                }
+            }
+            summary
+        })
+        .collect()
+}
+
 fn parse_unified_hunks(text: &str) -> HashMap<PathBuf, Vec<RustDiffHunk>> {
     let mut result: HashMap<PathBuf, Vec<RustDiffHunk>> = HashMap::new();
     let mut current_path: Option<PathBuf> = None;
+    let mut in_hunk = false;
     for line in text.lines() {
+        if line.starts_with("diff --git ") {
+            current_path = None;
+            in_hunk = false;
+            continue;
+        }
+        if line.starts_with("@@") {
+            if let (Some(path), Some(hunk)) = (current_path.clone(), parse_hunk_header(line)) {
+                result.entry(path).or_default().push(hunk);
+            }
+            in_hunk = true;
+            continue;
+        }
+        if in_hunk {
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("--- a/") {
+            current_path = Some(PathBuf::from(path));
+            continue;
+        }
         if let Some(path) = line.strip_prefix("+++ b/") {
             current_path = Some(PathBuf::from(path));
             continue;
         }
-        if !line.starts_with("@@") {
+        if line == "+++ /dev/null" {
             continue;
-        }
-        let Some(hunk) = parse_hunk_header(line) else {
-            continue;
-        };
-        if let Some(path) = current_path.clone() {
-            result.entry(path).or_default().push(hunk);
         }
     }
     result
@@ -2891,8 +3268,11 @@ mod tests {
 
     #[test]
     fn parses_git_name_status_and_uses_new_path_for_rename() {
-        let files = parse_name_status_z(b"M\0src/lib.rs\0R100\0src/old.rs\0src/new.rs\0")
-            .expect("name-status should parse");
+        let files = parse_name_status_z(
+            b"M\0src/lib.rs\0R100\0src/old.rs\0src/new.rs\0",
+            GitChangeScope::Staged,
+        )
+        .expect("name-status should parse");
 
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].status, "M");
@@ -2900,6 +3280,28 @@ mod tests {
         assert_eq!(files[1].path, PathBuf::from("src/new.rs"));
         assert_eq!(files[1].old_path, Some(PathBuf::from("src/old.rs")));
         assert!(files[1].is_rust);
+        assert_eq!(files[1].scope_changes[0].scope, GitChangeScope::Staged);
+    }
+
+    #[test]
+    fn parses_git_numstat_for_text_rename_binary_and_utf8_paths() {
+        let records = parse_numstat_z(
+            b"3\t1\tsrc/lib.rs\0\
+              0\t0\t\0src/old.rs\0src/new.rs\0\
+              -\t-\tassets/blob.bin\0\
+              2\t0\tsrc/\xe5\xa4\x89\xe6\x9b\xb4.rs\0",
+        )
+        .expect("numstat should parse");
+
+        assert_eq!(records.len(), 4);
+        assert_eq!(records[0].additions, Some(3));
+        assert_eq!(records[0].deletions, Some(1));
+        assert_eq!(records[0].line_count_status, LineCountStatus::Counted);
+        assert_eq!(records[1].old_path, Some(PathBuf::from("src/old.rs")));
+        assert_eq!(records[1].path, PathBuf::from("src/new.rs"));
+        assert_eq!(records[2].line_count_status, LineCountStatus::Binary);
+        assert_eq!(records[2].additions, None);
+        assert_eq!(records[3].path, PathBuf::from("src/\u{5909}\u{66f4}.rs"));
     }
 
     #[test]
@@ -2929,6 +3331,22 @@ mod tests {
         assert_eq!(hunk.new_start, 13);
         assert_eq!(hunk.new_count, 4);
         assert_eq!(hunk.header.as_deref(), Some("fn demo"));
+    }
+
+    #[test]
+    fn unified_diff_content_cannot_impersonate_file_headers() {
+        let hunks = parse_unified_hunks(
+            "diff --git a/src/lib.rs b/src/lib.rs\n\
+             --- a/src/lib.rs\n\
+             +++ b/src/lib.rs\n\
+             @@ -1 +1 @@ first\n\
+             --- a/not-a-header.rs\n\
+             +++ b/not-a-header.rs\n\
+             @@ -8 +8 @@ second\n",
+        );
+
+        assert_eq!(hunks[&PathBuf::from("src/lib.rs")].len(), 2);
+        assert!(!hunks.contains_key(&PathBuf::from("not-a-header.rs")));
     }
 
     #[test]
