@@ -1,6 +1,6 @@
 # Current task — Rust-first context layer
 
-Updated: 2026-08-23
+Updated: 2026-08-24
 
 ## Product
 
@@ -29,6 +29,15 @@ workflow and stop conditions.
   machine contract;
 - external baseline path redaction plus exact error/warning multiset deltas,
   covered by the repository's Rust golden fixture;
+- Cargo workspace discovery from a workspace root, nested directory, or source
+  file, with Cargo's reported workspace root used as the canonical boundary;
+- NUL-delimited Git path collection and unquoted UTF-8 patch paths, so Japanese
+  tracked and untracked paths remain readable and hunks stay associated;
+- incomplete snapshot evidence and an explicit limitation when `cargo check`
+  fails operationally, times out, or exceeds its output limit;
+- a read-only Nyash repository probe using its nested `src` path, confirming
+  workspace discovery, readable Japanese paths, incomplete offline-failure
+  evidence, and an unchanged target Git status;
 - Codex Skill v0;
 - final legacy recovery tag and archive branch;
 - physical removal of the old root crate, multi-binary workspace, analyzers,

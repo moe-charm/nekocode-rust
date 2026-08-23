@@ -908,13 +908,27 @@ pub fn build_rust_snapshot_with_mode(
     } else {
         AnalysisMode::MetadataOnly
     };
+    let mut limitations = if include_diagnostics {
+        vec![
+            "cargo-check may execute trusted workspace build scripts and procedural macros."
+                .to_string(),
+        ]
+    } else {
+        vec!["Compiler diagnostics were not requested.".to_string()]
+    };
+    if include_diagnostics && !artifact_status_is_complete(status) {
+        limitations.push(format!(
+            "cargo check did not produce a complete diagnostic observation (status: {}).",
+            artifact_status_name(status)
+        ));
+    }
     let mut snapshot = RustContextSnapshot {
         contract_version: SNAPSHOT_CONTRACT_VERSION.to_string(),
         artifact_kind: "snapshot".to_string(),
         status,
         analysis_mode,
         schema_version: SCHEMA_VERSION,
-        evidence: EvidenceLevel::ToolConfirmed,
+        evidence: evidence_for_artifact_status(status),
         execution_policy: if include_diagnostics {
             cargo_execution_policy()
         } else {
@@ -924,14 +938,7 @@ pub fn build_rust_snapshot_with_mode(
         workspace,
         diagnostics,
         canonical_hash: None,
-        limitations: if include_diagnostics {
-            vec![
-                "cargo-check may execute trusted workspace build scripts and procedural macros."
-                    .to_string(),
-            ]
-        } else {
-            vec!["Compiler diagnostics were not requested.".to_string()]
-        },
+        limitations,
         omissions: Vec::new(),
     };
     snapshot.canonical_hash = Some(canonical_snapshot_hash(&snapshot)?);
@@ -1089,10 +1096,10 @@ fn normalize_hash_value(value: &mut serde_json::Value, key: Option<&str>, worksp
 
 /// Read Cargo workspace metadata without attempting to parse Rust semantics.
 pub fn index_rust_workspace(path: impl AsRef<Path>) -> Result<RustWorkspaceSnapshot> {
-    let root = normalize_workspace_root(path.as_ref())?;
+    let manifest_root = discover_manifest_root(path.as_ref())?;
     let command = "cargo metadata --format-version=1 --no-deps --offline --config 'build.rustc-wrapper=\"\"' --config 'build.rustc-workspace-wrapper=\"\"'".to_string();
     let mut cargo = Command::new("cargo");
-    cargo.current_dir(&root).args([
+    cargo.current_dir(&manifest_root).args([
         "metadata",
         "--format-version=1",
         "--no-deps",
@@ -1133,6 +1140,12 @@ pub fn index_rust_workspace(path: impl AsRef<Path>) -> Result<RustWorkspaceSnaps
         .map(PathBuf::from)
         .ok_or_else(|| {
             NekocodeError::External("cargo metadata omitted workspace_root".to_string())
+        })?
+        .canonicalize()
+        .map_err(|error| {
+            NekocodeError::External(format!(
+                "cargo metadata returned an invalid workspace_root: {error}"
+            ))
         })?;
 
     let packages = metadata
@@ -1154,12 +1167,12 @@ pub fn index_rust_workspace(path: impl AsRef<Path>) -> Result<RustWorkspaceSnaps
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let inputs = collect_input_digests(&root, &packages);
+    let inputs = collect_input_digests(&workspace_root, &packages);
 
     Ok(RustWorkspaceSnapshot {
         schema_version: SCHEMA_VERSION,
         evidence: EvidenceLevel::ToolConfirmed,
-        root: root.clone(),
+        root: workspace_root.clone(),
         workspace_root,
         toolchain,
         packages,
@@ -1168,7 +1181,7 @@ pub fn index_rust_workspace(path: impl AsRef<Path>) -> Result<RustWorkspaceSnaps
         provenance: ToolProvenance {
             tool: "cargo metadata".to_string(),
             command,
-            cwd: root,
+            cwd: manifest_root,
             version: command_version("cargo"),
             exit_code: Some(0),
         },
@@ -1500,10 +1513,22 @@ fn diagnostic_status(run: &RustDiagnosticRun) -> ArtifactStatus {
 }
 
 fn diagnostic_run_is_complete(run: &RustDiagnosticRun) -> bool {
+    artifact_status_is_complete(diagnostic_status(run))
+}
+
+fn artifact_status_is_complete(status: ArtifactStatus) -> bool {
     matches!(
-        diagnostic_status(run),
+        status,
         ArtifactStatus::CompletedClean | ArtifactStatus::CompletedWithDiagnostics
     )
+}
+
+fn evidence_for_artifact_status(status: ArtifactStatus) -> EvidenceLevel {
+    if artifact_status_is_complete(status) {
+        EvidenceLevel::ToolConfirmed
+    } else {
+        EvidenceLevel::Incomplete
+    }
 }
 
 fn omissions_for_pack(pack: &RustContextPack) -> Vec<Omission> {
@@ -1801,24 +1826,27 @@ fn pop_diagnostic_delta_item(delta: &mut RustDiagnosticDelta) -> bool {
         .is_some()
 }
 
-fn normalize_workspace_root(path: &Path) -> Result<PathBuf> {
+fn discover_manifest_root(path: &Path) -> Result<PathBuf> {
     let candidate = path.canonicalize()?;
-    let root = if candidate.is_file() {
+    let start = if candidate.is_file() {
         candidate
             .parent()
-            .ok_or_else(|| NekocodeError::Config("Cargo.toml has no parent directory".to_string()))?
+            .ok_or_else(|| NekocodeError::Config("input file has no parent directory".to_string()))?
             .to_path_buf()
     } else {
         candidate
     };
 
-    if !root.join("Cargo.toml").is_file() {
-        return Err(NekocodeError::Config(format!(
-            "Rust workspace not found: {}",
-            root.display()
-        )));
+    for ancestor in start.ancestors() {
+        if ancestor.join("Cargo.toml").is_file() {
+            return Ok(ancestor.to_path_buf());
+        }
     }
-    Ok(root)
+
+    Err(NekocodeError::Config(format!(
+        "Rust workspace not found at or above: {}",
+        start.display()
+    )))
 }
 
 fn collect_input_digests(root: &Path, packages: &[RustPackage]) -> Vec<RustInputDigest> {
@@ -2013,33 +2041,65 @@ fn git_changed_files(root: &Path, compare_ref: &str) -> Result<Vec<ChangedRustFi
     Ok(files)
 }
 
-fn parse_name_status(text: &str) -> Result<Vec<ChangedRustFile>> {
-    text.lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            let fields = line.split('\t').collect::<Vec<_>>();
-            let status = fields.first().copied().ok_or_else(|| {
-                NekocodeError::External("malformed git name-status output".to_string())
+fn parse_name_status_z(bytes: &[u8]) -> Result<Vec<ChangedRustFile>> {
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+    if !bytes.ends_with(&[0]) {
+        return Err(NekocodeError::External(
+            "malformed NUL-delimited git name-status output".to_string(),
+        ));
+    }
+
+    let mut fields = bytes[..bytes.len() - 1].split(|byte| *byte == 0);
+    let mut files = Vec::new();
+    while let Some(status_bytes) = fields.next() {
+        let status = std::str::from_utf8(status_bytes).map_err(|_| {
+            NekocodeError::External("git returned a non-UTF-8 change status".to_string())
+        })?;
+        if status.is_empty() {
+            return Err(NekocodeError::External(
+                "git returned an empty change status".to_string(),
+            ));
+        }
+
+        let renamed = status.starts_with('R') || status.starts_with('C');
+        let first_path = fields
+            .next()
+            .ok_or_else(|| NekocodeError::External("git change has no path".to_string()))?;
+        let (old_path, path) = if renamed {
+            let new_path = fields.next().ok_or_else(|| {
+                NekocodeError::External("git rename or copy has no destination path".to_string())
             })?;
-            let path = fields
-                .last()
-                .ok_or_else(|| NekocodeError::External("git change has no path".to_string()))?;
-            Ok(ChangedRustFile {
-                status: status.to_string(),
-                path: PathBuf::from(path),
-                old_path: if (status.starts_with('R') || status.starts_with('C'))
-                    && fields.len() >= 3
-                {
-                    Some(PathBuf::from(fields[1]))
-                } else {
-                    None
-                },
-                is_rust: is_rust_path(Path::new(path)),
-                package: None,
-                hunks: Vec::new(),
-            })
-        })
-        .collect()
+            (
+                Some(git_path_from_bytes(first_path)?),
+                git_path_from_bytes(new_path)?,
+            )
+        } else {
+            (None, git_path_from_bytes(first_path)?)
+        };
+
+        files.push(ChangedRustFile {
+            status: status.to_string(),
+            is_rust: is_rust_path(&path),
+            path,
+            old_path,
+            package: None,
+            hunks: Vec::new(),
+        });
+    }
+    Ok(files)
+}
+
+fn git_path_from_bytes(bytes: &[u8]) -> Result<PathBuf> {
+    let path = std::str::from_utf8(bytes)
+        .map_err(|_| NekocodeError::External("git returned a non-UTF-8 path".to_string()))?;
+    if path.is_empty() {
+        return Err(NekocodeError::External(
+            "git returned an empty path".to_string(),
+        ));
+    }
+    Ok(PathBuf::from(path))
 }
 
 fn git_context(
@@ -2065,14 +2125,19 @@ fn git_context(
             "diff".to_string(),
             "--relative".to_string(),
             "--name-status".to_string(),
+            "-z".to_string(),
             "--no-ext-diff".to_string(),
             "--no-textconv".to_string(),
             spec.clone(),
         ];
-        changed_files.extend(parse_name_status(&run_git(root, &args, "git diff")?)?);
+        changed_files.extend(parse_name_status_z(&run_git_bytes(
+            root, &args, "git diff",
+        )?)?);
         commands.push(format!("git {}", args.join(" ")));
         if include_patch {
             let patch_args = vec![
+                "-c".to_string(),
+                "core.quotePath=false".to_string(),
                 "diff".to_string(),
                 "--relative".to_string(),
                 "--no-ext-diff".to_string(),
@@ -2091,14 +2156,19 @@ fn git_context(
             "diff".to_string(),
             "--relative".to_string(),
             "--name-status".to_string(),
+            "-z".to_string(),
             "--no-ext-diff".to_string(),
             "--no-textconv".to_string(),
             base.to_string(),
         ];
-        changed_files.extend(parse_name_status(&run_git(root, &args, "git diff")?)?);
+        changed_files.extend(parse_name_status_z(&run_git_bytes(
+            root, &args, "git diff",
+        )?)?);
         commands.push(format!("git {}", args.join(" ")));
         if include_patch {
             let patch_args = vec![
+                "-c".to_string(),
+                "core.quotePath=false".to_string(),
                 "diff".to_string(),
                 "--relative".to_string(),
                 "--no-ext-diff".to_string(),
@@ -2164,7 +2234,7 @@ fn git_context(
     Ok((changed_files, summary))
 }
 
-fn run_git(root: &Path, args: &[String], label: &str) -> Result<String> {
+fn run_git_bytes(root: &Path, args: &[String], label: &str) -> Result<Vec<u8>> {
     let output = Command::new("git")
         .current_dir(root)
         .args(args)
@@ -2176,7 +2246,11 @@ fn run_git(root: &Path, args: &[String], label: &str) -> Result<String> {
             &output.stderr,
         )));
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(output.stdout)
+}
+
+fn run_git(root: &Path, args: &[String], label: &str) -> Result<String> {
+    Ok(String::from_utf8_lossy(&run_git_bytes(root, args, label)?).into_owned())
 }
 
 fn git_rev_parse(root: &Path, reference: &str) -> Option<String> {
@@ -2192,12 +2266,21 @@ fn git_untracked_files(root: &Path) -> Result<Vec<PathBuf>> {
         "ls-files".to_string(),
         "--others".to_string(),
         "--exclude-standard".to_string(),
+        "-z".to_string(),
     ];
-    Ok(run_git(root, &args, "git ls-files")?
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(PathBuf::from)
-        .collect())
+    let output = run_git_bytes(root, &args, "git ls-files")?;
+    if output.is_empty() {
+        return Ok(Vec::new());
+    }
+    if !output.ends_with(&[0]) {
+        return Err(NekocodeError::External(
+            "malformed NUL-delimited git ls-files output".to_string(),
+        ));
+    }
+    output[..output.len() - 1]
+        .split(|byte| *byte == 0)
+        .map(git_path_from_bytes)
+        .collect()
 }
 
 fn merge_changed_files(files: Vec<ChangedRustFile>) -> Vec<ChangedRustFile> {
@@ -2795,7 +2878,7 @@ mod tests {
 
     #[test]
     fn parses_git_name_status_and_uses_new_path_for_rename() {
-        let files = parse_name_status("M\tsrc/lib.rs\nR100\tsrc/old.rs\tsrc/new.rs\n")
+        let files = parse_name_status_z(b"M\0src/lib.rs\0R100\0src/old.rs\0src/new.rs\0")
             .expect("name-status should parse");
 
         assert_eq!(files.len(), 2);
@@ -2804,6 +2887,22 @@ mod tests {
         assert_eq!(files[1].path, PathBuf::from("src/new.rs"));
         assert_eq!(files[1].old_path, Some(PathBuf::from("src/old.rs")));
         assert!(files[1].is_rust);
+    }
+
+    #[test]
+    fn snapshot_evidence_is_incomplete_when_the_tool_did_not_finish() {
+        assert_eq!(
+            evidence_for_artifact_status(ArtifactStatus::ToolFailed),
+            EvidenceLevel::Incomplete
+        );
+        assert_eq!(
+            evidence_for_artifact_status(ArtifactStatus::TimedOut),
+            EvidenceLevel::Incomplete
+        );
+        assert_eq!(
+            evidence_for_artifact_status(ArtifactStatus::CompletedWithDiagnostics),
+            EvidenceLevel::ToolConfirmed
+        );
     }
 
     #[test]

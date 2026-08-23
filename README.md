@@ -51,6 +51,11 @@ cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --working-tree --include-untracked-content
 ```
 
+`PATH` may be the Cargo workspace/package root, a nested directory such as
+`src`, or an existing source file. NekoCode searches upward for the nearest
+`Cargo.toml`, asks Cargo for the canonical workspace root, and uses that root
+consistently for Cargo and Git evidence.
+
 ### Human-readable change summary
 
 `context` returns the versioned `context-v1` JSON artifact by default. Add
@@ -101,7 +106,10 @@ budget fields, and `limitations`. When a request is too large, NekoCode
 records what was omitted instead of silently presenting an incomplete result as
 complete. Source excerpts are display context around Git hunks; they are not
 symbol resolution. Untracked contents are markers by default and require
-`--include-untracked-content`.
+`--include-untracked-content`. Git filenames are collected with NUL-delimited
+output so UTF-8 names are preserved without Git's octal quoting. An operational
+Cargo failure, timeout, or output limit produces `evidence: incomplete`, never
+`tool-confirmed`.
 
 ### MCP and workflow integrations
 
@@ -199,6 +207,10 @@ cargo run -q -p nekocode -- context . \
   --baseline /tmp/nekocode-baseline.json --diagnostics
 ```
 
+`PATH`にはCargo workspace/packageのrootだけでなく、`src`のような配下directoryや
+既存source fileも指定できます。最も近い`Cargo.toml`を上方向へ探し、Cargoが返した
+workspace rootをCargo/Git根拠の共通境界として使います。
+
 `context`の既定出力は、versioned contractである`context-v1` JSONです。
 人が差分を素早く確認するときだけ`--format summary`を指定します。サマリーには
 変更ファイル・hunk・表示できたpatchの増減行数・compiler診断とdelta・比較可能性・
@@ -218,7 +230,9 @@ diagnostic runへ保持しますが、delta件数には混ぜません。workspa
 予算超過時は省略数と`limitations`をJSONへ残します。source excerptはGit hunk周辺の
 表示補助であり、symbol/reference解決ではありません。cargo-checkはtrusted
 workspaceでのみ明示的に実行し、応答の`execution_policy`にoffline・環境allowlist・
-専用target・未実装のOS network isolationを記録します。
+専用target・未実装のOS network isolationを記録します。Git pathはNUL区切りで取得し、
+日本語などのUTF-8 filenameを8進escapeへ変えず保持します。Cargoの実行失敗・timeout・
+出力上限到達時は`evidence: incomplete`とし、`tool-confirmed`にはしません。
 
 ### MCP・Skill・Pluginの境界
 

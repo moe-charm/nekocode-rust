@@ -1,4 +1,4 @@
-use nekocode_core::build_rust_snapshot;
+use nekocode_core::{build_rust_snapshot, ArtifactStatus, EvidenceLevel};
 use std::fs;
 use tempfile::tempdir;
 
@@ -67,4 +67,18 @@ fn main() {
     assert!(report.contains("offline=true"));
     assert!(report.contains("nekocode-rust-first-target"));
     assert!(report.contains("wrapper=\n"));
+
+    fs::write(
+        root.join("build.rs"),
+        "fn main() { std::process::exit(9); }\n",
+    )
+    .expect("failing build script");
+    let failed = build_rust_snapshot(root, true, false)
+        .expect("an operational Cargo failure should remain a snapshot artifact");
+    assert_eq!(failed.status, ArtifactStatus::ToolFailed);
+    assert_eq!(failed.evidence, EvidenceLevel::Incomplete);
+    assert!(failed.limitations.iter().any(|limitation| {
+        limitation.contains("did not produce a complete diagnostic observation")
+            && limitation.contains("tool_failed")
+    }));
 }

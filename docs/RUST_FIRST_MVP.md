@@ -75,12 +75,17 @@ is `metadata-only` and must not run `build.rs` or procedural macros.
 
 The canonical payload hash excludes timestamps and storage paths. Path values
 in the artifact are normalized to the workspace boundary where possible.
+The input path may be the workspace/package root, a nested directory, or an
+existing file. NekoCode searches ancestors for the nearest manifest and then
+uses Cargo metadata's canonical workspace root for subsequent observations.
 
 ## Context contract
 
 The external artifact is `context-v1`. It contains the caller-selected Git
 base, staged/unstaged/working-tree change markers, hunks, bounded excerpts,
 optional compiler diagnostics, and explicit status/provenance/budget fields.
+Git filename lists use NUL delimiters and patches disable non-ASCII path
+quoting, preserving UTF-8 paths and their hunk association.
 
 `compare_ref` selects a Git change set; it never recreates compiler output for
 an old commit. A diagnostic delta requires a saved snapshot containing a
@@ -126,7 +131,8 @@ partial
 ```
 
 Compiler errors are observations. Operational failures are separate from a
-valid diagnostic stream.
+valid diagnostic stream. A failed, timed-out, output-limited, or partial
+diagnostic run sets the enclosing artifact evidence to `incomplete`.
 
 ## Budget and evidence
 

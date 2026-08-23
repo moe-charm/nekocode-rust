@@ -110,6 +110,7 @@ fn explains_a_fixed_golden_error_without_leaking_the_external_baseline_path() {
     let baseline = build_rust_snapshot(&workspace, true, false)
         .expect("the compiler error should be captured as baseline evidence");
     assert_eq!(baseline.status, ArtifactStatus::CompletedWithDiagnostics);
+    assert_eq!(baseline.evidence, EvidenceLevel::ToolConfirmed);
     let baseline_path = directory.path().join("baseline.json");
     write_rust_snapshot(&baseline_path, &baseline).expect("external baseline file");
 

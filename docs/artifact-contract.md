@@ -31,6 +31,9 @@ The artifact records, as applicable:
 
 Cargo metadata parsing must pin a machine-readable format version, tolerate
 unknown fields, and avoid assuming a fixed future enum set.
+`PATH` may identify a manifest root, nested directory, or existing file. The
+nearest ancestor manifest is used to invoke Cargo, and Cargo's canonical
+workspace root becomes the artifact and Git boundary.
 
 ## Context
 
@@ -47,6 +50,9 @@ with the current workspace observation. It may contain:
 The default Git base is explicit `HEAD` or a caller-provided ref. NekoCode does
 not infer a merge base. Untracked content is reported as a marker by default;
 reading it requires an explicit option.
+Filename collection uses NUL-delimited Git output so UTF-8 names are not
+stored as quoted octal text. Patch collection disables non-ASCII pathname
+quoting so a changed file and its hunks remain associated.
 
 JSON is the canonical `context-v1` representation. A human-readable summary
 may project fields from the completed core artifact, but it must not infer new
@@ -100,6 +106,8 @@ The fixed truncation order is:
 
 Every omitted group has a reason, count, and priority. Silent truncation and
 an incomplete artifact labelled complete are forbidden.
+Operational diagnostic failures, timeouts, output limits, and partial runs set
+the enclosing artifact evidence to `incomplete` and record a limitation.
 
 ## Versioning and parity
 

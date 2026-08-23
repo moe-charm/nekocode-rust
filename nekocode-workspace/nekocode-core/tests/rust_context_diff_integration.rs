@@ -234,7 +234,7 @@ fn metadata_snapshot_has_stable_contract_and_safe_public_paths() {
         "[package]\nname = \"metadata-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
     )
     .expect("manifest");
-    fs::create_dir(root.join("src")).expect("src directory");
+    fs::create_dir_all(root.join("src/nested")).expect("nested src directory");
     fs::write(root.join("src/lib.rs"), "pub fn stable() {}\n").expect("source");
 
     let first = build_rust_snapshot(root, false, false).expect("snapshot should build");
@@ -243,11 +243,70 @@ fn metadata_snapshot_has_stable_contract_and_safe_public_paths() {
     assert_eq!(first.analysis_mode, AnalysisMode::MetadataOnly);
     assert_eq!(first.canonical_hash, second.canonical_hash);
 
+    let from_src = build_rust_snapshot(root.join("src"), false, false)
+        .expect("a nested source directory should discover its Cargo workspace");
+    let from_file = build_rust_snapshot(root.join("src/lib.rs"), false, false)
+        .expect("a Rust source file should discover its Cargo workspace");
+    let canonical_root = root.canonicalize().expect("workspace should canonicalize");
+    assert_eq!(from_src.workspace.root, canonical_root);
+    assert_eq!(from_file.workspace.root, canonical_root);
+    assert_eq!(from_src.workspace.workspace_root, canonical_root);
+    assert_eq!(from_file.workspace.workspace_root, canonical_root);
+
     let public = sanitize_snapshot_for_output(&first).expect("public view should serialize");
     assert_eq!(public.workspace.root, std::path::Path::new("$WORKSPACE"));
     assert!(!serde_json::to_string(&public)
         .expect("public snapshot should serialize")
         .contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn unicode_git_paths_are_preserved_in_context_and_summary() {
+    let directory = tempdir().expect("temporary repository");
+    let root = directory.path();
+    fs::create_dir(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"unicode-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(root.join("src/lib.rs"), "pub fn stable() {}\n").expect("source");
+    fs::write(root.join("src/予定.rs"), "pub fn before() -> u32 { 1 }\n")
+        .expect("tracked Unicode source");
+
+    git(root, &["init", "-q"]);
+    git(root, &["config", "user.email", "context@example.invalid"]);
+    git(root, &["config", "user.name", "Context Fixture"]);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "initial"]);
+
+    fs::write(root.join("src/予定.rs"), "pub fn after() -> u32 { 2 }\n")
+        .expect("modified Unicode source");
+    fs::write(root.join("src/追加.rs"), "pub fn added() {}\n").expect("untracked Unicode source");
+
+    let mut options = RustContextOptions::new(Some("HEAD".to_string()), 8_000);
+    options.include_working_tree = true;
+    let pack = build_rust_context_with_config(root, options).expect("context should build");
+
+    let tracked = pack
+        .changed_files
+        .iter()
+        .find(|file| file.path == Path::new("src/予定.rs"))
+        .expect("tracked Unicode path should be preserved");
+    assert_eq!(tracked.status, "M");
+    assert!(!tracked.hunks.is_empty());
+    assert!(pack.changed_files.iter().any(|file| {
+        file.path == Path::new("src/追加.rs") && file.status == "??" && file.is_rust
+    }));
+    assert!(pack
+        .diff
+        .as_ref()
+        .is_some_and(|diff| diff.patch.contains("+++ b/src/予定.rs")));
+
+    let summary = format_context_summary(&pack);
+    assert!(summary.contains("src/予定.rs"));
+    assert!(summary.contains("src/追加.rs"));
+    assert!(!summary.contains("\\344"));
 }
 
 #[test]
