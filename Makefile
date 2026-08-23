@@ -6,31 +6,27 @@
 # 🎯 Default target: canonical Rust-first CLI staging
 all: rust-first-release
 
-# 🔧 Debug build (5 binaries)
+# 🔧 Canonical debug build
 debug:
-	@echo "🔧 Building NekoCode 5-binary toolchain (debug)..."
-	@cd nekocode-workspace && cargo build
+	@echo "🔧 Building canonical NekoCode CLI (debug)..."
+	@cd nekocode-workspace && cargo build -p nekocode
 	@echo "✅ Debug build complete!"
 
-# 🏗️ Core build step for 5 binaries
+# 🏗️ Canonical release build
 build:
-	@echo "🚀 Building NekoCode 5-binary toolchain (release)..."
-	@cd nekocode-workspace && cargo build --release
+	@echo "🚀 Building canonical NekoCode CLI (release)..."
+	@cd nekocode-workspace && cargo build -p nekocode --release
 	@echo "✅ Release build complete!"
 
-# 🎊 Full release: build + copy + setup
-release: build update-binaries setup
-	@echo "🎊 NekoCode 5-binary release complete!"
-	@echo "📋 Available commands:"
-	@echo "  ./bin/nekocode         - Core analysis engine (16MB)"
-	@echo "  ./bin/nekorefactor     - Smart refactoring + strip-comments (2.8MB)"
-	@echo "  ./bin/nekoimpact       - Change impact analysis (2.8MB)"
-	@echo "  ./bin/nekoinc          - Incremental analysis (3.1MB)"
-	@echo "  ./bin/nekomcp          - MCP integration (3.6MB)"
+# 🎊 Canonical release staging
+release: rust-first-release
 
 # Explicit names for the historical five-binary route.
-legacy-release: release
-legacy-install: install
+legacy-release: update-binaries setup
+legacy-install: legacy-release
+	@echo "📥 Installing legacy binaries to ~/.local/bin/..."
+	@mkdir -p ~/.local/bin
+	@for binary in nekocode nekorefactor nekoimpact nekoinc nekomcp; do ln -sf $$(pwd)/bin/$$binary ~/.local/bin/$$binary; done
 
 # 🦀 Explicit Rust-first release: stage only the canonical nekocode CLI.
 # The historical five-binary targets above remain unchanged for compatibility.
@@ -81,8 +77,9 @@ setup:
 
 # 🧪 Run all tests
 test:
-	@echo "🧪 Running workspace tests..."
+	@echo "🧪 Running canonical Rust-first tests..."
 	@cd nekocode-workspace && cargo test
+	@python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 
 # 🚀 Quick functionality test of all 5 binaries
 quick-test: legacy-release
@@ -110,21 +107,8 @@ clean-all: clean
 	@rm -rf bin/* releases/*
 	@echo "✅ Complete cleanup done!"
 
-# 📥 Install all 5 legacy binaries to ~/.local/bin
-install: legacy-release
-	@echo "📥 Installing 5 binaries to ~/.local/bin/..."
-	@mkdir -p ~/.local/bin
-	@ln -sf $$(pwd)/bin/nekocode ~/.local/bin/nekocode
-	@ln -sf $$(pwd)/bin/nekorefactor ~/.local/bin/nekorefactor
-	@ln -sf $$(pwd)/bin/nekoimpact ~/.local/bin/nekoimpact
-	@ln -sf $$(pwd)/bin/nekoinc ~/.local/bin/nekoinc
-	@ln -sf $$(pwd)/bin/nekomcp ~/.local/bin/nekomcp
-	@echo "✅ Installed! Available commands:"
-	@echo "  nekocode --help"
-	@echo "  nekorefactor strip-comments --help"
-	@echo "  nekoimpact --help"
-	@echo "  nekoinc --help"
-	@echo "  nekomcp --help"
+# 📥 Canonical install
+install: rust-first-install
 
 # 📖 Help
 help:
@@ -150,9 +134,6 @@ help:
 	@echo "  make clean-all     - Clean everything including bin/"
 	@echo ""
 	@echo "📥 Installation:"
-	@echo "  make install       - Legacy alias for legacy-install"
+	@echo "  make install       - Install canonical CLI/MCP wrappers"
 	@echo ""
-	@echo "🎊 After 'make', use:"
-	@echo "  ./bin/nekocode --help"
-	@echo "  ./bin/nekorefactor strip-comments --help"
-	@echo "  ./bin/quick-setup.sh"
+	@echo "🎊 After 'make', use ./releases/nekocode snapshot --help"

@@ -35,6 +35,11 @@ cargo test -p nekocode-core
 cargo check -p nekocode
 ```
 
+The `nekocode` package has `autolib = false`: its canonical binary no longer
+compiles or exposes the retained analyzer/session library. Cargo
+`default-members` likewise excludes the old standalone binaries. Building a
+legacy member now requires an explicit package name or `--workspace`.
+
 ## Target physical shape
 
 The long-term shape is a small core plus adapters. The current workspace has

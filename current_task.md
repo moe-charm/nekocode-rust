@@ -58,7 +58,7 @@ nekocode context PATH --baseline baseline.json --diagnostics
 - Phase 1（core契約・snapshot改名・schema・parity）: 実装済み（CLI snapshot、index alias、MCP二tool、schema/omission/comparabilityを追加）
 - Phase 2（診断delta・budget・安全性fixture）: 実装済み（cargo-checkはtrusted workspaceで明示opt-in、timeout/process group、output cap、offline、環境allowlist、専用target、symlink jailを追加）。OS sandboxは未実装
 - Phase 3（Skill v0）: 実装済み（`skills/nekocode-rust-context/SKILL.md`。CLI/MCPの呼び出し順序・停止条件・根拠提示のみ）
-- Phase 4（MCP hardening・legacy archive）: parityと安全性ゲート後
+- Phase 4（MCP hardening・legacy archive）: 進行中（CLIを2コマンドへ縮小し、Cargo/Makeの一般導線をcanonical defaultへ変更。物理archive前のfinal tag/read-only archiveは未実施）
 
 検証メモ: workspace test、core/CLI check、snapshot/context smoke、schemaチェック、Rust-first MCP smoke、build.rs/proc-macroを含む実行安全性fixtureは通過済み。legacy crateのwarning-freeは現行契約ではない。
 

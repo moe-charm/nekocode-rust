@@ -48,3 +48,8 @@ and presentation layers, not replacements for the legacy analyzer.
 
 The migration is complete when a clean checkout has one supported CLI, two
 MCP tools, no hidden state, and no legacy feature claim in the primary docs.
+
+As of 2026-08-23, plain Cargo build/test and the generic Make targets resolve
+to `nekocode-core` plus the two-command `nekocode` CLI. Legacy workspace
+members and their explicit `legacy-*` recovery targets remain until the final
+tag/archive gate is completed.

@@ -80,6 +80,13 @@ jobs:
       - name: Check canonical CLI package
         run: cargo check -p nekocode --all-targets
 
+      - name: Verify the canonical CLI exposes only two use cases
+        run: |
+          cargo run -q -p nekocode -- --help > /tmp/nekocode-help.txt
+          grep -Eq '^  snapshot  ' /tmp/nekocode-help.txt
+          grep -Eq '^  context   ' /tmp/nekocode-help.txt
+          ! grep -Eq '^  (session-|deadcode|refactor|impact|watch)' /tmp/nekocode-help.txt
+
       - name: Smoke-test Rust snapshot output
         run: cargo run -q -p nekocode -- snapshot . --output /tmp/nekocode-rust-snapshot.json && test -s /tmp/nekocode-rust-snapshot.json
 
@@ -100,4 +107,4 @@ jobs:
           bash -n scripts/update_rust_first_release.sh
           bash -n nekocode-workspace/build.sh nekocode-workspace/build-and-deploy.sh
           python3 -m py_compile releases/setup.py
-          make -n rust-first-release rust-first-install
+          make -n build test release install rust-first-release rust-first-install

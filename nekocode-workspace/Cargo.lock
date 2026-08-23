@@ -1008,25 +1008,9 @@ dependencies = [
 name = "nekocode"
 version = "1.2.0"
 dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
  "clap",
- "env_logger",
- "log",
  "nekocode-core",
- "serde",
  "serde_json",
- "tokio",
- "tree-sitter",
- "tree-sitter-c-sharp",
- "tree-sitter-cpp",
- "tree-sitter-go",
- "tree-sitter-javascript",
- "tree-sitter-python",
- "tree-sitter-rust",
- "tree-sitter-typescript",
- "walkdir",
 ]
 
 [[package]]

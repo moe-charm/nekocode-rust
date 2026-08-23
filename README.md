@@ -109,14 +109,15 @@ does not add another analyzer or execution path.
 
 ```bash
 cd nekocode-workspace
-cargo test --workspace
-cargo check --workspace --all-targets
+cargo test
+cargo check --all-targets
 cd ..
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
-The workspace still contains recoverable legacy crates, so warning-free legacy
-builds are not part of the current contract. Rust-first fixtures, schema,
+Plain `cargo build`, `cargo check`, and `cargo test` use only the canonical
+core and CLI through Cargo `default-members`. Recoverable legacy crates require
+an explicit package or `--workspace`. Rust-first fixtures, schema,
 safety fixtures, and CLI/MCP smoke tests are the promotion gate for future
 semantic backends.
 

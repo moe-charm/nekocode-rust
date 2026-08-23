@@ -8,6 +8,10 @@ members = [
     "nekomcp",
     "nekosplit_rust"
 ]
+default-members = [
+    "nekocode-core",
+    "nekocode"
+]
 resolver = "2"
 
 # Workspace-wide dependencies for consistent versions
