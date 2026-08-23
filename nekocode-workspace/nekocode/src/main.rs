@@ -41,8 +41,14 @@ async fn async_main(cli: Cli) -> Result<()> {
     
     // Execute command
     match cli.command {
-        Commands::Index { path, output } => {
-            handle_rust_index_command(path, output)?;
+        Commands::Index {
+            path,
+            output,
+            snapshot,
+            diagnostics,
+            all_features,
+        } => {
+            handle_rust_index_command(path, output, snapshot, diagnostics, all_features)?;
         }
 
         Commands::Context {
@@ -52,6 +58,8 @@ async fn async_main(cli: Cli) -> Result<()> {
             diagnostics,
             working_tree,
             all_features,
+            excerpt_lines,
+            baseline,
             output,
         } => {
             handle_rust_context_command(
@@ -61,6 +69,8 @@ async fn async_main(cli: Cli) -> Result<()> {
                 diagnostics,
                 working_tree,
                 all_features,
+                excerpt_lines,
+                baseline,
                 output,
             )?;
         }
@@ -330,12 +340,53 @@ async fn async_main(cli: Cli) -> Result<()> {
 fn handle_rust_index_command(
     path: std::path::PathBuf,
     output: Option<std::path::PathBuf>,
+    snapshot_path: Option<std::path::PathBuf>,
+    diagnostics: bool,
+    all_features: bool,
 ) -> Result<()> {
-    let snapshot = nekocode_core::index_rust_workspace(&path)?;
-    let json = serde_json::to_string_pretty(&snapshot)?;
+    if snapshot_path.is_some() && output.is_some() {
+        return Err(NekocodeError::Config(
+            "--snapshot and --output cannot be used together".to_string(),
+        ));
+    }
+    if all_features && !diagnostics {
+        return Err(NekocodeError::Config(
+            "--all-features requires --diagnostics for index".to_string(),
+        ));
+    }
+
+    if let Some(snapshot_path) = snapshot_path {
+        let snapshot =
+            nekocode_core::build_rust_snapshot(&path, diagnostics, all_features)?;
+        nekocode_core::write_rust_snapshot(&snapshot_path, &snapshot)?;
+        println!("{}", serde_json::to_string_pretty(&snapshot)?);
+        return Ok(());
+    }
+
+    if diagnostics {
+        let snapshot =
+            nekocode_core::build_rust_snapshot(&path, diagnostics, all_features)?;
+        let json = serde_json::to_string_pretty(&snapshot)?;
+        if let Some(output_path) = output {
+            fs::write(&output_path, json)?;
+            println!(
+                "✅ Rust workspace snapshot written to {}",
+                output_path.display()
+            );
+        } else {
+            println!("{}", json);
+        }
+        return Ok(());
+    }
+
+    let workspace = nekocode_core::index_rust_workspace(&path)?;
+    let json = serde_json::to_string_pretty(&workspace)?;
     if let Some(output_path) = output {
         fs::write(&output_path, json)?;
-        println!("✅ Rust workspace snapshot written to {}", output_path.display());
+        println!(
+            "✅ Rust workspace snapshot written to {}",
+            output_path.display()
+        );
     } else {
         println!("{}", json);
     }
@@ -350,12 +401,21 @@ fn handle_rust_context_command(
     diagnostics: bool,
     working_tree: bool,
     all_features: bool,
+    excerpt_lines: usize,
+    baseline: Option<std::path::PathBuf>,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
+    if excerpt_lines > 200 {
+        return Err(NekocodeError::Config(
+            "--excerpt-lines must be between 0 and 200".to_string(),
+        ));
+    }
     let mut options = nekocode_core::RustContextOptions::new(compare_ref, budget);
     options.include_diagnostics = diagnostics;
     options.include_working_tree = working_tree;
     options.all_features = all_features;
+    options.excerpt_lines = excerpt_lines;
+    options.baseline = baseline;
     let pack = nekocode_core::build_rust_context_with_config(&path, options)?;
     let json = serde_json::to_string_pretty(&pack)?;
     if let Some(output_path) = output {

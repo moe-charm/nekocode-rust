@@ -9,11 +9,12 @@
 use crate::error::{NekocodeError, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: u32 = 3;
+const MAX_SOURCE_EXCERPT_BYTES: usize = 32 * 1024;
 
 /// Provenance for one external tool invocation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,6 +93,18 @@ pub struct RustWorkspaceSnapshot {
     pub provenance: ToolProvenance,
 }
 
+/// A complete, explicit JSON snapshot that can be used as a later baseline.
+///
+/// The snapshot is deliberately a file supplied by the caller. NekoCode does
+/// not maintain a hidden database or silently create history.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RustContextSnapshot {
+    pub schema_version: u32,
+    pub generated_at: String,
+    pub workspace: RustWorkspaceSnapshot,
+    pub diagnostics: Option<RustDiagnosticRun>,
+}
+
 /// A file reported by `git diff --name-status`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChangedRustFile {
@@ -139,6 +152,8 @@ pub struct RustDiagnostic {
     pub package_id: Option<String>,
     pub target: Option<String>,
     pub spans: Vec<RustDiagnosticSpan>,
+    #[serde(default)]
+    pub fingerprint: String,
 }
 
 /// A source span from rustc's structured diagnostic payload.
@@ -165,6 +180,28 @@ pub struct RustDiagnosticRun {
     pub provenance: ToolProvenance,
 }
 
+/// Comparison of diagnostics from a saved snapshot and the current run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RustDiagnosticDelta {
+    pub baseline_path: PathBuf,
+    pub compatible: bool,
+    pub added: Vec<RustDiagnostic>,
+    pub resolved: Vec<RustDiagnostic>,
+    pub persisting: Vec<RustDiagnostic>,
+    pub limitations: Vec<String>,
+}
+
+/// A bounded source excerpt adjacent to a Git diff hunk.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RustSourceExcerpt {
+    pub path: PathBuf,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub content: String,
+    pub source: String,
+    pub truncated: bool,
+}
+
 /// Compact context pack intended for MCP/AI consumers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RustContextPack {
@@ -175,7 +212,10 @@ pub struct RustContextPack {
     pub compare_ref: Option<String>,
     pub changed_files: Vec<ChangedRustFile>,
     pub diff: Option<RustDiffSummary>,
+    pub source_excerpts: Vec<RustSourceExcerpt>,
     pub diagnostics: Option<RustDiagnosticRun>,
+    pub baseline: Option<PathBuf>,
+    pub diagnostic_delta: Option<RustDiagnosticDelta>,
     pub budget_tokens: usize,
     pub estimated_tokens: usize,
     pub serialized_bytes: usize,
@@ -183,7 +223,9 @@ pub struct RustContextPack {
     pub include_working_tree: bool,
     pub all_features: bool,
     pub omitted_changed_files: usize,
+    pub omitted_excerpts: usize,
     pub omitted_diagnostics: usize,
+    pub omitted_delta_items: usize,
     pub omitted_diff_bytes: usize,
     pub truncation_order: Vec<String>,
     pub limitations: Vec<String>,
@@ -198,6 +240,8 @@ pub struct RustContextOptions {
     pub include_working_tree: bool,
     pub all_features: bool,
     pub include_diff: bool,
+    pub excerpt_lines: usize,
+    pub baseline: Option<PathBuf>,
 }
 
 impl RustContextOptions {
@@ -209,8 +253,68 @@ impl RustContextOptions {
             include_diagnostics: false,
             include_working_tree: false,
             all_features: false,
+            excerpt_lines: 8,
+            baseline: None,
         }
     }
+}
+
+/// Build a complete explicit JSON snapshot for a Rust workspace.
+pub fn build_rust_snapshot(
+    path: impl AsRef<Path>,
+    include_diagnostics: bool,
+    all_features: bool,
+) -> Result<RustContextSnapshot> {
+    let workspace = index_rust_workspace(path)?;
+    let diagnostics = if include_diagnostics {
+        Some(run_cargo_check_with_options(&workspace.root, all_features)?)
+    } else {
+        None
+    };
+    Ok(RustContextSnapshot {
+        schema_version: SCHEMA_VERSION,
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        workspace,
+        diagnostics,
+    })
+}
+
+/// Atomically replace an explicit snapshot path with pretty JSON.
+pub fn write_rust_snapshot(path: impl AsRef<Path>, snapshot: &RustContextSnapshot) -> Result<()> {
+    let path = path.as_ref();
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| NekocodeError::Config("snapshot path must name a file".to_string()))?;
+    let temporary = parent.join(format!(
+        ".{}.tmp-{}",
+        file_name.to_string_lossy(),
+        std::process::id()
+    ));
+    let bytes = serde_json::to_vec_pretty(snapshot)?;
+    if let Err(error) = std::fs::write(&temporary, bytes) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error.into());
+    }
+    if let Err(error) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+/// Read and validate an explicit Rust context snapshot.
+pub fn read_rust_snapshot(path: impl AsRef<Path>) -> Result<RustContextSnapshot> {
+    let path = path.as_ref();
+    let bytes = std::fs::read(path)?;
+    let snapshot: RustContextSnapshot = serde_json::from_slice(&bytes)?;
+    if snapshot.schema_version != SCHEMA_VERSION {
+        return Err(NekocodeError::Config(format!(
+            "unsupported Rust snapshot schema version {} (expected {})",
+            snapshot.schema_version, SCHEMA_VERSION
+        )));
+    }
+    Ok(snapshot)
 }
 
 /// Read Cargo workspace metadata without attempting to parse Rust semantics.
@@ -314,19 +418,25 @@ pub fn build_rust_context_with_config(
     }
 
     let workspace = index_rust_workspace(path)?;
-    let (mut changed_files, diff) =
-        if options.include_diff || options.compare_ref.is_some() || options.include_working_tree {
-            let (files, diff) = git_context(
-                &workspace.root,
-                options.compare_ref.as_deref(),
-                options.include_working_tree,
-                options.include_diff,
-            )?;
-            (files, Some(diff))
-        } else {
-            (Vec::new(), None)
-        };
+    let wants_git =
+        options.include_diff || options.compare_ref.is_some() || options.include_working_tree;
+    let include_patch = options.include_diff
+        || (options.excerpt_lines > 0
+            && (options.compare_ref.is_some() || options.include_working_tree));
+    let (mut changed_files, diff) = if wants_git {
+        let (files, diff) = git_context(
+            &workspace.root,
+            options.compare_ref.as_deref(),
+            options.include_working_tree,
+            include_patch,
+        )?;
+        (files, Some(diff))
+    } else {
+        (Vec::new(), None)
+    };
     annotate_changed_files(&mut changed_files, &workspace.root, &workspace.packages);
+    let source_excerpts =
+        build_source_excerpts(&workspace.root, &changed_files, options.excerpt_lines);
     let diagnostics = if options.include_diagnostics {
         Some(run_cargo_check_with_options(
             &workspace.root,
@@ -335,6 +445,51 @@ pub fn build_rust_context_with_config(
     } else {
         None
     };
+    let mut extra_limitations = Vec::new();
+    let diagnostic_delta = match options.baseline.as_ref() {
+        None => None,
+        Some(baseline_path) => match diagnostics.as_ref() {
+            None => {
+                extra_limitations.push(
+                    "Diagnostic baseline was supplied without --diagnostics; no delta was computed."
+                        .to_string(),
+                );
+                None
+            }
+            Some(current_run) => match read_rust_snapshot(baseline_path) {
+                Ok(baseline) => {
+                    let baseline_run = baseline.diagnostics.as_ref();
+                    if baseline_run.is_none() {
+                        extra_limitations.push(
+                            "Diagnostic baseline does not contain a saved cargo check run; no delta was computed."
+                                .to_string(),
+                        );
+                    }
+                    let delta = build_diagnostic_delta(
+                        baseline_path,
+                        &baseline.workspace,
+                        baseline_run,
+                        &workspace,
+                        current_run,
+                    );
+                    extra_limitations.extend(delta.limitations.iter().cloned());
+                    Some(delta)
+                }
+                Err(error) => {
+                    extra_limitations.push(format!(
+                        "Diagnostic baseline could not be read; no delta was computed: {error}"
+                    ));
+                    None
+                }
+            },
+        },
+    };
+    if let Some(run) = diagnostics.as_ref().filter(|run| run.status != "success") {
+        extra_limitations.push(format!(
+            "cargo check did not succeed (status: {}); diagnostic delta is incomplete.",
+            run.status
+        ));
+    }
 
     // Keep the pack bounded even before semantic symbol data is added. The
     // estimate is intentionally conservative: JSON is usually a few bytes per
@@ -348,7 +503,10 @@ pub fn build_rust_context_with_config(
         compare_ref: options.compare_ref.clone(),
         changed_files,
         diff,
+        source_excerpts,
         diagnostics,
+        baseline: options.baseline.clone(),
+        diagnostic_delta,
         budget_tokens: options.budget_tokens,
         estimated_tokens: 0,
         serialized_bytes: 0,
@@ -356,16 +514,21 @@ pub fn build_rust_context_with_config(
         include_working_tree: options.include_working_tree,
         all_features: options.all_features,
         omitted_changed_files: 0,
+        omitted_excerpts: 0,
         omitted_diagnostics: 0,
+        omitted_delta_items: 0,
         omitted_diff_bytes: 0,
         truncation_order: vec![
             "diff.patch".to_string(),
+            "source_excerpts".to_string(),
+            "diagnostic_delta".to_string(),
             "diagnostics.messages".to_string(),
             "changed_files".to_string(),
         ],
         limitations: limitations(
             options.include_diagnostics,
             options.include_working_tree,
+            &extra_limitations,
             false,
         ),
     };
@@ -409,6 +572,16 @@ pub fn build_rust_context_with_config(
                 }
             }
         }
+        if pack.source_excerpts.pop().is_some() {
+            pack.omitted_excerpts += 1;
+            continue;
+        }
+        if let Some(delta) = pack.diagnostic_delta.as_mut() {
+            if pop_diagnostic_delta_item(delta) {
+                pack.omitted_delta_items += 1;
+                continue;
+            }
+        }
         if let Some(run) = pack.diagnostics.as_mut() {
             if run.messages.pop().is_some() {
                 pack.omitted_diagnostics += 1;
@@ -430,22 +603,242 @@ pub fn build_rust_context_with_config(
     pack.serialized_bytes = serialized_size(&pack)?;
     pack.estimated_tokens = pack.serialized_bytes.div_ceil(4);
     pack.budget_exceeded = pack.serialized_bytes > byte_budget;
+    let diagnostic_failed = pack
+        .diagnostics
+        .as_ref()
+        .is_some_and(|run| run.status != "success");
+    let baseline_incomplete = pack
+        .diagnostic_delta
+        .as_ref()
+        .is_some_and(|delta| !delta.compatible)
+        || !extra_limitations.is_empty();
     if pack.omitted_changed_files > 0
+        || pack.omitted_excerpts > 0
         || pack.omitted_diagnostics > 0
+        || pack.omitted_delta_items > 0
         || pack.omitted_diff_bytes > 0
         || pack.budget_exceeded
+        || diagnostic_failed
+        || baseline_incomplete
     {
         pack.evidence = EvidenceLevel::Incomplete;
     }
     pack.limitations = limitations(
         options.include_diagnostics,
         options.include_working_tree,
+        &extra_limitations,
         pack.omitted_changed_files > 0
+            || pack.omitted_excerpts > 0
             || pack.omitted_diagnostics > 0
+            || pack.omitted_delta_items > 0
             || pack.omitted_diff_bytes > 0
             || pack.budget_exceeded,
     );
     Ok(pack)
+}
+
+fn build_source_excerpts(
+    root: &Path,
+    changed_files: &[ChangedRustFile],
+    context_lines: usize,
+) -> Vec<RustSourceExcerpt> {
+    if changed_files.is_empty() {
+        return Vec::new();
+    }
+
+    let mut ranges: BTreeMap<PathBuf, Vec<(u32, u32)>> = BTreeMap::new();
+    for file in changed_files.iter().filter(|file| file.is_rust) {
+        if file.hunks.is_empty() {
+            continue;
+        }
+        let path = root.join(&file.path);
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let line_count = content.lines().count() as u32;
+        if line_count == 0 {
+            continue;
+        }
+        let file_ranges = ranges.entry(file.path.clone()).or_default();
+        for hunk in &file.hunks {
+            let changed_start = hunk.new_start.max(1);
+            let changed_end = if hunk.new_count == 0 {
+                changed_start
+            } else {
+                changed_start.saturating_add(hunk.new_count.saturating_sub(1))
+            };
+            let start = changed_start.saturating_sub(context_lines as u32).max(1);
+            let end = changed_end
+                .saturating_add(context_lines as u32)
+                .min(line_count);
+            if start <= end {
+                file_ranges.push((start, end));
+            }
+        }
+    }
+
+    let mut excerpts = Vec::new();
+    for (path, mut file_ranges) in ranges {
+        file_ranges.sort_unstable();
+        let mut merged: Vec<(u32, u32)> = Vec::new();
+        for (start, end) in file_ranges {
+            if let Some(last) = merged.last_mut() {
+                if start <= last.1.saturating_add(1) {
+                    last.1 = last.1.max(end);
+                    continue;
+                }
+            }
+            merged.push((start, end));
+        }
+
+        let Ok(content) = std::fs::read_to_string(root.join(&path)) else {
+            continue;
+        };
+        let lines = content.lines().collect::<Vec<_>>();
+        for (start, end) in merged {
+            let mut excerpt = lines[(start as usize - 1)..(end as usize)].join("\n");
+            let mut truncated = false;
+            if truncate_utf8(&mut excerpt, MAX_SOURCE_EXCERPT_BYTES) > 0 {
+                truncated = true;
+                excerpt.push_str("\n... [source excerpt truncated]");
+            }
+            excerpts.push(RustSourceExcerpt {
+                path: path.clone(),
+                start_line: start,
+                end_line: end,
+                content: excerpt,
+                source: "git-diff-hunk".to_string(),
+                truncated,
+            });
+        }
+    }
+    excerpts
+}
+
+fn diagnostic_fingerprint(diagnostic: &RustDiagnostic) -> String {
+    let file = diagnostic
+        .file
+        .as_ref()
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default();
+    let message = diagnostic
+        .message
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let identity = format!(
+        "{}|{}|{}|{}",
+        diagnostic.code.as_deref().unwrap_or(&diagnostic.level),
+        file,
+        diagnostic.line.unwrap_or_default(),
+        message
+    );
+    let mut hasher = Sha256::new();
+    hasher.update(identity.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn diagnostic_with_fingerprint(mut diagnostic: RustDiagnostic) -> RustDiagnostic {
+    if diagnostic.fingerprint.is_empty() {
+        diagnostic.fingerprint = diagnostic_fingerprint(&diagnostic);
+    }
+    diagnostic
+}
+
+fn diagnostic_map(diagnostics: &[RustDiagnostic]) -> BTreeMap<String, RustDiagnostic> {
+    diagnostics
+        .iter()
+        .cloned()
+        .map(diagnostic_with_fingerprint)
+        .map(|diagnostic| (diagnostic.fingerprint.clone(), diagnostic))
+        .collect()
+}
+
+fn build_diagnostic_delta(
+    baseline_path: &Path,
+    baseline_workspace: &RustWorkspaceSnapshot,
+    baseline_run: Option<&RustDiagnosticRun>,
+    current_workspace: &RustWorkspaceSnapshot,
+    current_run: &RustDiagnosticRun,
+) -> RustDiagnosticDelta {
+    let mut delta = RustDiagnosticDelta {
+        baseline_path: baseline_path.to_path_buf(),
+        compatible: true,
+        added: Vec::new(),
+        resolved: Vec::new(),
+        persisting: Vec::new(),
+        limitations: Vec::new(),
+    };
+
+    let Some(baseline_run) = baseline_run else {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline snapshot has no cargo check diagnostics".to_string());
+        return delta;
+    };
+
+    if baseline_workspace.toolchain != current_workspace.toolchain {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline and current Rust toolchains differ".to_string());
+    }
+    if baseline_run.all_targets != current_run.all_targets {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline and current target coverage differ".to_string());
+    }
+    if baseline_run.all_features != current_run.all_features {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline and current feature coverage differ".to_string());
+    }
+    if baseline_run.provenance.tool != current_run.provenance.tool
+        || baseline_run.provenance.version != current_run.provenance.version
+    {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline and current diagnostic tool provenance differs".to_string());
+    }
+    if baseline_run.status != "success" || current_run.status != "success" {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("diagnostic delta requires successful baseline and current checks".to_string());
+    }
+
+    if !delta.compatible {
+        return delta;
+    }
+
+    let baseline = diagnostic_map(&baseline_run.messages);
+    let current = diagnostic_map(&current_run.messages);
+    for (fingerprint, diagnostic) in &current {
+        if baseline.contains_key(fingerprint) {
+            delta.persisting.push(diagnostic.clone());
+        } else {
+            delta.added.push(diagnostic.clone());
+        }
+    }
+    for (fingerprint, diagnostic) in &baseline {
+        if !current.contains_key(fingerprint) {
+            delta.resolved.push(diagnostic.clone());
+        }
+    }
+    delta
+}
+
+fn pop_diagnostic_delta_item(delta: &mut RustDiagnosticDelta) -> bool {
+    delta
+        .added
+        .pop()
+        .or_else(|| delta.resolved.pop())
+        .or_else(|| delta.persisting.pop())
+        .is_some()
 }
 
 fn normalize_workspace_root(path: &Path) -> Result<PathBuf> {
@@ -1048,7 +1441,7 @@ fn parse_cargo_diagnostics_with_root(text: &str, root: Option<&Path>) -> Vec<Rus
                 })
                 .unwrap_or_default();
 
-            Some(RustDiagnostic {
+            Some(diagnostic_with_fingerprint(RustDiagnostic {
                 level,
                 message: text,
                 code,
@@ -1069,7 +1462,8 @@ fn parse_cargo_diagnostics_with_root(text: &str, root: Option<&Path>) -> Vec<Rus
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string),
                 spans,
-            })
+                fingerprint: String::new(),
+            }))
         })
         .collect()
 }
@@ -1118,6 +1512,7 @@ fn truncate_utf8(value: &mut String, max_bytes: usize) -> usize {
 fn limitations(
     include_diagnostics: bool,
     include_working_tree: bool,
+    extra: &[String],
     budget_truncated: bool,
 ) -> Vec<String> {
     let mut limitations = Vec::new();
@@ -1134,9 +1529,11 @@ fn limitations(
         .push("Symbol references and public API impact require a semantic backend.".to_string());
     limitations
         .push("No breaking-change conclusion is emitted from this snapshot alone.".to_string());
+    limitations.extend(extra.iter().cloned());
     if budget_truncated {
         limitations.push(
-            "Some diff, diagnostics, or changed files were omitted to fit the budget.".to_string(),
+            "Some diff, excerpts, diagnostics, delta items, or changed files were omitted to fit the budget."
+                .to_string(),
         );
     }
     limitations

@@ -26,6 +26,18 @@ pub enum Commands {
         /// Write the JSON snapshot to a file instead of stdout
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Persist an explicit Rust context snapshot for later baselines
+        #[arg(long)]
+        snapshot: Option<PathBuf>,
+
+        /// Include a workspace-wide cargo check in the persisted snapshot
+        #[arg(long)]
+        diagnostics: bool,
+
+        /// Run the snapshot cargo check with every workspace feature enabled
+        #[arg(long)]
+        all_features: bool,
     },
 
     /// Build a bounded, Git-diff-focused Rust context pack.
@@ -52,6 +64,14 @@ pub enum Commands {
         /// Run cargo check with every declared workspace feature enabled
         #[arg(long)]
         all_features: bool,
+
+        /// Include this many source lines before and after each Git hunk
+        #[arg(long, default_value = "8")]
+        excerpt_lines: usize,
+
+        /// Saved snapshot used as the diagnostic baseline
+        #[arg(long)]
+        baseline: Option<PathBuf>,
 
         /// Write the JSON context pack to a file instead of stdout
         #[arg(short, long)]

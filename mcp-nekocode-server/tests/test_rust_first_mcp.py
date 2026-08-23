@@ -112,6 +112,8 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                         "budget": 1200,
                         "working_tree": True,
                         "all_features": True,
+                        "excerpt_lines": 12,
+                        "baseline": "/tmp/baseline.json",
                     },
                 }
             )
@@ -124,6 +126,44 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertIn("--budget", argv)
         self.assertIn("1200", argv)
         self.assertIn("--working-tree", argv)
+        self.assertIn("--all-features", argv)
+        self.assertIn("--excerpt-lines", argv)
+        self.assertIn("12", argv)
+        self.assertIn("--baseline", argv)
+        self.assertIn("<path>", argv)
+
+    def test_index_forwards_explicit_snapshot_options(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:]}))\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
+            result = server.handle_tool_call(
+                {
+                    "name": "index",
+                    "arguments": {
+                        "path": ".",
+                        "snapshot": "/tmp/baseline.json",
+                        "diagnostics": True,
+                        "all_features": True,
+                    },
+                }
+            )
+
+        self.assertFalse(result["isError"])
+        argv = result["structuredContent"]["argv"]
+        self.assertEqual(argv[:2], ["index", "."])
+        self.assertIn("--snapshot", argv)
+        self.assertIn("<path>", argv)
+        self.assertIn("--diagnostics", argv)
         self.assertIn("--all-features", argv)
 
 

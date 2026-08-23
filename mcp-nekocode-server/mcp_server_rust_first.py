@@ -101,7 +101,20 @@ class RustFirstMCPServer:
                         "path": {
                             "type": "string",
                             "description": "Rust workspace or Cargo.toml path.",
-                        }
+                        },
+                        "snapshot": {
+                            "type": "string",
+                            "description": "Explicit JSON snapshot path to write.",
+                        },
+                        "diagnostics": {
+                            "type": "boolean",
+                            "default": False,
+                        },
+                        "all_features": {
+                            "type": "boolean",
+                            "description": "Run the snapshot check with all workspace features.",
+                            "default": False,
+                        },
                     },
                     "required": ["path"],
                     "additionalProperties": False,
@@ -140,6 +153,16 @@ class RustFirstMCPServer:
                             "type": "boolean",
                             "description": "Run cargo check with all workspace features.",
                             "default": False,
+                        },
+                        "excerpt_lines": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 200,
+                            "default": 8,
+                        },
+                        "baseline": {
+                            "type": "string",
+                            "description": "Explicit JSON snapshot used for diagnostic delta.",
                         },
                     },
                     "required": ["path"],
@@ -188,6 +211,37 @@ class RustFirstMCPServer:
             raise ToolInputError("'all_features' must be a boolean")
         if all_features:
             command.append("--all-features")
+        excerpt_lines = args.get("excerpt_lines", 8)
+        if isinstance(excerpt_lines, bool) or not isinstance(excerpt_lines, int):
+            raise ToolInputError("'excerpt_lines' must be an integer")
+        if not 0 <= excerpt_lines <= 200:
+            raise ToolInputError("'excerpt_lines' must be between 0 and 200")
+        command.extend(["--excerpt-lines", str(excerpt_lines)])
+        baseline = args.get("baseline")
+        if baseline is not None:
+            if not isinstance(baseline, str) or not baseline.strip() or "\x00" in baseline:
+                raise ToolInputError("'baseline' must be a non-empty string")
+            command.extend(["--baseline", baseline])
+        return command
+
+    @staticmethod
+    def _index_arguments(args: Dict[str, Any]) -> list[str]:
+        command: list[str] = []
+        snapshot = args.get("snapshot")
+        if snapshot is not None:
+            if not isinstance(snapshot, str) or not snapshot.strip() or "\x00" in snapshot:
+                raise ToolInputError("'snapshot' must be a non-empty string")
+            command.extend(["--snapshot", snapshot])
+        diagnostics = args.get("diagnostics", False)
+        if not isinstance(diagnostics, bool):
+            raise ToolInputError("'diagnostics' must be a boolean")
+        if diagnostics:
+            command.append("--diagnostics")
+        all_features = args.get("all_features", False)
+        if not isinstance(all_features, bool):
+            raise ToolInputError("'all_features' must be a boolean")
+        if all_features:
+            command.append("--all-features")
         return command
 
     def _run_cli(self, tool: str, args: Dict[str, Any]) -> Any:
@@ -206,7 +260,9 @@ class RustFirstMCPServer:
                 raise CommandError("Cargo is unavailable")
             command = [cargo, "run", "-q", "-p", "nekocode", "--", tool, path]
             command_cwd = self.workspace_dir
-        if tool == "context":
+        if tool == "index":
+            command.extend(self._index_arguments(args))
+        elif tool == "context":
             command.extend(self._context_arguments(args))
 
         env = os.environ.copy()
@@ -253,10 +309,29 @@ class RustFirstMCPServer:
             "diagnostics",
             "working_tree",
             "all_features",
+            "snapshot",
+            "excerpt_lines",
+            "baseline",
         }:
             return _tool_result({"error": "unsupported tool argument"}, True)
-        if name == "index" and set(args) - {"path"}:
-            return _tool_result({"error": "index accepts only 'path'"}, True)
+        if name == "index" and set(args) - {
+            "path",
+            "snapshot",
+            "diagnostics",
+            "all_features",
+        }:
+            return _tool_result({"error": "unsupported index argument"}, True)
+        if name == "context" and set(args) - {
+            "path",
+            "compare_ref",
+            "budget",
+            "diagnostics",
+            "working_tree",
+            "all_features",
+            "excerpt_lines",
+            "baseline",
+        }:
+            return _tool_result({"error": "unsupported context argument"}, True)
         try:
             return _tool_result(self._run_cli(name, args))
         except ToolInputError as exc:
