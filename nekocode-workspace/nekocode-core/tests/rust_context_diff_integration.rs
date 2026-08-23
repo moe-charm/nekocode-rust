@@ -1,6 +1,7 @@
 use nekocode_core::{
     build_rust_context_with_config, build_rust_snapshot, format_context_summary,
-    sanitize_snapshot_for_output, AnalysisMode, ComparisonStatus, RustContextOptions,
+    sanitize_context_for_output, sanitize_snapshot_for_output, AnalysisMode, ComparisonStatus,
+    RustContextOptions,
 };
 use std::fs;
 use std::path::Path;
@@ -118,6 +119,7 @@ fn context_contains_hunks_packages_and_working_tree_files() {
 #[test]
 fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     let directory = tempdir().expect("temporary workspace");
+    let baseline_directory = tempdir().expect("external baseline directory");
     let root = directory.path();
     fs::create_dir(root.join("src")).expect("src directory");
     fs::write(
@@ -142,8 +144,7 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     assert!(!snapshot.generated_at.is_empty());
     assert!(snapshot.diagnostics.is_some());
 
-    let snapshot_path = root.join("state").join("baseline.json");
-    fs::create_dir_all(snapshot_path.parent().expect("snapshot parent")).expect("state directory");
+    let snapshot_path = baseline_directory.path().join("baseline.json");
     nekocode_core::write_rust_snapshot(&snapshot_path, &snapshot)
         .expect("snapshot should be written");
     let loaded = nekocode_core::read_rust_snapshot(&snapshot_path).expect("snapshot should load");
@@ -151,10 +152,28 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
 
     let mut options = RustContextOptions::new(None, 20_000);
     options.include_diagnostics = true;
-    options.baseline = Some(snapshot_path);
+    options.baseline = Some(snapshot_path.clone());
     let pack = build_rust_context_with_config(root, options).expect("context should build");
+
+    let public = sanitize_context_for_output(&pack).expect("public context should sanitize");
+    assert_eq!(
+        public.baseline.as_deref(),
+        Some(std::path::Path::new("$EXTERNAL"))
+    );
+    assert_eq!(
+        public
+            .diagnostic_delta
+            .as_ref()
+            .map(|delta| delta.baseline_path.as_path()),
+        Some(std::path::Path::new("$EXTERNAL"))
+    );
+    assert!(!serde_json::to_string(&public)
+        .expect("public context should serialize")
+        .contains(baseline_directory.path().to_string_lossy().as_ref()));
+
     let delta = pack
         .diagnostic_delta
+        .as_ref()
         .expect("matching diagnostic baseline should produce a delta");
     assert!(delta.compatible);
     assert_eq!(delta.status, ComparisonStatus::Comparable);
@@ -169,7 +188,7 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     .expect("invalid source");
     let mut changed_options = RustContextOptions::new(None, 20_000);
     changed_options.include_diagnostics = true;
-    changed_options.baseline = Some(root.join("state").join("baseline.json"));
+    changed_options.baseline = Some(snapshot_path);
     let changed = build_rust_context_with_config(root, changed_options)
         .expect("compiler errors should remain evidence");
     let changed_delta = changed
@@ -186,8 +205,11 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     let changed_summary = format_context_summary(&changed);
     assert!(changed_summary
         .contains("Diagnostics: completed_with_diagnostics; producer_status=failed;"));
-    assert!(changed_summary.contains("Diagnostic delta: comparable;"));
+    assert!(changed_summary.contains(
+        "Diagnostic delta: comparable; 1 new, 0 resolved, 0 persisting (unique errors/warnings)"
+    ));
     assert!(changed_summary.contains("- NEW [E0308]"));
+    assert_eq!(changed_summary.matches("- NEW [E0308]").count(), 1);
 
     let mut missing_options = RustContextOptions::new(None, 20_000);
     missing_options.include_diagnostics = true;

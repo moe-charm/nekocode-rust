@@ -107,7 +107,11 @@ Toolchain, target, package, feature/default-feature, compiler-affecting
 configuration, or analysis-profile changes produce `not_comparable` with
 reasons. A baseline without diagnostics produces `baseline_missing`, never an
 empty successful delta. MVP matching is exact and multiset-based; fuzzy line
-movement matching is not implemented.
+movement matching is not implemented. Error and warning observations enter the
+delta; auxiliary note/help/failure-note messages stay available in the full
+diagnostic run. JSON preserves multiplicity, while the human summary explicitly
+reports unique fingerprints and raw observation counts. Public output redacts
+both workspace-local and external baseline storage paths.
 
 Compiler result states are also explicit:
 

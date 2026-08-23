@@ -84,6 +84,10 @@ cargo run -q -p nekocode -- context . \
 result of an older commit. A diagnostic delta is reported only when the saved
 and current toolchain, features, and targets are compatible. The result keeps
 `added`, `resolved`, and `persisting` diagnostics separate from Git changes.
+The JSON delta preserves repeated error/warning observations as a multiset;
+the human summary condenses identical fingerprints and labels its counts as
+unique. Auxiliary rustc note/help messages remain in the diagnostic run but do
+not inflate the delta. External baseline paths are redacted in public output.
 
 ### What the JSON contains
 
@@ -207,6 +211,10 @@ budget・省略・制限を表示します。`--output`には選択した形式�
 `compare_ref`はGitの変更範囲を指定するだけで、過去commitのcompiler結果を
 再現しません。diagnostic deltaは、保存したbaselineと現在のtoolchain・features・
 targetsが互換する場合だけ比較し、`added`・`resolved`・`persisting`を返します。
+JSONのdeltaは同じerror/warningが複数回観測された回数を保持し、人向けサマリーでは
+同じfingerprintを1件へまとめて`unique`と明示します。rustcの補足note/helpは元の
+diagnostic runへ保持しますが、delta件数には混ぜません。workspace外のbaseline
+絶対パスは公開出力でredactします。
 予算超過時は省略数と`limitations`をJSONへ残します。source excerptはGit hunk周辺の
 表示補助であり、symbol/reference解決ではありません。cargo-checkはtrusted
 workspaceでのみ明示的に実行し、応答の`execution_policy`にoffline・環境allowlist・

@@ -74,7 +74,15 @@ changes. A baseline without a diagnostic observation is always
 MVP matching is exact and multiset-based. It does not fuzzy-match diagnostics
 that moved to another line. A fingerprint includes the producer, code/level,
 normalized message, workspace-relative primary path/label, and a stable span
-component.
+component. Repeated error/warning observations retain their multiplicity in
+JSON. Auxiliary note/help/failure-note messages remain in the producer run but
+do not enter `added`, `resolved`, or `persisting`. A human summary may collapse
+identical fingerprints only when it labels those counts as unique and keeps the
+raw observation count visible.
+
+Public artifacts replace workspace-local paths with `$WORKSPACE` and other
+absolute path fields with `$EXTERNAL`. This includes both `baseline` and
+`diagnostic_delta.baseline_path`; artifact storage locations must not leak.
 
 ## Budget and omissions
 

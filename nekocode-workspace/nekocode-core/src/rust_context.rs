@@ -561,24 +561,28 @@ pub fn format_context_summary(pack: &ContextV1) -> String {
 
 fn format_diagnostics(output: &mut String, pack: &ContextV1) {
     if let Some(run) = &pack.diagnostics {
-        let errors = run
-            .messages
+        let unique = unique_primary_diagnostics(&run.messages);
+        let errors = unique
             .iter()
             .filter(|diagnostic| diagnostic.level == "error")
             .count();
-        let warnings = run
-            .messages
+        let warnings = unique
             .iter()
             .filter(|diagnostic| diagnostic.level == "warning")
             .count();
         writeln!(
             output,
-            "Diagnostics: {}; producer_status={}; {} total ({} errors, {} warnings)",
+            "Diagnostics: {}; producer_status={}; {} ({} errors, {} warnings; {} raw messages)",
             artifact_status_name(diagnostic_status(run)),
             run.status,
-            run.messages.len(),
+            item_count(
+                unique.len(),
+                "unique primary diagnostic",
+                "unique primary diagnostics"
+            ),
             errors,
-            warnings
+            warnings,
+            run.messages.len()
         )
         .expect("write to String");
     } else {
@@ -586,20 +590,33 @@ fn format_diagnostics(output: &mut String, pack: &ContextV1) {
     }
 
     if let Some(delta) = &pack.diagnostic_delta {
+        let added = unique_primary_diagnostics(&delta.added);
+        let resolved = unique_primary_diagnostics(&delta.resolved);
+        let persisting = unique_primary_diagnostics(&delta.persisting);
         writeln!(
             output,
-            "Diagnostic delta: {}; {} new, {} resolved, {} persisting",
+            "Diagnostic delta: {}; {} new, {} resolved, {} persisting (unique errors/warnings)",
             comparison_status_name(delta.status),
-            delta.added.len(),
-            delta.resolved.len(),
-            delta.persisting.len()
+            added.len(),
+            resolved.len(),
+            persisting.len()
         )
         .expect("write to String");
-        format_diagnostic_items(output, "NEW", &delta.added);
-        format_diagnostic_items(output, "RESOLVED", &delta.resolved);
+        format_diagnostic_items(output, "NEW", &added);
+        format_diagnostic_items(output, "RESOLVED", &resolved);
+        let raw_delta_count = delta.added.len() + delta.resolved.len() + delta.persisting.len();
+        let unique_delta_count = added.len() + resolved.len() + persisting.len();
+        if raw_delta_count != unique_delta_count {
+            writeln!(
+                output,
+                "Diagnostic detail: {raw_delta_count} raw error/warning observations condensed to {unique_delta_count} unique diagnostics"
+            )
+            .expect("write to String");
+        }
         if delta.status != ComparisonStatus::Comparable {
             if let Some(run) = &pack.diagnostics {
-                format_diagnostic_items(output, "CURRENT", &run.messages);
+                let current = unique_primary_diagnostics(&run.messages);
+                format_diagnostic_items(output, "CURRENT", &current);
             }
         }
     } else if let Some(run) = &pack.diagnostics {
@@ -609,13 +626,30 @@ fn format_diagnostics(output: &mut String, pack: &ContextV1) {
             comparison_status_name(pack.comparison_status)
         )
         .expect("write to String");
-        format_diagnostic_items(output, "CURRENT", &run.messages);
+        let current = unique_primary_diagnostics(&run.messages);
+        format_diagnostic_items(output, "CURRENT", &current);
     } else {
         writeln!(output, "Diagnostic delta: not requested").expect("write to String");
     }
 }
 
-fn format_diagnostic_items(output: &mut String, label: &str, diagnostics: &[RustDiagnostic]) {
+fn unique_primary_diagnostics(diagnostics: &[RustDiagnostic]) -> Vec<&RustDiagnostic> {
+    let mut unique = BTreeMap::<String, &RustDiagnostic>::new();
+    for diagnostic in diagnostics
+        .iter()
+        .filter(|diagnostic| is_delta_diagnostic(diagnostic))
+    {
+        let fingerprint = if diagnostic.fingerprint.is_empty() {
+            diagnostic_fingerprint(diagnostic)
+        } else {
+            diagnostic.fingerprint.clone()
+        };
+        unique.entry(fingerprint).or_insert(diagnostic);
+    }
+    unique.into_values().collect()
+}
+
+fn format_diagnostic_items(output: &mut String, label: &str, diagnostics: &[&RustDiagnostic]) {
     for diagnostic in diagnostics.iter().take(SUMMARY_DIAGNOSTIC_LIMIT) {
         let code = diagnostic
             .code
@@ -988,28 +1022,34 @@ fn sanitize_public_json(value: &mut serde_json::Value, key: Option<&str>, worksp
             let normalized = text.replace('\\', "/");
             if normalized.contains(workspace_root) {
                 *text = normalized.replace(workspace_root, "$WORKSPACE");
-            } else if matches!(
-                key,
-                Some(
-                    "root"
-                        | "workspace_root"
-                        | "cwd"
-                        | "manifest_path"
-                        | "src_path"
-                        | "file"
-                        | "file_name"
-                        | "filename"
-                        | "path"
-                        | "old_path"
-                        | "baseline_path"
-                )
-            ) && (normalized.starts_with('/') || is_windows_absolute(&normalized))
+            } else if is_path_field(key)
+                && (normalized.starts_with('/') || is_windows_absolute(&normalized))
             {
                 *text = "$EXTERNAL".to_string();
             }
         }
         _ => {}
     }
+}
+
+fn is_path_field(key: Option<&str>) -> bool {
+    matches!(
+        key,
+        Some(
+            "root"
+                | "workspace_root"
+                | "cwd"
+                | "manifest_path"
+                | "src_path"
+                | "file"
+                | "file_name"
+                | "filename"
+                | "path"
+                | "old_path"
+                | "baseline"
+                | "baseline_path"
+        )
+    )
 }
 
 fn is_windows_absolute(path: &str) -> bool {
@@ -1036,22 +1076,7 @@ fn normalize_hash_value(value: &mut serde_json::Value, key: Option<&str>, worksp
             let root_text = workspace_root.to_string_lossy().replace('\\', "/");
             if normalized.contains(&root_text) {
                 *text = normalized.replace(&root_text, "$WORKSPACE");
-            } else if matches!(
-                key,
-                Some(
-                    "root"
-                        | "workspace_root"
-                        | "cwd"
-                        | "manifest_path"
-                        | "src_path"
-                        | "file"
-                        | "file_name"
-                        | "filename"
-                        | "path"
-                        | "old_path"
-                        | "baseline_path"
-                )
-            ) {
+            } else if is_path_field(key) {
                 let candidate = Path::new(text.as_str());
                 if candidate.is_absolute() || is_windows_absolute(&normalized) {
                     *text = "$EXTERNAL".to_string();
@@ -1634,13 +1659,59 @@ fn diagnostic_with_fingerprint(mut diagnostic: RustDiagnostic) -> RustDiagnostic
     diagnostic
 }
 
-fn diagnostic_map(diagnostics: &[RustDiagnostic]) -> BTreeMap<String, RustDiagnostic> {
-    diagnostics
+fn is_delta_diagnostic(diagnostic: &RustDiagnostic) -> bool {
+    matches!(diagnostic.level.as_str(), "error" | "warning")
+}
+
+fn diagnostic_multimap(diagnostics: &[RustDiagnostic]) -> BTreeMap<String, Vec<RustDiagnostic>> {
+    let mut grouped = BTreeMap::<String, Vec<RustDiagnostic>>::new();
+    for diagnostic in diagnostics
         .iter()
+        .filter(|diagnostic| is_delta_diagnostic(diagnostic))
         .cloned()
         .map(diagnostic_with_fingerprint)
-        .map(|diagnostic| (diagnostic.fingerprint.clone(), diagnostic))
-        .collect()
+    {
+        grouped
+            .entry(diagnostic.fingerprint.clone())
+            .or_default()
+            .push(diagnostic);
+    }
+    grouped
+}
+
+#[derive(Debug, Default)]
+struct DiagnosticChanges {
+    added: Vec<RustDiagnostic>,
+    resolved: Vec<RustDiagnostic>,
+    persisting: Vec<RustDiagnostic>,
+}
+
+fn compare_diagnostic_multisets(
+    baseline: &[RustDiagnostic],
+    current: &[RustDiagnostic],
+) -> DiagnosticChanges {
+    let mut changes = DiagnosticChanges::default();
+    let mut baseline = diagnostic_multimap(baseline);
+    let current = diagnostic_multimap(current);
+
+    for (fingerprint, current_group) in current {
+        let baseline_group = baseline.remove(&fingerprint).unwrap_or_default();
+        let persisting_count = baseline_group.len().min(current_group.len());
+        changes
+            .persisting
+            .extend(current_group.iter().take(persisting_count).cloned());
+        changes
+            .added
+            .extend(current_group.into_iter().skip(persisting_count));
+        changes
+            .resolved
+            .extend(baseline_group.into_iter().skip(persisting_count));
+    }
+    for baseline_group in baseline.into_values() {
+        changes.resolved.extend(baseline_group);
+    }
+
+    changes
 }
 
 fn build_diagnostic_delta(
@@ -1713,20 +1784,10 @@ fn build_diagnostic_delta(
         return delta;
     }
 
-    let baseline = diagnostic_map(&baseline_run.messages);
-    let current = diagnostic_map(&current_run.messages);
-    for (fingerprint, diagnostic) in &current {
-        if baseline.contains_key(fingerprint) {
-            delta.persisting.push(diagnostic.clone());
-        } else {
-            delta.added.push(diagnostic.clone());
-        }
-    }
-    for (fingerprint, diagnostic) in &baseline {
-        if !current.contains_key(fingerprint) {
-            delta.resolved.push(diagnostic.clone());
-        }
-    }
+    let changes = compare_diagnostic_multisets(&baseline_run.messages, &current_run.messages);
+    delta.added = changes.added;
+    delta.resolved = changes.resolved;
+    delta.persisting = changes.persisting;
     delta.status = ComparisonStatus::Comparable;
     delta
 }
@@ -2828,6 +2889,31 @@ mod tests {
         assert_eq!(diagnostics[0].line, Some(3));
         assert_eq!(diagnostics[0].spans.len(), 1);
         assert!(diagnostics[0].spans[0].is_primary);
+    }
+
+    #[test]
+    fn diagnostic_delta_preserves_multiplicity_and_excludes_auxiliary_notes() {
+        let error = r#"{"reason":"compiler-message","message":{"level":"error","message":"mismatched types","code":{"code":"E0308"},"spans":[{"file_name":"src/lib.rs","line_start":3,"column_start":5,"is_primary":true}]}}"#;
+        let note = r#"{"reason":"compiler-message","message":{"level":"failure-note","message":"try rustc --explain E0308","code":null,"spans":[]}}"#;
+        let baseline = parse_cargo_diagnostics(&format!("{error}\n{error}\n{note}\n{note}"));
+        let current = parse_cargo_diagnostics(error);
+
+        let partial = compare_diagnostic_multisets(&baseline, &current);
+        assert!(partial.added.is_empty());
+        assert_eq!(partial.persisting.len(), 1);
+        assert_eq!(partial.resolved.len(), 1);
+        assert!(partial
+            .resolved
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_deref() == Some("E0308")));
+
+        let resolved = compare_diagnostic_multisets(&baseline, &[]);
+        assert_eq!(resolved.resolved.len(), 2);
+        assert!(resolved
+            .resolved
+            .iter()
+            .all(|diagnostic| diagnostic.level == "error"));
+        assert_eq!(unique_primary_diagnostics(&baseline).len(), 1);
     }
 
     #[test]
