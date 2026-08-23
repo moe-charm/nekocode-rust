@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVER = REPO_ROOT / "mcp-nekocode-server" / "mcp_server_rust_first.py"
+sys.path.insert(0, str(SERVER.parent))
 
 
 class RustFirstMCPProtocolTest(unittest.TestCase):
@@ -65,6 +67,27 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
 
         process.stdin.close()
         process.wait(timeout=10)
+
+    def test_prebuilt_cli_mode_does_not_require_cargo_workspace(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json\n"
+                "print(json.dumps({'evidence': 'tool-confirmed', 'mode': 'prebuilt'}))\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
+            result = server.handle_tool_call(
+                {"name": "index", "arguments": {"path": "."}}
+            )
+
+        self.assertFalse(result["isError"])
+        self.assertEqual(result["structuredContent"]["mode"], "prebuilt")
 
 
 if __name__ == "__main__":

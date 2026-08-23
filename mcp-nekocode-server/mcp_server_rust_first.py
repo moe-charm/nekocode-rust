@@ -66,9 +66,28 @@ def _tool_result(data: Any, is_error: bool = False) -> Dict[str, Any]:
 class RustFirstMCPServer:
     """Minimal MCP dispatcher backed by the Rust-first NekoCode CLI."""
 
-    def __init__(self, workspace_dir: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        workspace_dir: Optional[Path] = None,
+        binary_path: Optional[Path] = None,
+    ) -> None:
         project_root = Path(__file__).resolve().parent.parent
-        self.workspace_dir = workspace_dir or project_root / "nekocode-workspace"
+        configured_workspace = os.environ.get("NEKOCODE_WORKSPACE_DIR")
+        if workspace_dir is not None:
+            self.workspace_dir = workspace_dir
+        elif configured_workspace:
+            self.workspace_dir = Path(configured_workspace).expanduser()
+        else:
+            self.workspace_dir = project_root / "nekocode-workspace"
+
+        configured_binary = binary_path
+        if configured_binary is None:
+            raw_binary = os.environ.get("NEKOCODE_BINARY_PATH")
+            if raw_binary:
+                configured_binary = Path(raw_binary).expanduser()
+        if configured_binary is not None and not configured_binary.is_absolute():
+            configured_binary = project_root / configured_binary
+        self.binary_path = configured_binary
 
     @staticmethod
     def tools() -> list[Dict[str, Any]]:
@@ -152,14 +171,21 @@ class RustFirstMCPServer:
         return command
 
     def _run_cli(self, tool: str, args: Dict[str, Any]) -> Any:
-        if not self.workspace_dir.is_dir():
-            raise CommandError("Rust workspace is unavailable")
-        cargo = shutil.which("cargo")
-        if cargo is None:
-            raise CommandError("Cargo is unavailable")
-
         path = self._path_argument(args)
-        command = [cargo, "run", "-q", "-p", "nekocode", "--", tool, path]
+        if self.binary_path is not None:
+            if not self.binary_path.is_file():
+                raise CommandError("Configured Rust CLI is unavailable")
+            command = [str(self.binary_path), tool, path]
+            configured_cwd = os.environ.get("NEKOCODE_CLI_CWD")
+            command_cwd = Path(configured_cwd).expanduser() if configured_cwd else Path.cwd()
+        else:
+            if not self.workspace_dir.is_dir():
+                raise CommandError("Rust workspace is unavailable")
+            cargo = shutil.which("cargo")
+            if cargo is None:
+                raise CommandError("Cargo is unavailable")
+            command = [cargo, "run", "-q", "-p", "nekocode", "--", tool, path]
+            command_cwd = self.workspace_dir
         if tool == "context":
             command.extend(self._context_arguments(args))
 
@@ -170,7 +196,7 @@ class RustFirstMCPServer:
         try:
             completed = subprocess.run(
                 command,
-                cwd=self.workspace_dir,
+                cwd=command_cwd,
                 env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,

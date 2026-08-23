@@ -1,0 +1,6 @@
+.git
+.git/**
+**/target
+.nekocode_sessions
+nekocode-workspace/_cli_config
+nekocode-workspace/_temp_home

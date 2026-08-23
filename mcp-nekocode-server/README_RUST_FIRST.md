@@ -49,5 +49,19 @@ fails.
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
+## Prebuilt CLI / Docker
+
+配布環境では、gatewayに`NEKOCODE_BINARY_PATH`を渡すとCargo workspaceなしで
+canonical CLIを実行できる。リポジトリにはこのモードを使う
+`Dockerfile.rust-first`を用意している。
+
+```bash
+docker build -f Dockerfile.rust-first -t nekocode-rust-first .
+docker run --rm -i -v "$PWD":/work -w /work nekocode-rust-first
+```
+
+既存の`Dockerfile`と`mcp_server_real.py`はlegacy互換用であり、このgatewayから
+呼び出さない。
+
 The test starts the server over stdio, checks `initialize` and `tools/list`,
 then runs an `index` call against the canonical workspace.
