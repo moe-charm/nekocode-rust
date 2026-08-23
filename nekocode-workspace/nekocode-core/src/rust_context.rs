@@ -10,8 +10,11 @@ use crate::error::{NekocodeError, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// Internal compatibility marker retained while the public artifacts use
 /// versioned `snapshot-v1` and `context-v1` envelopes.
@@ -19,6 +22,10 @@ pub const SCHEMA_VERSION: u32 = 3;
 pub const SNAPSHOT_CONTRACT_VERSION: &str = "snapshot-v1";
 pub const CONTEXT_CONTRACT_VERSION: &str = "context-v1";
 const MAX_SOURCE_EXCERPT_BYTES: usize = 32 * 1024;
+const CARGO_CHECK_TIMEOUT: Duration = Duration::from_secs(180);
+const MAX_CARGO_STDOUT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_CARGO_STDERR_BYTES: usize = 2 * 1024 * 1024;
+const CARGO_TARGET_DIR_NAME: &str = "nekocode-rust-first-target";
 
 /// Provenance for one external tool invocation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -62,6 +69,46 @@ pub enum AnalysisMode {
 impl Default for AnalysisMode {
     fn default() -> Self {
         Self::MetadataOnly
+    }
+}
+
+/// Safety posture recorded with every public artifact.
+///
+/// These are descriptive strings rather than a claim that an OS sandbox is
+/// present. In particular, `process_network_isolation` remains
+/// `not_enforced` until a platform sandbox is implemented.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExecutionPolicy {
+    pub mode: AnalysisMode,
+    pub workspace_trust: String,
+    pub cargo_registry_network: String,
+    pub process_network_isolation: String,
+    pub environment: String,
+    pub compiler_wrappers: String,
+    pub target_directory: String,
+}
+
+fn metadata_execution_policy() -> ExecutionPolicy {
+    ExecutionPolicy {
+        mode: AnalysisMode::MetadataOnly,
+        workspace_trust: "not_required".to_string(),
+        cargo_registry_network: "not_used".to_string(),
+        process_network_isolation: "not_applicable".to_string(),
+        environment: "not_applicable".to_string(),
+        compiler_wrappers: "not_run".to_string(),
+        target_directory: "not_used".to_string(),
+    }
+}
+
+fn cargo_execution_policy() -> ExecutionPolicy {
+    ExecutionPolicy {
+        mode: AnalysisMode::CargoCheck,
+        workspace_trust: "required".to_string(),
+        cargo_registry_network: "offline".to_string(),
+        process_network_isolation: "not_enforced".to_string(),
+        environment: "allowlist".to_string(),
+        compiler_wrappers: "disabled".to_string(),
+        target_directory: "dedicated_temp".to_string(),
     }
 }
 
@@ -184,6 +231,10 @@ fn default_evidence_level() -> EvidenceLevel {
     EvidenceLevel::ToolConfirmed
 }
 
+fn default_execution_policy() -> ExecutionPolicy {
+    metadata_execution_policy()
+}
+
 /// A complete, explicit JSON snapshot that can be used as a later baseline.
 ///
 /// The snapshot is deliberately a file supplied by the caller. NekoCode does
@@ -201,6 +252,8 @@ pub struct RustContextSnapshot {
     pub schema_version: u32,
     #[serde(default = "default_evidence_level")]
     pub evidence: EvidenceLevel,
+    #[serde(default = "default_execution_policy")]
+    pub execution_policy: ExecutionPolicy,
     pub generated_at: String,
     pub workspace: RustWorkspaceSnapshot,
     pub diagnostics: Option<RustDiagnosticRun>,
@@ -240,6 +293,8 @@ pub struct RustDiffSummary {
     pub resolved_base: Option<String>,
     pub resolved_head: Option<String>,
     pub include_working_tree: bool,
+    #[serde(default)]
+    pub include_untracked_content: bool,
     pub patch: String,
     pub patch_truncated: bool,
     pub omitted_patch_bytes: usize,
@@ -324,6 +379,8 @@ pub struct RustContextPack {
     pub comparison_status: ComparisonStatus,
     pub schema_version: u32,
     pub evidence: EvidenceLevel,
+    #[serde(default = "default_execution_policy")]
+    pub execution_policy: ExecutionPolicy,
     pub root: PathBuf,
     pub workspace: RustWorkspaceSnapshot,
     pub compare_ref: Option<String>,
@@ -340,6 +397,8 @@ pub struct RustContextPack {
     pub serialized_bytes: usize,
     pub budget_exceeded: bool,
     pub include_working_tree: bool,
+    #[serde(default)]
+    pub include_untracked_content: bool,
     pub all_features: bool,
     pub omitted_changed_files: usize,
     pub omitted_excerpts: usize,
@@ -359,6 +418,7 @@ pub struct RustContextOptions {
     pub budget_tokens: usize,
     pub include_diagnostics: bool,
     pub include_working_tree: bool,
+    pub include_untracked_content: bool,
     pub all_features: bool,
     pub include_diff: bool,
     pub excerpt_lines: usize,
@@ -373,6 +433,7 @@ impl RustContextOptions {
             budget_tokens,
             include_diagnostics: false,
             include_working_tree: false,
+            include_untracked_content: false,
             all_features: false,
             excerpt_lines: 8,
             baseline: None,
@@ -406,6 +467,7 @@ pub struct ContextRequest {
     pub budget: usize,
     pub diagnostics: bool,
     pub working_tree: bool,
+    pub include_untracked_content: bool,
     pub all_features: bool,
     pub excerpt_lines: usize,
     pub baseline: Option<PathBuf>,
@@ -419,6 +481,7 @@ impl ContextRequest {
             budget,
             diagnostics: false,
             working_tree: false,
+            include_untracked_content: false,
             all_features: false,
             excerpt_lines: 8,
             baseline: None,
@@ -444,6 +507,7 @@ pub fn build_context(request: &ContextRequest) -> Result<ContextV1> {
     let mut options = RustContextOptions::new(request.compare_ref.clone(), request.budget);
     options.include_diagnostics = request.diagnostics;
     options.include_working_tree = request.working_tree;
+    options.include_untracked_content = request.include_untracked_content;
     options.all_features = request.all_features;
     options.excerpt_lines = request.excerpt_lines;
     options.baseline = request.baseline.clone();
@@ -486,6 +550,11 @@ pub fn build_rust_snapshot_with_mode(
         analysis_mode,
         schema_version: SCHEMA_VERSION,
         evidence: EvidenceLevel::ToolConfirmed,
+        execution_policy: if include_diagnostics {
+            cargo_execution_policy()
+        } else {
+            metadata_execution_policy()
+        },
         generated_at: chrono::Utc::now().to_rfc3339(),
         workspace,
         diagnostics,
@@ -665,23 +734,43 @@ fn normalize_hash_value(value: &mut serde_json::Value, key: Option<&str>, worksp
 /// Read Cargo workspace metadata without attempting to parse Rust semantics.
 pub fn index_rust_workspace(path: impl AsRef<Path>) -> Result<RustWorkspaceSnapshot> {
     let root = normalize_workspace_root(path.as_ref())?;
-    let command = "cargo metadata --format-version=1 --no-deps".to_string();
-    let output = Command::new("cargo")
-        .current_dir(&root)
-        .args(["metadata", "--format-version=1", "--no-deps"])
-        .output()
-        .map_err(|error| {
-            NekocodeError::External(format!("failed to run cargo metadata: {error}"))
-        })?;
+    let command = "cargo metadata --format-version=1 --no-deps --offline --config 'build.rustc-wrapper=\"\"' --config 'build.rustc-workspace-wrapper=\"\"'".to_string();
+    let mut cargo = Command::new("cargo");
+    cargo.current_dir(&root).args([
+        "metadata",
+        "--format-version=1",
+        "--no-deps",
+        "--offline",
+        "--config",
+        "build.rustc-wrapper=\"\"",
+        "--config",
+        "build.rustc-workspace-wrapper=\"\"",
+    ]);
+    configure_safe_environment(&mut cargo);
+    let output = run_bounded_command(
+        cargo,
+        Duration::from_secs(60),
+        MAX_CARGO_STDOUT_BYTES,
+        MAX_CARGO_STDERR_BYTES,
+    )?;
 
-    if !output.status.success() {
+    if output.timed_out {
+        return Err(NekocodeError::External(
+            "cargo metadata timed out".to_string(),
+        ));
+    }
+    if output.output_limited {
+        return Err(NekocodeError::External(
+            "cargo metadata output exceeded the safety limit".to_string(),
+        ));
+    }
+    if !output.status.is_some_and(|status| status.success()) {
         return Err(NekocodeError::External(format_command_failure(
             "cargo metadata",
-            &output.stderr,
+            &output.stderr.bytes,
         )));
     }
-
-    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout.bytes)?;
     let workspace_root = metadata
         .get("workspace_root")
         .and_then(serde_json::Value::as_str)
@@ -773,6 +862,7 @@ pub fn build_rust_context_with_config(
             &workspace.root,
             options.compare_ref.as_deref(),
             options.include_working_tree,
+            options.include_untracked_content,
             include_patch,
         )?;
         (files, Some(diff))
@@ -791,6 +881,16 @@ pub fn build_rust_context_with_config(
         None
     };
     let mut extra_limitations = Vec::new();
+    if options.include_working_tree && !options.include_untracked_content {
+        extra_limitations.push(
+            "Untracked files are reported as markers; use --include-untracked-content to read their contents."
+                .to_string(),
+        );
+    }
+    if options.include_untracked_content && !options.include_working_tree {
+        extra_limitations
+            .push("--include-untracked-content has no effect without --working-tree.".to_string());
+    }
     let mut comparison_status = if options.include_diagnostics {
         ComparisonStatus::BaselineMissing
     } else {
@@ -863,6 +963,11 @@ pub fn build_rust_context_with_config(
         comparison_status,
         schema_version: SCHEMA_VERSION,
         evidence: EvidenceLevel::ToolConfirmed,
+        execution_policy: if options.include_diagnostics {
+            cargo_execution_policy()
+        } else {
+            metadata_execution_policy()
+        },
         root: workspace.root.clone(),
         workspace,
         compare_ref: options.compare_ref.clone(),
@@ -883,6 +988,7 @@ pub fn build_rust_context_with_config(
         serialized_bytes: 0,
         budget_exceeded: false,
         include_working_tree: options.include_working_tree,
+        include_untracked_content: options.include_untracked_content,
         all_features: options.all_features,
         omitted_changed_files: 0,
         omitted_excerpts: 0,
@@ -1025,10 +1131,12 @@ fn diagnostics_status(diagnostics: Option<&RustDiagnosticRun>) -> ArtifactStatus
 }
 
 fn diagnostic_status(run: &RustDiagnosticRun) -> ArtifactStatus {
-    if run.status != "success" || !run.messages.is_empty() {
-        ArtifactStatus::CompletedWithDiagnostics
-    } else {
-        ArtifactStatus::CompletedClean
+    match run.status.as_str() {
+        "timed_out" => ArtifactStatus::TimedOut,
+        "output_limited" => ArtifactStatus::OutputLimited,
+        "failed" if run.messages.is_empty() => ArtifactStatus::ToolFailed,
+        "success" if run.messages.is_empty() => ArtifactStatus::CompletedClean,
+        _ => ArtifactStatus::CompletedWithDiagnostics,
     }
 }
 
@@ -1060,6 +1168,18 @@ fn omissions_for_pack(pack: &RustContextPack) -> Vec<Omission> {
     omissions
 }
 
+fn safe_workspace_file(root: &Path, relative: &Path) -> Option<PathBuf> {
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return None;
+    }
+    let candidate = root.join(relative).canonicalize().ok()?;
+    candidate.starts_with(root).then_some(candidate)
+}
+
 fn build_source_excerpts(
     root: &Path,
     changed_files: &[ChangedRustFile],
@@ -1074,7 +1194,9 @@ fn build_source_excerpts(
         if file.hunks.is_empty() {
             continue;
         }
-        let path = root.join(&file.path);
+        let Some(path) = safe_workspace_file(root, &file.path) else {
+            continue;
+        };
         let Ok(content) = std::fs::read_to_string(&path) else {
             continue;
         };
@@ -1114,7 +1236,10 @@ fn build_source_excerpts(
             merged.push((start, end));
         }
 
-        let Ok(content) = std::fs::read_to_string(root.join(&path)) else {
+        let Some(safe_path) = safe_workspace_file(root, &path) else {
+            continue;
+        };
+        let Ok(content) = std::fs::read_to_string(safe_path) else {
             continue;
         };
         let lines = content.lines().collect::<Vec<_>>();
@@ -1480,7 +1605,7 @@ fn command_version(command: &str) -> Option<String> {
 
 #[cfg(test)]
 fn git_changed_files(root: &Path, compare_ref: &str) -> Result<Vec<ChangedRustFile>> {
-    let (files, _) = git_context(root, Some(compare_ref), false, false)?;
+    let (files, _) = git_context(root, Some(compare_ref), false, false, false)?;
     Ok(files)
 }
 
@@ -1517,6 +1642,7 @@ fn git_context(
     root: &Path,
     compare_ref: Option<&str>,
     include_working_tree: bool,
+    include_untracked_content: bool,
     include_patch: bool,
 ) -> Result<(Vec<ChangedRustFile>, RustDiffSummary)> {
     if compare_ref.is_some_and(|reference| reference.trim().is_empty()) {
@@ -1536,6 +1662,7 @@ fn git_context(
             "--relative".to_string(),
             "--name-status".to_string(),
             "--no-ext-diff".to_string(),
+            "--no-textconv".to_string(),
             spec.clone(),
         ];
         changed_files.extend(parse_name_status(&run_git(root, &args, "git diff")?)?);
@@ -1545,6 +1672,7 @@ fn git_context(
                 "diff".to_string(),
                 "--relative".to_string(),
                 "--no-ext-diff".to_string(),
+                "--no-textconv".to_string(),
                 "--unified=3".to_string(),
                 spec,
             ];
@@ -1560,6 +1688,7 @@ fn git_context(
             "--relative".to_string(),
             "--name-status".to_string(),
             "--no-ext-diff".to_string(),
+            "--no-textconv".to_string(),
             base.to_string(),
         ];
         changed_files.extend(parse_name_status(&run_git(root, &args, "git diff")?)?);
@@ -1569,6 +1698,7 @@ fn git_context(
                 "diff".to_string(),
                 "--relative".to_string(),
                 "--no-ext-diff".to_string(),
+                "--no-textconv".to_string(),
                 "--unified=3".to_string(),
                 base.to_string(),
             ];
@@ -1585,8 +1715,10 @@ fn git_context(
                 package: None,
                 hunks: Vec::new(),
             });
-            if include_patch {
-                patch_parts.push(untracked_patch(root, path));
+            if include_patch && include_untracked_content {
+                if let Some(patch) = untracked_patch(root, path) {
+                    patch_parts.push(patch);
+                }
             }
         }
     }
@@ -1609,6 +1741,7 @@ fn git_context(
         resolved_base: compare_ref.and_then(|reference| git_rev_parse(root, reference)),
         resolved_head: git_rev_parse(root, "HEAD"),
         include_working_tree,
+        include_untracked_content,
         patch,
         patch_truncated: false,
         omitted_patch_bytes: 0,
@@ -1728,10 +1861,9 @@ fn parse_diff_range(value: &str) -> Option<(u32, u32)> {
     Some((start, count))
 }
 
-fn untracked_patch(root: &Path, path: &Path) -> String {
-    let Ok(content) = std::fs::read_to_string(root.join(path)) else {
-        return String::new();
-    };
+fn untracked_patch(root: &Path, path: &Path) -> Option<String> {
+    let safe_path = safe_workspace_file(root, path)?;
+    let content = std::fs::read_to_string(safe_path).ok()?;
     let line_count = content.lines().count().max(1);
     let mut patch = format!(
         "diff --git a/{0} b/{0}\nnew file mode 100644\n--- /dev/null\n+++ b/{0}\n@@ -0,0 +1,{1} @@\n",
@@ -1743,11 +1875,251 @@ fn untracked_patch(root: &Path, path: &Path) -> String {
         patch.push_str(line);
         patch.push('\n');
     }
-    patch
+    Some(patch)
 }
 
 fn is_rust_path(path: &Path) -> bool {
     path.extension().and_then(|extension| extension.to_str()) == Some("rs")
+}
+
+#[derive(Debug)]
+struct CappedBytes {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+#[derive(Debug)]
+struct BoundedCommandOutput {
+    status: Option<std::process::ExitStatus>,
+    stdout: CappedBytes,
+    stderr: CappedBytes,
+    timed_out: bool,
+    output_limited: bool,
+}
+
+fn read_capped<R: Read>(mut reader: R, limit: usize) -> io::Result<CappedBytes> {
+    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
+    let mut buffer = [0_u8; 16 * 1024];
+    let mut truncated = false;
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        let remaining = limit.saturating_sub(bytes.len());
+        let keep = read.min(remaining);
+        bytes.extend_from_slice(&buffer[..keep]);
+        if keep < read {
+            truncated = true;
+        }
+    }
+    Ok(CappedBytes { bytes, truncated })
+}
+
+fn join_reader(
+    reader: thread::JoinHandle<io::Result<CappedBytes>>,
+    timeout: Duration,
+    stream_name: &str,
+) -> Result<CappedBytes> {
+    let deadline = Instant::now() + timeout;
+    while !reader.is_finished() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    if !reader.is_finished() {
+        return Err(NekocodeError::External(format!(
+            "{stream_name} reader did not finish within the safety deadline"
+        )));
+    }
+    reader
+        .join()
+        .map_err(|_| NekocodeError::External(format!("{stream_name} reader thread panicked")))?
+        .map_err(|error| NekocodeError::External(format!("{stream_name} reader failed: {error}")))
+}
+
+fn run_bounded_command(
+    mut command: Command,
+    timeout: Duration,
+    stdout_limit: usize,
+    stderr_limit: usize,
+) -> Result<BoundedCommandOutput> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_process_group(&mut command);
+    let mut child = command
+        .spawn()
+        .map_err(|error| NekocodeError::External(format!("failed to start command: {error}")))?;
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            terminate_process_tree(&mut child);
+            return Err(NekocodeError::External(
+                "command stdout was not piped".to_string(),
+            ));
+        }
+    };
+    let stderr = match child.stderr.take() {
+        Some(stderr) => stderr,
+        None => {
+            terminate_process_tree(&mut child);
+            return Err(NekocodeError::External(
+                "command stderr was not piped".to_string(),
+            ));
+        }
+    };
+    let stdout_thread = thread::spawn(move || read_capped(stdout, stdout_limit));
+    let stderr_thread = thread::spawn(move || read_capped(stderr, stderr_limit));
+
+    let deadline = Instant::now() + timeout;
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() >= deadline => {
+                timed_out = true;
+                terminate_process_tree(&mut child);
+                break child.try_wait().ok().flatten();
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(error) => {
+                terminate_process_tree(&mut child);
+                return Err(NekocodeError::External(format!(
+                    "failed to wait for command: {error}"
+                )));
+            }
+        }
+    };
+
+    let reader_timeout = timeout.min(Duration::from_secs(5));
+    let stdout = match join_reader(stdout_thread, reader_timeout, "stdout") {
+        Ok(stdout) => stdout,
+        Err(error) => {
+            terminate_process_tree(&mut child);
+            return Err(error);
+        }
+    };
+    let stderr = match join_reader(stderr_thread, reader_timeout, "stderr") {
+        Ok(stderr) => stderr,
+        Err(error) => {
+            terminate_process_tree(&mut child);
+            return Err(error);
+        }
+    };
+    Ok(BoundedCommandOutput {
+        output_limited: stdout.truncated || stderr.truncated,
+        stdout,
+        stderr,
+        timed_out,
+        status,
+    })
+}
+
+#[cfg(unix)]
+fn configure_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    // A Cargo invocation can spawn build scripts and compiler wrappers. Put
+    // the child in its own process group so timeout cleanup reaches them.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setpgid(0, 0) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(windows)]
+fn configure_process_group(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+}
+
+#[cfg(not(any(unix, windows)))]
+fn configure_process_group(_command: &mut Command) {}
+
+#[cfg(unix)]
+fn terminate_process_tree(child: &mut Child) {
+    let pid = child.id() as libc::pid_t;
+    // Negative pid addresses the process group created above.
+    unsafe {
+        libc::kill(-pid, libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(windows)]
+fn terminate_process_tree(child: &mut Child) {
+    let pid = child.id().to_string();
+    let _ = Command::new("taskkill")
+        .args(["/PID", pid.as_str(), "/T", "/F"])
+        .status();
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(not(any(unix, windows)))]
+fn terminate_process_tree(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn dedicated_target_dir(root: &Path) -> Result<PathBuf> {
+    let mut hasher = Sha256::new();
+    hasher.update(root.to_string_lossy().as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    let target = std::env::temp_dir()
+        .join(CARGO_TARGET_DIR_NAME)
+        .join(&digest[..16]);
+    std::fs::create_dir_all(&target)?;
+    Ok(target)
+}
+
+fn configure_safe_environment(command: &mut Command) {
+    command.env_clear();
+    for key in [
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "USERPROFILE",
+        "SystemRoot",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "RUSTUP_TOOLCHAIN",
+    ] {
+        if let Ok(value) = std::env::var(key) {
+            command.env(key, value);
+        }
+    }
+    command
+        .env("CARGO_TERM_COLOR", "never")
+        .env_remove("RUSTC")
+        .env_remove("RUSTDOC")
+        .env_remove("RUSTC_WRAPPER")
+        .env_remove("RUSTC_WORKSPACE_WRAPPER")
+        .env_remove("CARGO_BUILD_RUSTC")
+        .env_remove("CARGO_BUILD_RUSTC_WRAPPER")
+        .env_remove("LD_PRELOAD")
+        .env_remove("DYLD_INSERT_LIBRARIES")
+        .env_remove("BASH_ENV")
+        .env_remove("ENV");
+}
+
+fn configure_cargo_environment(command: &mut Command, target_dir: &Path) {
+    configure_safe_environment(command);
+    command
+        .env("CARGO_NET_OFFLINE", "true")
+        .env("CARGO_TARGET_DIR", target_dir);
 }
 
 fn run_cargo_check_with_options(root: &Path, all_features: bool) -> Result<RustDiagnosticRun> {
@@ -1755,30 +2127,53 @@ fn run_cargo_check_with_options(root: &Path, all_features: bool) -> Result<RustD
         "check".to_string(),
         "--workspace".to_string(),
         "--all-targets".to_string(),
+        "--offline".to_string(),
+        "--config".to_string(),
+        "build.rustc-wrapper=\"\"".to_string(),
+        "--config".to_string(),
+        "build.rustc-workspace-wrapper=\"\"".to_string(),
     ];
     if all_features {
         args.push("--all-features".to_string());
     }
     args.push("--message-format=json".to_string());
     let command = format!("cargo {}", args.join(" "));
-    let output = Command::new("cargo")
-        .current_dir(root)
-        .args(&args)
-        .output()
-        .map_err(|error| NekocodeError::External(format!("failed to run cargo check: {error}")))?;
+    let target_dir = dedicated_target_dir(root)?;
+    let mut cargo = Command::new("cargo");
+    cargo.current_dir(root).args(&args);
+    configure_cargo_environment(&mut cargo, &target_dir);
+    let output = run_bounded_command(
+        cargo,
+        CARGO_CHECK_TIMEOUT,
+        MAX_CARGO_STDOUT_BYTES,
+        MAX_CARGO_STDERR_BYTES,
+    )?;
+    let status = if output.timed_out {
+        "timed_out"
+    } else if output.output_limited {
+        "output_limited"
+    } else if output.status.is_some_and(|status| status.success()) {
+        "success"
+    } else {
+        "failed"
+    };
+    let mut stderr = non_empty_text(&output.stderr.bytes);
+    if output.stderr.truncated {
+        let marker = "[stderr truncated by safety limit]";
+        stderr = Some(match stderr {
+            Some(text) => format!("{text}\n{marker}"),
+            None => marker.to_string(),
+        });
+    }
 
     Ok(RustDiagnosticRun {
         command: command.clone(),
-        status: if output.status.success() {
-            "success".to_string()
-        } else {
-            "failed".to_string()
-        },
+        status: status.to_string(),
         messages: parse_cargo_diagnostics_with_root(
-            &String::from_utf8_lossy(&output.stdout),
+            &String::from_utf8_lossy(&output.stdout.bytes),
             Some(root),
         ),
-        stderr: non_empty_text(&output.stderr),
+        stderr,
         all_targets: true,
         all_features,
         provenance: ToolProvenance {
@@ -1786,7 +2181,7 @@ fn run_cargo_check_with_options(root: &Path, all_features: bool) -> Result<RustD
             command,
             cwd: root.to_path_buf(),
             version: command_version("cargo"),
-            exit_code: output.status.code(),
+            exit_code: output.status.and_then(|status| status.code()),
         },
     })
 }
@@ -2078,5 +2473,69 @@ mod tests {
         assert_eq!(diagnostics[0].line, Some(3));
         assert_eq!(diagnostics[0].spans.len(), 1);
         assert!(diagnostics[0].spans[0].is_primary);
+    }
+
+    #[test]
+    fn metadata_policy_does_not_claim_execution() {
+        let policy = metadata_execution_policy();
+        assert_eq!(policy.mode, AnalysisMode::MetadataOnly);
+        assert_eq!(policy.workspace_trust, "not_required");
+        assert_eq!(policy.process_network_isolation, "not_applicable");
+    }
+
+    #[test]
+    fn cargo_policy_reports_unenforced_network_isolation() {
+        let policy = cargo_execution_policy();
+        assert_eq!(policy.mode, AnalysisMode::CargoCheck);
+        assert_eq!(policy.workspace_trust, "required");
+        assert_eq!(policy.cargo_registry_network, "offline");
+        assert_eq!(policy.process_network_isolation, "not_enforced");
+        assert_eq!(policy.compiler_wrappers, "disabled");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_runner_caps_output() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "printf 'abcdef'"]);
+        let output = run_bounded_command(command, Duration::from_secs(2), 3, 3)
+            .expect("bounded command should run");
+        assert!(output.output_limited);
+        assert_eq!(output.stdout.bytes, b"abc");
+        assert_eq!(output.status.expect("status").code(), Some(0));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_runner_terminates_process_group_on_timeout() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 2"]);
+        let started = Instant::now();
+        let output = run_bounded_command(command, Duration::from_millis(50), 1024, 1024)
+            .expect("bounded command should return after timeout");
+        assert!(output.timed_out);
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_runner_does_not_wait_for_orphaned_pipe_holder() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 5 & exit 0"]);
+        let started = Instant::now();
+        let result = run_bounded_command(command, Duration::from_millis(100), 1024, 1024);
+        assert!(result.is_err());
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_workspace_file_rejects_symlink_escape() {
+        let root = tempfile::tempdir().expect("workspace tempdir");
+        let outside = tempfile::tempdir().expect("outside tempdir");
+        std::fs::write(outside.path().join("secret.rs"), "secret").expect("outside file");
+        std::os::unix::fs::symlink(outside.path(), root.path().join("link"))
+            .expect("symlink should be created");
+        assert!(safe_workspace_file(root.path(), Path::new("link/secret.rs")).is_none());
     }
 }

@@ -25,6 +25,9 @@ async-trait = { workspace = true }
 # File hashing for change detection
 sha2 = "0.10"
 
+# Process-group termination for bounded trusted-workspace checks
+libc = "0.2"
+
 # CPU count for default parallelism
 num_cpus = "1.16"
 

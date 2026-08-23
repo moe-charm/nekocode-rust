@@ -24,6 +24,8 @@ The artifact records, as applicable:
 - relevant manifest, lockfile, toolchain, and configuration digests;
 - Git HEAD/dirty state and normalized workspace-relative paths;
 - analysis mode and tool provenance;
+- an execution policy describing trust, offline mode, environment filtering,
+  compiler-wrapper handling, and sandbox gaps;
 - optional compiler diagnostic observation;
 - a canonical payload hash that excludes volatile timestamps and storage paths.
 
@@ -36,6 +38,7 @@ unknown fields, and avoid assuming a fixed future enum set.
 with the current workspace observation. It may contain:
 
 - staged and unstaged Git changes, renames, deletes, untracked/binary markers;
+- untracked file content only when explicitly requested;
 - unified-diff hunks and bounded source excerpts;
 - optional structured Cargo/rustc diagnostics;
 - an exact diagnostic delta against a compatible saved snapshot;

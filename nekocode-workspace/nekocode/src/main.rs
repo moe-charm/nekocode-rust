@@ -65,6 +65,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             budget,
             diagnostics,
             working_tree,
+            include_untracked_content,
             all_features,
             excerpt_lines,
             baseline,
@@ -76,6 +77,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                 budget,
                 diagnostics,
                 working_tree,
+                include_untracked_content,
                 all_features,
                 excerpt_lines,
                 baseline,
@@ -394,6 +396,7 @@ fn handle_rust_context_command(
     budget: usize,
     diagnostics: bool,
     working_tree: bool,
+    include_untracked_content: bool,
     all_features: bool,
     excerpt_lines: usize,
     baseline: Option<std::path::PathBuf>,
@@ -404,12 +407,18 @@ fn handle_rust_context_command(
             "--excerpt-lines must be between 0 and 200".to_string(),
         ));
     }
+    if include_untracked_content && !working_tree {
+        return Err(NekocodeError::Config(
+            "--include-untracked-content requires --working-tree".to_string(),
+        ));
+    }
     let request = nekocode_core::ContextRequest {
         path,
         compare_ref,
         budget,
         diagnostics,
         working_tree,
+        include_untracked_content,
         all_features,
         excerpt_lines,
         baseline,

@@ -10,6 +10,7 @@
     "comparison_status",
     "schema_version",
     "evidence",
+    "execution_policy",
     "workspace",
     "changed_files",
     "budget",
@@ -36,8 +37,33 @@
     "evidence": {
       "enum": ["tool-confirmed", "semantic-resolved", "syntax-only", "incomplete"]
     },
+    "execution_policy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "workspace_trust",
+        "cargo_registry_network",
+        "process_network_isolation",
+        "environment",
+        "compiler_wrappers",
+        "target_directory"
+      ],
+      "properties": {
+        "mode": { "enum": ["metadata_only", "cargo_check"] },
+        "workspace_trust": { "enum": ["not_required", "required"] },
+        "cargo_registry_network": { "enum": ["not_used", "offline"] },
+        "process_network_isolation": {
+          "enum": ["not_applicable", "not_enforced"]
+        },
+        "environment": { "enum": ["not_applicable", "allowlist"] },
+        "compiler_wrappers": { "enum": ["not_run", "disabled"] },
+        "target_directory": { "enum": ["not_used", "dedicated_temp"] }
+      },
+      "additionalProperties": false
+    },
     "workspace": { "type": "object" },
     "changed_files": { "type": "array", "items": { "type": "object" } },
+    "include_untracked_content": { "type": "boolean" },
     "diff": { "type": ["object", "null"] },
     "source_excerpts": { "type": "array", "items": { "type": "object" } },
     "diagnostics": { "type": ["object", "null"] },

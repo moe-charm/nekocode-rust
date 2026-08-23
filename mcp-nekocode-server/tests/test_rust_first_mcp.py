@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +94,41 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertFalse(result["isError"])
         self.assertEqual(result["structuredContent"]["mode"], "prebuilt")
 
+    def test_cli_environment_does_not_forward_compiler_wrappers(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os\n"
+                "print(json.dumps({key: os.environ.get(key) for key in (\n"
+                "  'RUSTC_WRAPPER', 'CARGO_BUILD_RUSTC_WRAPPER', 'NEKOCODE_SECRET'\n"
+                ")}))\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "RUSTC_WRAPPER": "evil-wrapper",
+                    "CARGO_BUILD_RUSTC_WRAPPER": "evil-wrapper",
+                    "NEKOCODE_SECRET": "not-forwarded",
+                },
+                clear=False,
+            ):
+                result = server.handle_tool_call(
+                    {"name": "nekocode_snapshot", "arguments": {"path": "."}}
+                )
+
+        self.assertFalse(result["isError"])
+        environment = result["structuredContent"]
+        self.assertIsNone(environment["RUSTC_WRAPPER"])
+        self.assertIsNone(environment["CARGO_BUILD_RUSTC_WRAPPER"])
+        self.assertIsNone(environment["NEKOCODE_SECRET"])
+
     def test_context_forwards_working_tree_and_feature_options(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
 
@@ -114,6 +151,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                         "compare_ref": "HEAD~1",
                         "budget": 1200,
                         "working_tree": True,
+                        "include_untracked_content": True,
                         "all_features": True,
                         "excerpt_lines": 12,
                         "baseline": "/tmp/baseline.json",
@@ -129,11 +167,90 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertIn("--budget", argv)
         self.assertIn("1200", argv)
         self.assertIn("--working-tree", argv)
+        self.assertIn("--include-untracked-content", argv)
         self.assertIn("--all-features", argv)
         self.assertIn("--excerpt-lines", argv)
         self.assertIn("12", argv)
         self.assertIn("--baseline", argv)
         self.assertIn("<path>", argv)
+
+    def test_untracked_content_requires_working_tree(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(
+                workspace_dir=temp / "missing", binary_path=fake_cli
+            )
+            result = server.handle_tool_call(
+                {
+                    "name": "nekocode_context",
+                    "arguments": {
+                        "path": ".",
+                        "include_untracked_content": True,
+                    },
+                }
+            )
+        self.assertTrue(result["isError"])
+        self.assertIn("requires", result["content"][0]["text"])
+
+    def test_timeout_is_reported_without_leaking_process_details(self) -> None:
+        import mcp_server_rust_first as gateway
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "import time\n"
+                "time.sleep(2)\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = gateway.RustFirstMCPServer(
+                workspace_dir=temp / "missing", binary_path=fake_cli
+            )
+            original_timeout = gateway.COMMAND_TIMEOUT_SECONDS
+            gateway.COMMAND_TIMEOUT_SECONDS = 0.05
+            try:
+                result = server.handle_tool_call(
+                    {"name": "nekocode_snapshot", "arguments": {"path": "."}}
+                )
+            finally:
+                gateway.COMMAND_TIMEOUT_SECONDS = original_timeout
+
+        self.assertTrue(result["isError"])
+        self.assertIn("timed out", result["content"][0]["text"])
+
+    def test_output_limit_is_reported_before_json_parsing(self) -> None:
+        import mcp_server_rust_first as gateway
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "print('x' * 100)\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = gateway.RustFirstMCPServer(
+                workspace_dir=temp / "missing", binary_path=fake_cli
+            )
+            original_limit = gateway.MAX_STDOUT_BYTES
+            gateway.MAX_STDOUT_BYTES = 4
+            try:
+                result = server.handle_tool_call(
+                    {"name": "nekocode_snapshot", "arguments": {"path": "."}}
+                )
+            finally:
+                gateway.MAX_STDOUT_BYTES = original_limit
+
+        self.assertTrue(result["isError"])
+        self.assertIn("safety limit", result["content"][0]["text"])
 
     def test_snapshot_forwards_explicit_options(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer

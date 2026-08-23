@@ -49,6 +49,8 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     assert_eq!(pack.contract_version, "context-v1");
     assert_eq!(pack.artifact_kind, "context");
     assert_eq!(pack.comparison_status, ComparisonStatus::Comparable);
+    assert_eq!(pack.execution_policy.workspace_trust, "not_required");
+    assert_eq!(pack.execution_policy.process_network_isolation, "not_applicable");
     assert_eq!(pack.budget.requested_tokens, 8_000);
     assert!(pack.budget.max_bytes >= pack.serialized_bytes);
     assert!(pack
@@ -76,6 +78,10 @@ fn context_contains_hunks_packages_and_working_tree_files() {
         .diff
         .as_ref()
         .is_some_and(|diff| diff.patch.contains("after")));
+    assert!(pack
+        .diff
+        .as_ref()
+        .is_some_and(|diff| !diff.patch.contains("new_file")));
     let excerpt = pack
         .source_excerpts
         .iter()
@@ -85,6 +91,16 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     assert!(excerpt.start_line <= 1);
     assert!(excerpt.end_line >= 1);
     assert!(excerpt.content.contains("after"));
+
+    let mut content_options = RustContextOptions::new(Some("HEAD".to_string()), 8_000);
+    content_options.include_working_tree = true;
+    content_options.include_untracked_content = true;
+    let content_pack =
+        build_rust_context_with_config(root, content_options).expect("untracked content works");
+    assert!(content_pack
+        .diff
+        .as_ref()
+        .is_some_and(|diff| diff.include_untracked_content && diff.patch.contains("new_file")));
 }
 
 #[test]
@@ -105,6 +121,11 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     assert_eq!(snapshot.contract_version, "snapshot-v1");
     assert_eq!(snapshot.artifact_kind, "snapshot");
     assert_eq!(snapshot.analysis_mode, AnalysisMode::CargoCheck);
+    assert_eq!(snapshot.execution_policy.workspace_trust, "required");
+    assert_eq!(
+        snapshot.execution_policy.process_network_isolation,
+        "not_enforced"
+    );
     assert!(snapshot.canonical_hash.is_some());
     assert!(!snapshot.generated_at.is_empty());
     assert!(snapshot.diagnostics.is_some());

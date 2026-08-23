@@ -11,9 +11,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -23,8 +25,25 @@ SERVER_NAME = "nekocode-rust-first"
 SERVER_VERSION = "0.2.0"
 MAX_BUDGET = 100_000
 COMMAND_TIMEOUT_SECONDS = 180
+MAX_STDOUT_BYTES = 8 * 1024 * 1024
+MAX_STDERR_BYTES = 2 * 1024 * 1024
 SNAPSHOT_TOOL = "nekocode_snapshot"
 CONTEXT_TOOL = "nekocode_context"
+SAFE_ENVIRONMENT_KEYS = (
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "USERPROFILE",
+    "SystemRoot",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "CARGO_HOME",
+    "RUSTUP_HOME",
+    "RUSTUP_TOOLCHAIN",
+)
 
 
 class ToolInputError(ValueError):
@@ -35,9 +54,64 @@ class CommandError(RuntimeError):
     """The Rust CLI could not produce a valid JSON result."""
 
 
+def _read_capped(stream: Any, limit: int) -> tuple[bytes, bool]:
+    chunks: list[bytes] = []
+    total = 0
+    truncated = False
+    while True:
+        chunk = stream.read(16 * 1024)
+        if not chunk:
+            break
+        kept = 0
+        if total < limit:
+            keep = chunk[: limit - total]
+            chunks.append(keep)
+            total += len(keep)
+            kept = len(keep)
+        if kept < len(chunk):
+            truncated = True
+    return b"".join(chunks), truncated
+
+
+def _capture_capped(stream: Any, limit: int, result: Dict[str, Any], key: str) -> None:
+    try:
+        result[key] = _read_capped(stream, limit)
+    except BaseException as exc:  # pragma: no cover - defensive thread bridge
+        result[key] = exc
+
+
+def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    elif os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    try:
+        process.kill()
+    except ProcessLookupError:
+        pass
+
+
 def _safe_error(message: str) -> str:
     """Keep operational details, paths, and environment values off stdio."""
     return re.sub(r"(?:[A-Za-z]:)?[/\\][^\s'\"]+", "<path>", message)
+
+
+def _safe_cli_environment() -> Dict[str, str]:
+    """Pass only the execution inputs needed by the local Rust CLI."""
+    environment = {
+        key: os.environ[key] for key in SAFE_ENVIRONMENT_KEYS if key in os.environ
+    }
+    environment["CARGO_TERM_COLOR"] = "never"
+    return environment
 
 
 def _redact_absolute_paths(value: Any) -> Any:
@@ -152,6 +226,11 @@ class RustFirstMCPServer:
                             "description": "Include staged, unstaged, and untracked changes.",
                             "default": False,
                         },
+                        "include_untracked_content": {
+                            "type": "boolean",
+                            "description": "Read untracked file contents; requires working_tree.",
+                            "default": False,
+                        },
                         "all_features": {
                             "type": "boolean",
                             "description": "Run cargo check with all workspace features.",
@@ -209,6 +288,13 @@ class RustFirstMCPServer:
             raise ToolInputError("'working_tree' must be a boolean")
         if working_tree:
             command.append("--working-tree")
+        include_untracked_content = args.get("include_untracked_content", False)
+        if not isinstance(include_untracked_content, bool):
+            raise ToolInputError("'include_untracked_content' must be a boolean")
+        if include_untracked_content and not working_tree:
+            raise ToolInputError("'include_untracked_content' requires 'working_tree'")
+        if include_untracked_content:
+            command.append("--include-untracked-content")
         all_features = args.get("all_features", False)
         if not isinstance(all_features, bool):
             raise ToolInputError("'all_features' must be a boolean")
@@ -269,31 +355,75 @@ class RustFirstMCPServer:
         elif tool == CONTEXT_TOOL:
             command.extend(self._context_arguments(args))
 
-        env = os.environ.copy()
-        # Cargo output belongs on stderr.  stdout must remain a parseable JSON CLI
-        # response, so do not allow terminal colouring to leak into it.
-        env["CARGO_TERM_COLOR"] = "never"
+        # Cargo output belongs on stderr. stdout must remain a parseable JSON CLI
+        # response, so do not allow terminal colouring to leak into it. The
+        # adapter also avoids forwarding compiler wrappers and arbitrary build
+        # configuration from the MCP host process.
+        env = _safe_cli_environment()
+        process_options: Dict[str, Any] = {}
+        if os.name == "posix":
+            process_options["start_new_session"] = True
+        elif os.name == "nt":
+            process_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=command_cwd,
                 env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                timeout=COMMAND_TIMEOUT_SECONDS,
-                check=False,
+                **process_options,
             )
-        except subprocess.TimeoutExpired as exc:
-            raise CommandError("Rust command timed out") from exc
         except OSError as exc:
             raise CommandError("Rust command could not start") from exc
 
-        if completed.returncode != 0:
-            raise CommandError("Rust command failed; inspect the local Cargo diagnostics")
+        assert process.stdout is not None
+        assert process.stderr is not None
+        captured: Dict[str, Any] = {}
+        stdout_thread = threading.Thread(
+            target=_capture_capped,
+            args=(process.stdout, MAX_STDOUT_BYTES, captured, "stdout"),
+            daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=_capture_capped,
+            args=(process.stderr, MAX_STDERR_BYTES, captured, "stderr"),
+            daemon=True,
+        )
+        stdout_thread.start()
+        stderr_thread.start()
         try:
-            return json.loads(completed.stdout)
+            completed_returncode = process.wait(timeout=COMMAND_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as exc:
+            _terminate_process_tree(process)
+            process.wait(timeout=5)
+            stdout_thread.join(timeout=5)
+            stderr_thread.join(timeout=5)
+            process.stdout.close()
+            process.stderr.close()
+            raise CommandError("Rust command timed out") from exc
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        process.stdout.close()
+        process.stderr.close()
+        if stdout_thread.is_alive() or stderr_thread.is_alive():
+            _terminate_process_tree(process)
+            raise CommandError("Rust command output reader timed out")
+        stdout = captured.get("stdout")
+        stderr = captured.get("stderr")
+        if completed_returncode != 0:
+            raise CommandError("Rust command failed; inspect the local Cargo diagnostics")
+        if stdout is None or stderr is None:
+            raise CommandError("Rust command output could not be collected")
+        if isinstance(stdout, BaseException) or isinstance(stderr, BaseException):
+            raise CommandError("Rust command output could not be collected")
+        stdout_bytes, stdout_truncated = stdout
+        _, stderr_truncated = stderr
+        if stdout_truncated or stderr_truncated:
+            raise CommandError("Rust command output exceeded the safety limit")
+        try:
+            return json.loads(stdout_bytes.decode("utf-8"))
         except json.JSONDecodeError as exc:
             raise CommandError("Rust command returned invalid JSON") from exc
 
@@ -315,6 +445,7 @@ class RustFirstMCPServer:
             "budget",
             "diagnostics",
             "working_tree",
+            "include_untracked_content",
             "all_features",
             "analysis",
             "output",
@@ -335,6 +466,7 @@ class RustFirstMCPServer:
             "budget",
             "diagnostics",
             "working_tree",
+            "include_untracked_content",
             "all_features",
             "excerpt_lines",
             "baseline",

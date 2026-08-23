@@ -54,6 +54,7 @@ workspace. An explicit output path is the only persisted artifact.
   "baseline":"/tmp/nekocode-baseline.json",
   "diagnostics":true,
   "working_tree":true,
+  "include_untracked_content":false,
   "all_features":false,
   "budget":8000,
   "excerpt_lines":8
@@ -64,15 +65,19 @@ The result contains Cargo metadata, normalized Git refs and change markers,
 diff hunks, bounded excerpts, optional structured diagnostics, and an exact
 diagnostic delta only when the baseline is comparable. A missing diagnostic
 baseline is `baseline_missing`; incompatible toolchain/features/targets are
-`not_comparable`. Clients must not infer a compiler delta from `compare_ref`.
+`not_comparable`. Untracked contents remain markers unless
+`include_untracked_content` is explicitly set with `working_tree`. Clients
+must not infer a compiler delta from `compare_ref`.
 
 ## Safety and parity
 
 The gateway uses argument-vector subprocess execution (no shell), rejects
-unknown arguments, enforces input limits and timeout, and redacts absolute
-paths in content and structured results. It does not claim OS-level sandboxing
-for Cargo execution; callers must trust the workspace when requesting
-`cargo-check`.
+unknown arguments, enforces input/output limits and timeout, terminates the
+child process group on timeout, and redacts absolute paths in content and
+structured results. The CLI subprocess receives a small environment allowlist;
+compiler wrapper variables are not forwarded by the adapter. It does not claim
+OS-level sandboxing for Cargo execution; callers must trust the workspace when
+requesting `cargo-check`.
 
 MCP exposes no prompts, resources, UI, refactor operations, symbol search,
 dead-code tool, arbitrary command, or server-side snapshot database.

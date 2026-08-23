@@ -10,6 +10,7 @@
     "analysis_mode",
     "schema_version",
     "evidence",
+    "execution_policy",
     "generated_at",
     "workspace",
     "limitations"
@@ -32,6 +33,30 @@
     "schema_version": { "type": "integer", "minimum": 1 },
     "evidence": {
       "enum": ["tool-confirmed", "semantic-resolved", "syntax-only", "incomplete"]
+    },
+    "execution_policy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "workspace_trust",
+        "cargo_registry_network",
+        "process_network_isolation",
+        "environment",
+        "compiler_wrappers",
+        "target_directory"
+      ],
+      "properties": {
+        "mode": { "enum": ["metadata_only", "cargo_check"] },
+        "workspace_trust": { "enum": ["not_required", "required"] },
+        "cargo_registry_network": { "enum": ["not_used", "offline"] },
+        "process_network_isolation": {
+          "enum": ["not_applicable", "not_enforced"]
+        },
+        "environment": { "enum": ["not_applicable", "allowlist"] },
+        "compiler_wrappers": { "enum": ["not_run", "disabled"] },
+        "target_directory": { "enum": ["not_used", "dedicated_temp"] }
+      },
+      "additionalProperties": false
     },
     "generated_at": { "type": "string", "format": "date-time" },
     "workspace": { "type": "object" },

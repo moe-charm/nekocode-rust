@@ -37,9 +37,13 @@ cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --budget 8000 --diagnostics
 
-# Include staged, unstaged, and untracked working-tree changes
+# Include staged, unstaged, and untracked working-tree markers
 cargo run -q -p nekocode -- context . \
-  --compare-ref HEAD~1 --working-tree --all-features
+  --compare-ref HEAD~1 --working-tree
+
+# Read untracked file contents only when explicitly requested
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --working-tree --include-untracked-content
 ```
 
 ### Snapshots and diagnostic deltas
@@ -71,10 +75,12 @@ digests, toolchain information, and command provenance. `context` adds the
 resolved Git refs, changed files, diff hunks/patch, optional source excerpts,
 optional structured compiler diagnostics, and diagnostic delta information.
 
-Every response reports its contract version, `evidence`, budget fields, and
-`limitations`. When a request is too large, NekoCode records what was omitted
-instead of silently presenting an incomplete result as complete. Source
-excerpts are display context around Git hunks; they are not symbol resolution.
+Every response reports its contract version, `evidence`, execution policy,
+budget fields, and `limitations`. When a request is too large, NekoCode
+records what was omitted instead of silently presenting an incomplete result as
+complete. Source excerpts are display context around Git hunks; they are not
+symbol resolution. Untracked contents are markers by default and require
+`--include-untracked-content`.
 
 ### MCP and workflow integrations
 
@@ -105,8 +111,9 @@ python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
 The workspace still contains recoverable legacy crates, so warning-free legacy
-builds are not part of the current contract. Rust-first fixtures and smoke
-tests are the promotion gate for future semantic backends.
+builds are not part of the current contract. Rust-first fixtures, schema,
+safety fixtures, and CLI/MCP smoke tests are the promotion gate for future
+semantic backends.
 
 ### Repository boundaries
 
@@ -153,6 +160,10 @@ cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --budget 8000 --diagnostics
 
+# 未追跡ファイルは既定でmarkerだけ返す。内容を読む場合だけ明示する。
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --working-tree --include-untracked-content
+
 # 明示的なbaselineを保存し、後でdiagnostic deltaを比較
 cargo run -q -p nekocode -- snapshot . \
   --analysis cargo-check --output /tmp/nekocode-baseline.json --all-features
@@ -164,7 +175,9 @@ cargo run -q -p nekocode -- context . \
 再現しません。diagnostic deltaは、保存したbaselineと現在のtoolchain・features・
 targetsが互換する場合だけ比較し、`added`・`resolved`・`persisting`を返します。
 予算超過時は省略数と`limitations`をJSONへ残します。source excerptはGit hunk周辺の
-表示補助であり、symbol/reference解決ではありません。
+表示補助であり、symbol/reference解決ではありません。cargo-checkはtrusted
+workspaceでのみ明示的に実行し、応答の`execution_policy`にoffline・環境allowlist・
+専用target・未実装のOS network isolationを記録します。
 
 ### MCP・Skill・Pluginの境界
 
@@ -191,8 +204,8 @@ python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
 legacy crate由来のwarningが残るため、workspace全体のwarning-freeは現行契約では
-ありません。Rust fixture、schema、CLI/MCP smoke testを、今後のsemantic backendを
-昇格させるゲートにします。
+ありません。Rust fixture、schema、実行安全性fixture、CLI/MCP smoke testを、
+今後のsemantic backendを昇格させるゲートにします。
 
 ### 詳細
 

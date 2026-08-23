@@ -28,25 +28,27 @@ process_network_isolation: not-enforced
 ## Current controls and gaps
 
 The current implementation exposes `cargo-check` only as an explicit opt-in
-and records tool provenance, compiler status, structured diagnostics, and
-budget omissions. The MCP subprocess adapter also applies an input limit,
-redacts absolute paths, and has a wall-clock timeout. Git diff calls disable
-external diff helpers; this is not an OS sandbox.
+and records tool provenance, compiler status, structured diagnostics, execution
+policy, and budget omissions. The core uses an offline Cargo profile with a
+dedicated temporary target directory, an environment allowlist, disabled
+compiler wrappers, bounded Cargo stdout/stderr, and process-group termination
+on timeout. Source excerpts use a canonical-root/symlink check. The MCP
+subprocess adapter also applies input/output limits, redacts absolute paths,
+uses a small environment allowlist, and has a wall-clock timeout. Git diff
+calls disable external diff/textconv helpers; this is not an OS sandbox.
 
-The following controls are **not yet enforced** by the core and remain release
-blockers for untrusted workspaces:
+The following controls are **not yet enforced** and remain release blockers
+for untrusted workspaces:
 
-- process-tree termination after a Cargo timeout;
-- a dedicated target directory and environment allowlist;
 - OS-level network/process isolation;
-- canonical-root and symlink escape checks for every source read;
-- bounded Cargo stdout/stderr before parsing;
 - a sandboxed build-script/procedural-macro execution boundary.
 
 Until those controls are implemented and tested, callers must trust the
 workspace and the product must not describe `cargo-check` as sandboxed. An
 unimplemented control is reported as a limitation rather than implied by a
-generic “read-only” label.
+generic “read-only” label. The current process-group, output-limit, and
+symlink tests cover the local safety boundary; build-script/procedural-macro
+sentinels remain promotion fixtures.
 
 ## Compiler result states
 

@@ -1037,6 +1037,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dirs",
+ "libc",
  "log",
  "num_cpus",
  "pretty_assertions",

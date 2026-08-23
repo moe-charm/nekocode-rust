@@ -70,9 +70,13 @@ pub enum Commands {
         #[arg(long)]
         diagnostics: bool,
 
-        /// Include staged, unstaged, and untracked working-tree changes
+        /// Include staged, unstaged, and untracked working-tree markers
         #[arg(long)]
         working_tree: bool,
+
+        /// Read untracked file contents (requires --working-tree)
+        #[arg(long)]
+        include_untracked_content: bool,
 
         /// Run cargo check with every declared workspace feature enabled
         #[arg(long)]

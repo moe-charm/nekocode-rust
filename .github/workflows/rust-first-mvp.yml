@@ -66,8 +66,11 @@ jobs:
       - name: Test context library
         run: cargo test -p nekocode-core
 
+      - name: Verify trusted-workspace execution boundary
+        run: cargo test -p nekocode-core --test execution_trust_integration
+
       - name: Check canonical CLI package
-        run: cargo check -p nekocode
+        run: cargo check -p nekocode --all-targets
 
       - name: Smoke-test Rust snapshot output
         run: cargo run -q -p nekocode -- snapshot . --output /tmp/nekocode-rust-snapshot.json && test -s /tmp/nekocode-rust-snapshot.json

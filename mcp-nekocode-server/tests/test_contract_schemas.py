@@ -24,7 +24,21 @@ class ContractSchemaTest(unittest.TestCase):
                 self.assertIn("contract_version", schema["required"])
                 self.assertIn("status", schema["required"])
                 self.assertIn("schema_version", schema["required"])
+                self.assertIn("execution_policy", schema["required"])
                 self.assertIn("limitations", schema["required"])
+                execution_policy = schema["properties"]["execution_policy"]
+                self.assertEqual(
+                    set(execution_policy["required"]),
+                    {
+                        "mode",
+                        "workspace_trust",
+                        "cargo_registry_network",
+                        "process_network_isolation",
+                        "environment",
+                        "compiler_wrappers",
+                        "target_directory",
+                    },
+                )
 
 
 if __name__ == "__main__":

@@ -140,16 +140,19 @@ compiler wrappers. Until OS-level isolation exists, NekoCode must report that
 process network isolation is not enforced and must not call the operation
 "sandboxed".
 
-The implementation must bound process time/output, redact secrets, keep source
-reads inside the workspace, reject symlink escapes, and disable Git external
-diff/textconv. See [execution-trust.md](execution-trust.md) for the release
+The implementation now bounds process time/output, filters the Cargo
+environment, uses offline mode and a dedicated target, keeps source reads
+inside the workspace, rejects symlink escapes, and disables Git external
+diff/textconv. OS-level process/network isolation is still not enforced.
+See [execution-trust.md](execution-trust.md) for the remaining release
 blockers and fixtures.
 
 ## Current implementation and promotion gates
 
 The current branch has the Rust context core, explicit snapshot persistence,
 Git hunk/excerpt support, diagnostic parsing, versioned artifact envelopes,
-safe public path views, and a minimal two-tool stdio gateway. `snapshot` is the
+execution policy, safe public path views, and a minimal two-tool stdio gateway.
+Untracked file content is opt-in. `snapshot` is the
 canonical CLI/MCP name; the CLI preserves only the short-lived hidden `index`
 alias for migration scripts.
 
