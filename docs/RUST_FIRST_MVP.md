@@ -57,9 +57,7 @@ cargo run -q -p nekocode -- context . \
   --diagnostics --budget 8000
 ```
 
-For one migration release, the CLI may accept `index` as a hidden compatibility
-alias. Documentation and MCP expose `snapshot` only. There is no canonical
-`analyze` command.
+There is no compatibility alias or `analyze` command.
 
 ## Snapshot contract
 
@@ -152,9 +150,8 @@ blockers and fixtures.
 The current branch has the Rust context core, explicit snapshot persistence,
 Git hunk/excerpt support, diagnostic parsing, versioned artifact envelopes,
 execution policy, safe public path views, and a minimal two-tool stdio gateway.
-Untracked file content is opt-in. `snapshot` is the
-canonical CLI/MCP name; the CLI preserves only the short-lived hidden `index`
-alias for migration scripts. The execution fixture suite covers build-script
+Untracked file content is opt-in. `snapshot` is the canonical CLI/MCP name.
+The execution fixture suite covers build-script
 and procedural-macro execution evidence without claiming sandboxing.
 
 Before a semantic backend or a second language is promoted, fixtures must cover
@@ -164,14 +161,9 @@ states, budget omissions, and CLI/MCP payload parity.
 
 ## Legacy boundary
 
-The root package, old five binaries, multi-language analyzers, refactoring,
-dead-code/impact heuristics, watch, security/quality suites, and extra MCP
-tools remain recoverable legacy only. They receive no new product claims.
-
-Physical archive waits for the gates in
-[legacy-retirement.md](legacy-retirement.md): final tag, clean canonical
-dependency graph, golden artifacts, parity tests, one install binary, and no
-legacy route in primary docs.
+The former multi-language, session, refactor, impact, watch, and extra MCP
+implementation has been removed from `main`. It remains recoverable only from
+the refs recorded in [legacy-retirement.md](legacy-retirement.md).
 
 ## Version policy
 

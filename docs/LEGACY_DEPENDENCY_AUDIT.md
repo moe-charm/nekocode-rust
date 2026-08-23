@@ -1,37 +1,19 @@
-# Legacy dependency audit before physical archive
+# Legacy dependency audit — final result
 
-監査日: 2026-08-23
+Audit completed: 2026-08-23.
 
-物理移動の前に、旧root package・5バイナリ配布・MCPの三系統を切り替える必要がある。`nekocode-workspace`を先に移動すると、現行の配布・MCP導線が壊れるため、順序を固定する。
+Before retirement, the repository had three competing dependency roots: a
+root parser package, a multi-binary nested workspace, and several MCP servers.
+They also controlled release binaries, Docker, CI, and checked-in session
+state.
 
-## 発見した依存
+The migration established the Rust context core, two-command CLI, versioned
+schemas, safety fixtures, and CLI/MCP parity first. Commit `ba71a05` then made
+legacy dependencies opt-in, after which the complete recovery snapshot was
+pushed as `legacy-multilang-final` and
+`archive/legacy-multilang-final`.
 
-### Root package
-
-- root `Cargo.toml` は旧単一package `nekocode-rust` を定義する。
-- `.github/workflows/build-and-test.yml` と `release.yml` はroot packageをfmt/test/build/releaseする。
-- `scripts/update_releases.sh` はrootでbuildするため、Rust-first CLIの配布更新になっていない。
-- `README.md`、`nekocode-analysis.yml`、`security.yml`にも旧`analyze`/`nekocode-rust`導線が残る。
-
-### 5-binary workspace
-
-- workspace memberには`nekorefactor`、`nekoimpact`、`nekoinc`、`nekomcp`、`nekosplit_rust`が残る。
-- `Makefile`、`build.sh`、`build-and-deploy.sh`は5本を`bin/`/`releases/`へコピーする。
-- `releases/setup.py`は`nekocode`と`nekorefactor`を別々に探索する。
-
-### MCP
-
-- `mcp-nekocode-server/mcp_server_real.py`はrelease/workspace/root/C++の複数binaryを探索し、legacyの`analyze`、session、refresh、deadcodeを呼ぶ。
-- `mcp_wrapper_5binary.py`は`nekocode`、`nekorefactor`、`nekoimpact`を同時に必要とする。
-- `mcp_server_nekocode.py`と`config.json`には開発機固有のbinary path候補も残る。
-
-## Archive gate
-
-1. root workflow/release/security/analysisをRust-first CLIへ切り替えるか、legacy workflowとして明示的に隔離する。
-2. MCPに`index`/`context`専用の最小gatewayを追加し、旧5-binary serverをlegacy扱いにする。
-3. workspace memberを`nekocode-core` + `nekocode`へ縮退する方針を決める。
-4. Makefile/build/setup/release/Dockerの5本コピー前提を切り替える。
-5. clean checkoutでcore test、CLI index/context、MCP smokeを通す。
-6. その後にroot package、legacy crates、配布ELFをarchive branchまたは`archive/legacy`へ移す。
-
-現時点では依存監査、移行前commit `c4bb63d` の `legacy-2026-pre-rust-first` タグ固定、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging helper、prebuilt CLI MCP gateway、security workflowのCargo audit/SBOM/container名切替、cargo-deny/CodeQLのcanonical build指定、setup/buildのRust-first既定化、コミット済みRust-first HEADのclean checkout（core 9 tests、CLI check/index/context、MCP smoke）まで完了。legacy Dockerfileと明示的legacy 5-binary routeはまだ残るため、物理移動はその切替後に実施する。
+The main branch now has one Cargo workspace with two members, one CLI binary,
+one MCP server with two tools, one Docker path, and no prebuilt executables or
+hidden sessions. Historical source and documentation must be consulted from
+the recovery refs, not copied back into the canonical dependency graph.

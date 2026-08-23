@@ -78,21 +78,15 @@ body:
       required: true
 
   - type: dropdown
-    id: language
+    id: operation
     attributes:
-      label: 🗣️ Language Being Analyzed
-      description: Which programming language were you analyzing when the bug occurred?
+      label: Operation
+      description: Which supported operation failed?
       options:
-        - "JavaScript"
-        - "TypeScript" 
-        - "Python"
-        - "C++"
-        - "C"
-        - "C#"
-        - "Go"
-        - "Rust"
-        - "Multiple languages"
-        - "Not language-specific"
+        - "snapshot"
+        - "context"
+        - "MCP gateway"
+        - "Build or installation"
     validations:
       required: true
 
@@ -101,7 +95,7 @@ body:
     attributes:
       label: 🔧 Command Used
       description: The exact command you ran when the bug occurred
-      placeholder: "./bin/nekocode_ai analyze src/ --format json"
+      placeholder: "nekocode context . --compare-ref HEAD~1"
       render: bash
     validations:
       required: true
@@ -141,7 +135,7 @@ body:
         - label: "Running on CI/CD (GitHub Actions, etc.)"
         - label: "Using with Claude Code MCP"
         - label: "Large project (>1000 files)"
-        - label: "Monorepo/multi-language project"
+        - label: "Cargo workspace with multiple packages"
 
   - type: textarea
     id: additional-context
@@ -164,5 +158,5 @@ body:
           required: true
         - label: "I have provided all the required information above"
           required: true
-        - label: "I understand this is for NekoCode Rust edition bugs only"
+        - label: "I understand the supported target is a Rust/Cargo workspace"
           required: true

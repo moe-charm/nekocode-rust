@@ -31,17 +31,12 @@ mod unix_only {
             "[package]\nname = \"git-helper-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
         )
         .expect("manifest");
-        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 1 }\n")
-            .expect("source");
-        fs::write(root.join(".gitattributes"), "src/lib.rs diff=sentinel\n")
-            .expect("attributes");
+        fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 1 }\n").expect("source");
+        fs::write(root.join(".gitattributes"), "src/lib.rs diff=sentinel\n").expect("attributes");
 
         let helper = root.join("helper.sh");
         let sentinel = root.join("GIT_HELPER_RAN");
-        let helper_body = format!(
-            "#!/bin/sh\nprintf ran > '{}'\nexit 0\n",
-            sentinel.display()
-        );
+        let helper_body = format!("#!/bin/sh\nprintf ran > '{}'\nexit 0\n", sentinel.display());
         fs::write(&helper, helper_body).expect("helper");
         fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).expect("executable");
 

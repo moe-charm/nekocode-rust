@@ -22,8 +22,8 @@ handling around those tools.
 - **Read-only:** no source editing, hidden database, or automatic commit/push.
 - **No unmeasured accuracy claims:** NekoCode does not claim independent
   dead-code, reference, type, or breaking-change accuracy.
-- Other languages and the older multi-binary/refactoring surface remain
-  legacy or experimental; they are not part of this contract.
+- The former multi-language/session/refactoring implementation is archived
+  outside `main`; it is not part of this contract.
 
 ### Quick start
 
@@ -115,26 +115,20 @@ cd ..
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
-Plain `cargo build`, `cargo check`, and `cargo test` use only the canonical
-core and CLI through Cargo `default-members`. Recoverable legacy crates require
-an explicit package or `--workspace`; their shared session API is also behind
-the non-default `nekocode-core/legacy` feature. The canonical core dependency
-graph contains no async runtime, SQLite, session storage, or language parser.
+The Cargo workspace contains only the canonical core and CLI. The core
+dependency graph contains no async runtime, SQLite, session storage, or
+language parser.
 Rust-first fixtures, schema,
 safety fixtures, and CLI/MCP smoke tests are the promotion gate for future
 semantic backends.
 
 ### Repository boundaries
 
-The canonical implementation and migration boundary are documented in
+The canonical implementation and completed archive are documented in
 [`docs/RUST_FIRST_MVP.md`](docs/RUST_FIRST_MVP.md) and
 [`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md). The root Cargo
-package, old five-binary commands, multi-language analyzers, refactoring,
-watch, impact, and legacy MCP paths are retained for recovery only. They are
-not advertised as current features.
-
-`archived/README_jp.md` is a historical document and is intentionally not the
-current Japanese specification.
+Historical source is absent from `main` and recoverable from the tag and
+archive branch named in the retirement decision.
 
 ## 日本語
 
@@ -155,7 +149,7 @@ Cargo、`rustc`、`cargo check`、rust-analyzer、Gitです。NekoCode固有の�
 - 外部artifact契約は`snapshot-v1`と`context-v1`で、provenance・evidence・制限情報を含む。
 - ソース編集、隠しDB、自動commit/pushは行わない。
 - dead code・参照・型・breaking changeの独自精度や、未測定の精度パーセントは主張しない。
-- 他言語と旧5バイナリ、旧refactor/watch/impact/MCPはlegacyまたはexperimentalであり、現行契約外。
+- 旧多言語・session・refactor等の実装はmainからarchive済みで、現行契約外。
 
 ### 最短手順
 
@@ -216,10 +210,8 @@ cd ..
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
-通常のCargoコマンドは`default-members`により正規coreとCLIだけを対象にします。
-旧memberは明示packageまたは`--workspace`指定時だけ対象になり、共通session APIも
-non-defaultの`nekocode-core/legacy` featureに隔離されています。正規coreは
-async runtime、SQLite、session storage、言語parserへ依存しません。
+Cargo workspaceは正規coreとCLIの2 memberだけです。正規coreはasync runtime、
+SQLite、session storage、言語parserへ依存しません。
 Rust fixture、schema、実行安全性fixture、CLI/MCP smoke testを、今後のsemantic
 backendを昇格させるゲートにします。
 

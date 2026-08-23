@@ -1,6 +1,11 @@
 .git
 .git/**
 **/target
+dist
+__pycache__
+*.pyc
 .nekocode_sessions
+.nekocode_history
+.nekocode_cache
 nekocode-workspace/_cli_config
 nekocode-workspace/_temp_home

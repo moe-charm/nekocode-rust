@@ -91,5 +91,5 @@ python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 The test starts the server over stdio, checks `initialize` and `tools/list`,
 and calls both canonical tool names against the Rust-first workspace.
 
-The legacy `mcp_server_real.py` and five-binary wrappers remain recoverable
-but are not the canonical gateway.
+The retired gateway is recoverable from the `legacy-multilang-final` tag and
+`archive/legacy-multilang-final` branch; it is not present on `main`.

@@ -2,8 +2,7 @@
 """A deliberately small Rust-first MCP server for NekoCode.
 
 The server speaks newline-delimited JSON-RPC 2.0 on stdio and exposes only
-the Rust-first ``snapshot`` and ``context`` commands.  It is intentionally
-independent from the legacy MCP implementations in this directory.
+the Rust-first ``snapshot`` and ``context`` commands.
 """
 
 from __future__ import annotations

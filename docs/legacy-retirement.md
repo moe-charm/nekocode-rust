@@ -1,60 +1,34 @@
 # Legacy retirement
 
-Status: migration policy, 2026-08-23.
+Status: completed on `main`, 2026-08-23.
 
-The repository remains recoverable while the Rust-first contract is validated.
-Keeping code recoverable does not make it a supported product surface.
+The former multi-language/session/refactor implementation is no longer part of
+the main branch. It remains fully recoverable from:
 
-## Freeze now
+- annotated tag `legacy-multilang-final`;
+- archive branch `archive/legacy-multilang-final`.
 
-The following receive no new product features or accuracy claims:
+## Completed gate
 
-- root single-package Cargo entry points;
-- old five-binary install/release paths;
-- multi-language analyzers;
-- heuristic dead-code and impact conclusions;
-- refactor, split, strip-comments, watch, security, and quality suites;
-- generic symbol/reference indexing;
-- additional MCP tools, prompts, resources, UI, or remote services.
+1. The final tag exists and was pushed.
+2. The archive branch exists and was pushed.
+3. Rust trait/impl/macro/cfg/feature and execution fixtures are in the
+   canonical test corpus.
+4. Canonical crates contain no dependency on retired code.
+5. snapshot/context artifacts and CLI/MCP parity tests pass.
+6. install, package, CI, Docker, README, and MCP paths expose one CLI and two
+   use cases.
+7. Retired binary names occur only in migration records.
 
-The canonical docs, release scripts, and README must describe only
-`snapshot`/`context` and the two-tool Rust-first gateway.
+## Removed from main
 
-## Physical archive gate
+- the root Cargo package and parser tree;
+- standalone analysis/refactor/impact/watch/MCP crates;
+- session, SQLite, generic symbol, and multi-language modules;
+- old MCP servers, prompts, configuration, and guides;
+- prebuilt binaries and multi-binary install/release helpers;
+- legacy CI, security, impact, and release workflows;
+- hidden checked-in session artifacts and unsupported product claims.
 
-Do not move or delete the legacy tree until all of the following are true:
-
-1. a final tag such as `legacy-multilang-final` exists;
-2. a read-only archive branch or repository is available if downstream users
-   need recovery;
-3. useful fixtures have moved to the canonical Rust-first test corpus;
-4. no canonical crate depends on legacy code;
-5. `snapshot`/`context` golden artifacts and CLI/MCP parity tests pass;
-6. install, release, CI, Docker, and README paths advertise one CLI only;
-7. searches for old binary names succeed only in migration documentation.
-
-Plugin or App completion is not an archive prerequisite. Those are packaging
-and presentation layers, not replacements for the legacy analyzer.
-
-## Migration sequence
-
-1. Keep the old implementation recoverable and mark it legacy.
-2. Add the Rust-first contract and fixtures.
-3. Make `snapshot` the public command; retain only a short-lived CLI `index`
-   alias for existing scripts.
-4. Remove old release/install/CI defaults from the canonical path.
-5. Create the final legacy tag and archive branch.
-6. Delete the old tree from `main` only after the gate is green.
-
-The migration is complete when a clean checkout has one supported CLI, two
-MCP tools, no hidden state, and no legacy feature claim in the primary docs.
-
-As of 2026-08-23, plain Cargo build/test and the generic Make targets resolve
-to `nekocode-core` plus the two-command `nekocode` CLI. Legacy workspace
-members and their explicit `legacy-*` recovery targets remain until the final
-tag/archive gate is completed.
-
-The retained core session API is compiled only by the explicit `legacy`
-feature. Canonical core/CLI builds do not resolve its async, SQLite, session,
-or generic-analysis dependencies. This is logical isolation, not yet physical
-archive: the source remains recoverable in the tree until the final tag gate.
+No compatibility wrapper or hidden command is retained. Recovery must use the
+tag or archive branch rather than reintroducing a second supported surface.

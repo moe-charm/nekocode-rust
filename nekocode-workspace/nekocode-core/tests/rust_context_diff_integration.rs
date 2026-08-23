@@ -50,7 +50,10 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     assert_eq!(pack.artifact_kind, "context");
     assert_eq!(pack.comparison_status, ComparisonStatus::Comparable);
     assert_eq!(pack.execution_policy.workspace_trust, "not_required");
-    assert_eq!(pack.execution_policy.process_network_isolation, "not_applicable");
+    assert_eq!(
+        pack.execution_policy.process_network_isolation,
+        "not_applicable"
+    );
     assert_eq!(pack.budget.requested_tokens, 8_000);
     assert!(pack.budget.max_bytes >= pack.serialized_bytes);
     assert!(pack

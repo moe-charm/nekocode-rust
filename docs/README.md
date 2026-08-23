@@ -8,10 +8,10 @@ contract is deliberately small: `snapshot` and `context`.
 - [Product boundary](product-boundary.md) — what NekoCode is and is not;
 - [Execution trust model](execution-trust.md) — metadata-only vs opt-in Cargo execution;
 - [Artifact contract](artifact-contract.md) — snapshot-v1/context-v1, comparability, and omissions;
-- [Legacy retirement](legacy-retirement.md) — freeze and physical-archive gates;
+- [Legacy retirement](legacy-retirement.md) — completed archive and recovery refs;
 - [Rust-first MVP contract](RUST_FIRST_MVP.md) — canonical architecture and acceptance gates;
-- [Repository layout](REPOSITORY_LAYOUT.md) — current paths and migration boundary;
-- [Legacy dependency audit](LEGACY_DEPENDENCY_AUDIT.md) — audited recovery dependencies.
+- [Repository layout](REPOSITORY_LAYOUT.md) — current canonical paths;
+- [Legacy dependency audit](LEGACY_DEPENDENCY_AUDIT.md) — final migration result.
 
 ## Current implementation guides
 
@@ -19,9 +19,8 @@ contract is deliberately small: `snapshot` and `context`.
 - [Root README](../README.md);
 - [Canonical workspace README](../nekocode-workspace/README.md).
 
-The older usage, performance, refactoring, and multi-language documents are
-historical recovery material. They are not the current product contract and do
-not override the documents above.
+Historical source and documents are available only through the recovery tag
+and archive branch listed in the retirement decision.
 
 ## English / 日本語
 

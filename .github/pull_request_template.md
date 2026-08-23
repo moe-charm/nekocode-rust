@@ -33,22 +33,17 @@
 ### Test Files/Commands Used
 ```bash
 # Example test commands
-./target/release/nekocode-rust analyze test-project/
-./target/release/nekocode-rust analyze-impact . --format github-comment
+make verify
+cargo run --manifest-path nekocode-workspace/Cargo.toml -p nekocode -- snapshot nekocode-workspace
 ```
 
-### Languages Tested
-<!-- Mark the languages you tested with [x] -->
+### Contract Surface Tested
 
-- [ ] JavaScript
-- [ ] TypeScript
-- [ ] Python
-- [ ] C++
-- [ ] C
-- [ ] C#
-- [ ] Go
-- [ ] Rust
-- [ ] N/A (not language-specific)
+- [ ] snapshot
+- [ ] context
+- [ ] MCP parity
+- [ ] schema validation
+- [ ] execution-trust boundary
 
 ## 📊 Performance Impact
 <!-- If applicable, describe any performance implications -->
@@ -116,12 +111,11 @@
 
 ---
 
-🐱 **Thank you for contributing to NekoCode!** Your changes help make code analysis faster and more powerful for everyone.
+🐱 **Thank you for contributing to NekoCode!**
 
 <!-- 
 For maintainers: This PR will trigger the following automated checks:
-- Build & Test workflow
-- Security scanning
-- Performance benchmarking (if applicable)
-- NekoCode impact analysis (dogfooding!)
+- Rust and MCP tests
+- Artifact contract checks
+- Execution-safety fixtures
 -->

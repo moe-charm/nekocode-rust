@@ -50,16 +50,19 @@ fn main() {
         "metadata-only mode must not execute build.rs"
     );
 
-    let snapshot = build_rust_snapshot(root, true, false)
-        .expect("cargo-check should return an observation");
-    assert_eq!(snapshot.analysis_mode, nekocode_core::AnalysisMode::CargoCheck);
-    assert_eq!(snapshot.execution_policy.workspace_trust, "required");
+    let snapshot =
+        build_rust_snapshot(root, true, false).expect("cargo-check should return an observation");
     assert_eq!(
-        snapshot.execution_policy.cargo_registry_network,
-        "offline"
+        snapshot.analysis_mode,
+        nekocode_core::AnalysisMode::CargoCheck
     );
+    assert_eq!(snapshot.execution_policy.workspace_trust, "required");
+    assert_eq!(snapshot.execution_policy.cargo_registry_network, "offline");
 
-    assert!(sentinel.is_file(), "build.rs should execute in explicit mode");
+    assert!(
+        sentinel.is_file(),
+        "build.rs should execute in explicit mode"
+    );
     let report = fs::read_to_string(sentinel).expect("sentinel report");
     assert!(report.contains("offline=true"));
     assert!(report.contains("nekocode-rust-first-target"));

@@ -16,11 +16,8 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'scripts/update_rust_first_release.sh'
-      - 'releases/setup.py'
       - 'Makefile'
-      - 'nekocode-workspace/build.sh'
-      - 'nekocode-workspace/build-and-deploy.sh'
-      - 'Dockerfile.rust-first'
+      - 'Dockerfile'
       - '.dockerignore'
       - '.github/workflows/rust-first-mvp.yml'
   pull_request:
@@ -37,11 +34,8 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'scripts/update_rust_first_release.sh'
-      - 'releases/setup.py'
       - 'Makefile'
-      - 'nekocode-workspace/build.sh'
-      - 'nekocode-workspace/build-and-deploy.sh'
-      - 'Dockerfile.rust-first'
+      - 'Dockerfile'
       - '.dockerignore'
       - '.github/workflows/rust-first-mvp.yml'
 
@@ -68,6 +62,12 @@ jobs:
       - name: Test context library
         run: cargo test -p nekocode-core
 
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Reject canonical Rust warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Verify trusted-workspace execution boundary
         run: cargo test -p nekocode-core --test execution_trust_integration
 
@@ -80,11 +80,25 @@ jobs:
       - name: Check canonical CLI package
         run: cargo check -p nekocode --all-targets
 
-      - name: Verify legacy dependencies stay out of canonical core
+      - name: Verify the physical repository boundary
+        run: |
+          python3 - <<'PY'
+          import json
+          import subprocess
+
+          metadata = json.loads(subprocess.check_output([
+              "cargo", "metadata", "--no-deps", "--format-version", "1"
+          ]))
+          packages = {package["name"] for package in metadata["packages"]}
+          assert packages == {"nekocode", "nekocode-core"}, packages
+          PY
+          test ! -e ../Cargo.toml
+          test "$(find ../mcp-nekocode-server -maxdepth 1 -name '*.py' | wc -l)" -eq 1
+
+      - name: Verify the canonical core stays minimal
         run: |
           cargo tree -p nekocode-core --depth 1 --edges normal > /tmp/nekocode-core-tree.txt
           ! grep -Eq 'anyhow|async-trait|dirs |log |num_cpus|regex|rusqlite|tokio|uuid|walkdir' /tmp/nekocode-core-tree.txt
-          cargo check -p nekocode-core --features legacy
 
       - name: Verify the canonical CLI exposes only two use cases
         run: |
@@ -111,6 +125,4 @@ jobs:
         working-directory: .
         run: |
           bash -n scripts/update_rust_first_release.sh
-          bash -n nekocode-workspace/build.sh nekocode-workspace/build-and-deploy.sh
-          python3 -m py_compile releases/setup.py
-          make -n build test release install rust-first-release rust-first-install
+          make -n build check test verify install package docker

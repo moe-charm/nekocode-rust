@@ -37,9 +37,8 @@ nekocode context PATH --baseline SNAPSHOT.json
 ```
 
 `snapshot` describes an explicit workspace observation. `context` describes a
-Git change set plus optional compiler observations. The old `index` spelling
-may remain as a short-lived CLI compatibility alias, but it is not a public
-MCP or documentation name.
+Git change set plus optional compiler observations. No compatibility command
+or hidden session entry point is supported.
 
 ## Non-goals for the Rust-first MVP
 

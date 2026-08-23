@@ -23,17 +23,13 @@ pub enum AnalysisArg {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Snapshot a Rust workspace using Cargo metadata.
-    #[command(name = "snapshot", alias = "index")]
+    #[command(name = "snapshot")]
     Snapshot {
         path: PathBuf,
         #[arg(short, long)]
         output: Option<PathBuf>,
         #[arg(long, value_enum, default_value_t = AnalysisArg::MetadataOnly)]
         analysis: AnalysisArg,
-        #[arg(long = "snapshot", hide = true)]
-        legacy_snapshot: Option<PathBuf>,
-        #[arg(long, hide = true)]
-        diagnostics: bool,
         #[arg(long)]
         all_features: bool,
     },

@@ -28,11 +28,9 @@ cargo test
 cargo check --all-targets
 ```
 
-The workspace still contains legacy members (`nekorefactor`, `nekoimpact`,
-`nekoinc`, and others) for recovery. Their old multi-language, session,
-refactoring, impact, and watch commands are not the Rust-first contract. Cargo
-`default-members` excludes them, and their shared core API requires the
-explicit non-default `nekocode-core/legacy` feature.
+The workspace contains exactly two members: the core and CLI. The retired
+implementation is available only through the recovery refs documented at the
+repository root.
 
 See the root [README](../README.md), the [Rust-first MVP contract](../docs/RUST_FIRST_MVP.md),
 and the [repository layout](../docs/REPOSITORY_LAYOUT.md).
@@ -56,10 +54,8 @@ Git差分、任意のsource excerpt、任意の`cargo check`診断を追加し�
 比較可能性・budget・limitationsを含みます。未追跡ファイルの内容は明示指定時だけ
 読み込みます。Rustの意味解析を独自に置き換えるものではありません。
 
-workspace内には復旧用のlegacy member（`nekorefactor`、`nekoimpact`、`nekoinc`など）
-が残っています。旧多言語・session・refactor・impact・watch機能は現行契約外です。
-通常のCargoコマンドからは`default-members`で除外され、共通core APIも明示的な
-non-default `nekocode-core/legacy` featureを指定した場合だけコンパイルされます。
+workspace memberはcoreとCLIの2つだけです。退役した実装はmainに残さず、ルート文書に
+記載したrecovery tag/branchからのみ取得できます。
 
 詳細はルートの[README](../README.md)、[Rust-first MVP契約](../docs/RUST_FIRST_MVP.md)、
 [repository layout](../docs/REPOSITORY_LAYOUT.md)を参照してください。

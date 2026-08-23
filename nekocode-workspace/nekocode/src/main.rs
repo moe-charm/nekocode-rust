@@ -13,13 +13,11 @@ fn main() -> Result<()> {
             path,
             output,
             analysis,
-            legacy_snapshot,
-            diagnostics,
             all_features,
         } => snapshot(
             SnapshotRequest {
                 path,
-                analysis: if diagnostics || matches!(analysis, AnalysisArg::CargoCheck) {
+                analysis: if matches!(analysis, AnalysisArg::CargoCheck) {
                     AnalysisMode::CargoCheck
                 } else {
                     AnalysisMode::MetadataOnly
@@ -27,7 +25,6 @@ fn main() -> Result<()> {
                 all_features,
             },
             output,
-            legacy_snapshot,
         ),
         Commands::Context {
             path,
@@ -57,16 +54,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn snapshot(
-    request: SnapshotRequest,
-    output: Option<std::path::PathBuf>,
-    legacy_output: Option<std::path::PathBuf>,
-) -> Result<()> {
-    if output.is_some() && legacy_output.is_some() {
-        return Err(NekocodeError::Config(
-            "--snapshot and --output cannot be used together".into(),
-        ));
-    }
+fn snapshot(request: SnapshotRequest, output: Option<std::path::PathBuf>) -> Result<()> {
     if request.all_features && request.analysis == AnalysisMode::MetadataOnly {
         return Err(NekocodeError::Config(
             "--all-features requires --analysis cargo-check".into(),
@@ -75,7 +63,7 @@ fn snapshot(
     let artifact =
         nekocode_core::sanitize_snapshot_for_output(&nekocode_core::build_snapshot(&request)?)?;
     let json = serde_json::to_string_pretty(&artifact)?;
-    if let Some(path) = output.or(legacy_output) {
+    if let Some(path) = output {
         nekocode_core::write_rust_snapshot(&path, &artifact)?;
         eprintln!("Rust snapshot written to {}", path.display());
     }

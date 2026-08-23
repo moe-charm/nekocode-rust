@@ -6,7 +6,7 @@ version: 2
 updates:
   # Rust dependencies
   - package-ecosystem: "cargo"
-    directory: "/"
+    directory: "/nekocode-workspace"
     schedule:
       interval: "weekly"
       day: "monday"

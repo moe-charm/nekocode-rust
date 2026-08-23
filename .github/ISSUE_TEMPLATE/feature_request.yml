@@ -52,14 +52,14 @@ body:
       label: 📂 Feature Category
       description: What category does this feature fall into?
       options:
-        - "Code Analysis (parsing, detection)"
+        - "Snapshot evidence"
+        - "Git and diagnostic context"
+        - "Comparability and omissions"
+        - "Execution safety"
         - "Performance (speed, memory)"
-        - "Output Formats (JSON, reports)"
-        - "Language Support (new languages)"
+        - "Artifact contract"
         - "CLI Interface (commands, options)"
-        - "Integration (APIs, MCP, tools)"
-        - "Session Management"
-        - "Impact Analysis"
+        - "MCP or Skill integration"
         - "Developer Experience"
         - "Documentation"
         - "Other"
@@ -130,19 +130,16 @@ body:
         - label: "Academic/research use"
 
   - type: checkboxes
-    id: languages
+    id: scope
     attributes:
-      label: 🗣️ Language Relevance
-      description: Which languages would this feature apply to?
+      label: Scope
+      description: Which canonical layer would this affect?
       options:
-        - label: "JavaScript/TypeScript"
-        - label: "Python"
-        - label: "C/C++"
-        - label: "C#"
-        - label: "Go"
-        - label: "Rust"
-        - label: "Language-agnostic"
-        - label: "All languages"
+        - label: "nekocode-core"
+        - label: "CLI"
+        - label: "MCP gateway"
+        - label: "Codex Skill"
+        - label: "Schemas or documentation"
 
   - type: textarea
     id: additional-context
@@ -173,7 +170,7 @@ body:
       options:
         - label: "I have searched existing issues and this feature hasn't been requested"
           required: true
-        - label: "This feature aligns with NekoCode's goals (code analysis)"
+        - label: "This feature aligns with the Rust context-layer product boundary"
           required: true
         - label: "I understand this may not be implemented immediately"
           required: true

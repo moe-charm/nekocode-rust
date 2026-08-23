@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build and stage only the Rust-first CLI.  Legacy five-binary artifacts are
-# intentionally left untouched; commit or publish the staged file separately.
+# Build and stage the canonical CLI for local packaging.
 #
 # Usage:
 #   scripts/update_rust_first_release.sh [--clean] [--skip-build] [--output DIR]
@@ -10,7 +9,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 MANIFEST="$ROOT_DIR/nekocode-workspace/Cargo.toml"
 TARGET="$ROOT_DIR/nekocode-workspace/target/release/nekocode"
-OUTPUT_DIR="$ROOT_DIR/releases"
+OUTPUT_DIR="$ROOT_DIR/dist"
 CLEAN=0
 SKIP_BUILD=0
 
@@ -60,4 +59,4 @@ fi
 mkdir -p "$OUTPUT_DIR"
 install -m 0755 "$TARGET" "$OUTPUT_DIR/nekocode"
 "$OUTPUT_DIR/nekocode" --version
-echo "[+] Rust-first CLI staged at $OUTPUT_DIR/nekocode"
+echo "[+] CLI staged at $OUTPUT_DIR/nekocode"
