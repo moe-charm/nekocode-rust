@@ -11,6 +11,7 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'skills/**'
       - 'schemas/**'
       - 'docs/**'
       - 'README.md'
@@ -31,6 +32,7 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'skills/**'
       - 'schemas/**'
       - 'docs/**'
       - 'README.md'
@@ -69,6 +71,9 @@ jobs:
       - name: Verify trusted-workspace execution boundary
         run: cargo test -p nekocode-core --test execution_trust_integration
 
+      - name: Verify procedural-macro execution evidence
+        run: cargo test -p nekocode-core --test proc_macro_execution_integration
+
       - name: Check canonical CLI package
         run: cargo check -p nekocode --all-targets
 
@@ -81,6 +86,10 @@ jobs:
       - name: Smoke-test Rust-first MCP gateway
         working-directory: .
         run: python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
+
+      - name: Check Rust-first Codex skill
+        working-directory: .
+        run: test -s skills/nekocode-rust-context/SKILL.md && ! grep -Fq '[TODO' skills/nekocode-rust-context/SKILL.md
 
       - name: Check Rust-first distribution helpers
         working-directory: .

@@ -154,7 +154,8 @@ Git hunk/excerpt support, diagnostic parsing, versioned artifact envelopes,
 execution policy, safe public path views, and a minimal two-tool stdio gateway.
 Untracked file content is opt-in. `snapshot` is the
 canonical CLI/MCP name; the CLI preserves only the short-lived hidden `index`
-alias for migration scripts.
+alias for migration scripts. The execution fixture suite covers build-script
+and procedural-macro execution evidence without claiming sandboxing.
 
 Before a semantic backend or a second language is promoted, fixtures must cover
 trait/impl/macro/cfg/features, workspaces and targets, toolchain/profile

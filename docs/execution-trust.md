@@ -47,8 +47,9 @@ Until those controls are implemented and tested, callers must trust the
 workspace and the product must not describe `cargo-check` as sandboxed. An
 unimplemented control is reported as a limitation rather than implied by a
 generic “read-only” label. The current process-group, output-limit, and
-symlink tests cover the local safety boundary; build-script/procedural-macro
-sentinels remain promotion fixtures.
+symlink tests cover the local safety boundary. The fixture suite now includes
+both a build-script execution sentinel and a procedural-macro diagnostic
+sentinel; these prove that code can run, not that it is sandboxed.
 
 ## Compiler result states
 
@@ -69,7 +70,8 @@ non-zero exit with a valid diagnostic stream is `completed_with_diagnostics`.
 
 ## Acceptance fixtures
 
-The trust gate must include a build script sentinel, a procedural-macro
-sentinel, a timeout fixture, output-limit coverage, an out-of-root symlink,
-and a Git external-diff sentinel. Until those tests pass, the product must
-require a trusted workspace and disclose the missing sandbox guarantee.
+The trust gate includes a build script sentinel, a procedural-macro sentinel,
+a timeout fixture, output-limit coverage, and an out-of-root symlink. A Git
+external-diff sentinel is still a promotion item. Until OS-level isolation is
+available, the product must require a trusted workspace and disclose the
+missing sandbox guarantee.

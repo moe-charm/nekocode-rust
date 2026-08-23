@@ -96,9 +96,14 @@ paths in responses. See
 [`mcp-nekocode-server/README_RUST_FIRST.md`](mcp-nekocode-server/README_RUST_FIRST.md)
 for the protocol details.
 
-A future Skill or Plugin may describe when to call the CLI/MCP tools and how
+A Skill or Plugin may describe when to call the CLI/MCP tools and how
 to present their evidence. It is a workflow layer, not a replacement semantic
 backend. Cargo/rustc/rust-analyzer remain the sources of Rust meaning.
+
+The first local Codex workflow is
+[`skills/nekocode-rust-context/SKILL.md`](skills/nekocode-rust-context/SKILL.md).
+It only defines call order, stop conditions, and evidence presentation; it
+does not add another analyzer or execution path.
 
 ### Development and tests
 
@@ -192,6 +197,10 @@ MCPは実行経路、SkillやPluginは呼び出し方・提示方法を定義す
 経由せずにCLIを呼び出します。詳細は
 [`mcp-nekocode-server/README_RUST_FIRST.md`](mcp-nekocode-server/README_RUST_FIRST.md)
 を参照してください。
+
+ローカルCodex向けの最初のSkillは
+[`skills/nekocode-rust-context/SKILL.md`](skills/nekocode-rust-context/SKILL.md)です。
+呼び出し順序・停止条件・根拠の提示だけを定義し、解析器や別の実行経路は追加しません。
 
 ### 開発・テスト
 

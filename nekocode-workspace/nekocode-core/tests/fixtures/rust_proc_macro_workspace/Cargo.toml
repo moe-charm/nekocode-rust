@@ -1,0 +1,3 @@
+[workspace]
+members = ["proc_macro_execution", "consumer"]
+resolver = "2"
