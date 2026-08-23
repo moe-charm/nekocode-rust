@@ -74,6 +74,9 @@ jobs:
       - name: Verify procedural-macro execution evidence
         run: cargo test -p nekocode-core --test proc_macro_execution_integration
 
+      - name: Verify Git helper isolation
+        run: cargo test -p nekocode-core --test git_helper_safety_integration
+
       - name: Check canonical CLI package
         run: cargo check -p nekocode --all-targets
 

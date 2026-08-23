@@ -73,6 +73,88 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         process.stdin.close()
         process.wait(timeout=10)
 
+    def test_cli_and_mcp_snapshot_payloads_are_in_parity(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer, SNAPSHOT_TOOL
+
+        workspace = REPO_ROOT / "nekocode-workspace"
+        completed = subprocess.run(
+            ["cargo", "run", "-q", "-p", "nekocode", "--", "snapshot", "."],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        cli_payload = json.loads(completed.stdout)
+        server = RustFirstMCPServer(workspace_dir=workspace)
+        mcp_payload = server._run_cli(SNAPSHOT_TOOL, {"path": "."})
+
+        for key in (
+            "contract_version",
+            "artifact_kind",
+            "status",
+            "analysis_mode",
+            "evidence",
+            "execution_policy",
+            "workspace",
+            "limitations",
+        ):
+            with self.subTest(key=key):
+                self.assertEqual(cli_payload[key], mcp_payload[key])
+
+        context_command = [
+            "cargo",
+            "run",
+            "-q",
+            "-p",
+            "nekocode",
+            "--",
+            "context",
+            ".",
+            "--compare-ref",
+            "HEAD",
+            "--budget",
+            "8000",
+            "--working-tree",
+            "--excerpt-lines",
+            "8",
+        ]
+        context_completed = subprocess.run(
+            context_command,
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        cli_context = json.loads(context_completed.stdout)
+        mcp_context = server._run_cli(
+            "nekocode_context",
+            {
+                "path": ".",
+                "compare_ref": "HEAD",
+                "budget": 8000,
+                "working_tree": True,
+                "excerpt_lines": 8,
+            },
+        )
+        for key in (
+            "contract_version",
+            "artifact_kind",
+            "status",
+            "comparison_status",
+            "evidence",
+            "execution_policy",
+            "include_working_tree",
+            "include_untracked_content",
+            "changed_files",
+            "diff",
+            "limitations",
+            "omissions",
+        ):
+            with self.subTest(context_key=key):
+                self.assertEqual(cli_context[key], mcp_context[key])
+
     def test_prebuilt_cli_mode_does_not_require_cargo_workspace(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
 
