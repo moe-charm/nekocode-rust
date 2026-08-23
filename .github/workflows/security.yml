@@ -19,6 +19,9 @@ jobs:
   cargo-audit:
     name: 🔍 Cargo Audit
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nekocode-workspace
     
     steps:
       - name: 📥 Checkout code
@@ -105,16 +108,16 @@ jobs:
         run: |
           cat > Dockerfile.security << 'EOF'
           FROM ubuntu:22.04
-          COPY releases/nekocode-rust /usr/local/bin/nekocode-rust
-          RUN chmod +x /usr/local/bin/nekocode-rust
+          COPY releases/nekocode /usr/local/bin/nekocode
+          RUN chmod +x /usr/local/bin/nekocode
           USER 1000:1000
-          ENTRYPOINT ["/usr/local/bin/nekocode-rust"]
+          ENTRYPOINT ["/usr/local/bin/nekocode"]
           EOF
-          
+
           # Create dummy binary for scanning
           mkdir -p releases/
-          echo '#!/bin/bash\necho "dummy"' > releases/nekocode-rust
-          chmod +x releases/nekocode-rust
+          echo '#!/bin/bash\necho "dummy"' > releases/nekocode
+          chmod +x releases/nekocode
           
           docker build -f Dockerfile.security -t nekocode-security-test .
           
@@ -161,6 +164,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         
       - name: 📦 Generate SBOM
+        working-directory: nekocode-workspace
         run: |
           # Install cargo-cyclonedx for SBOM generation
           cargo install cargo-cyclonedx
@@ -172,7 +176,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: software-bill-of-materials
-          path: sbom.json
+          path: nekocode-workspace/sbom.json
           retention-days: 90
           
   security-report:

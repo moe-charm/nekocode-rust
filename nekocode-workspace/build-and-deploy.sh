@@ -4,6 +4,12 @@
 
 set -e  # Exit on any error
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ "${1:-}" = "--rust-first" ]; then
+    shift
+    exec "$SCRIPT_DIR/../scripts/update_rust_first_release.sh" "$@"
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

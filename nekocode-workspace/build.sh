@@ -2,6 +2,12 @@
 # 🚀 NekoCode ビルド＆自動リリース更新スクリプト
 # これを使えば必ずreleasesフォルダが最新になる！
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ "${1:-}" = "--rust-first" ]; then
+    shift
+    exec "$SCRIPT_DIR/../scripts/update_rust_first_release.sh" "$@"
+fi
+
 echo "🔨 NekoCode ビルド開始..."
 cargo build --release
 

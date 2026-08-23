@@ -11,6 +11,13 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'scripts/update_rust_first_release.sh'
+      - 'releases/setup.py'
+      - 'Makefile'
+      - 'nekocode-workspace/build.sh'
+      - 'nekocode-workspace/build-and-deploy.sh'
+      - 'Dockerfile.rust-first'
+      - '.dockerignore'
       - '.github/workflows/rust-first-mvp.yml'
   pull_request:
     paths:
@@ -21,6 +28,13 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'scripts/update_rust_first_release.sh'
+      - 'releases/setup.py'
+      - 'Makefile'
+      - 'nekocode-workspace/build.sh'
+      - 'nekocode-workspace/build-and-deploy.sh'
+      - 'Dockerfile.rust-first'
+      - '.dockerignore'
       - '.github/workflows/rust-first-mvp.yml'
 
 env:
@@ -58,3 +72,11 @@ jobs:
       - name: Smoke-test Rust-first MCP gateway
         working-directory: .
         run: python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
+
+      - name: Check Rust-first distribution helpers
+        working-directory: .
+        run: |
+          bash -n scripts/update_rust_first_release.sh
+          bash -n nekocode-workspace/build.sh nekocode-workspace/build-and-deploy.sh
+          python3 -m py_compile releases/setup.py
+          make -n rust-first-release rust-first-install

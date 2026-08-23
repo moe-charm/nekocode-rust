@@ -34,4 +34,4 @@
 5. clean checkoutでcore test、CLI index/context、MCP smokeを通す。
 6. その後にroot package、legacy crates、配布ELFをarchive branchまたは`archive/legacy`へ移す。
 
-現時点では依存監査、移行前commit `c4bb63d` の `legacy-2026-pre-rust-first` タグ固定、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging helper、コミット済みRust-first HEADのclean checkout（core 9 tests、CLI check/index/context、MCP smoke）まで完了。5-binaryのCargo/build/setup/Docker導線とsecurityのroot監査はまだlegacy依存があるため、物理移動はその切替後に実施する。
+現時点では依存監査、移行前commit `c4bb63d` の `legacy-2026-pre-rust-first` タグ固定、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging helper、prebuilt CLI MCP gateway、security workflowのCargo audit/SBOM/container名切替、コミット済みRust-first HEADのclean checkout（core 9 tests、CLI check/index/context、MCP smoke）まで完了。5-binaryのsetup/build導線、cargo-deny/CodeQLのroot監査、legacy Dockerfileはまだ残るため、物理移動はその切替後に実施する。

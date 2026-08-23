@@ -53,12 +53,12 @@ NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの�
 
 - Phase 0（方針とcurrent_taskの更新）: 完了
 - Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み。旧build/release/PR workflowはmanual-onlyへ隔離済み）
-- Phase 2（Rust MVP）: index/contextの最小入口、Cargo features/toolchain provenance、canonical CLI-only release stagingを実装済み。semantic backendは未着手
+- Phase 2（Rust MVP）: index/contextの最小入口、Cargo features/toolchain provenance、canonical CLI-only release staging、prebuilt CLI MCP/Docker入口を実装済み。semantic backendは未着手
 - Phase 3（追加言語）: Rust昇格ゲート通過後
 
 検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
 
-アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency audit、baseline tag、clean checkout検証、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging追加まで完了。5-binaryのbuild/setup/Docker導線とsecurityのroot監査切替が残り、Stage C（物理移動）はその後。
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency audit、baseline tag、clean checkout検証、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging、prebuilt CLI MCP/Docker入口、securityの主要artifact切替まで完了。5-binaryのsetup/build導線、cargo-deny/CodeQLのroot監査、legacy Dockerfile切替が残り、Stage C（物理移動）はその後。
 
 監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureとclean checkout（core 9 tests、CLI check/index）を検証済み。物理移動前に旧導線の切替が必要。
 

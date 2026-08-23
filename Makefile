@@ -1,7 +1,7 @@
 # 🚀 NekoCode 5-Binary Toolchain - Modern Makefile
 # Unix Philosophy: "Do One Thing and Do It Well" + Instant Usability
 
-.PHONY: all build debug release update-binaries setup test clean clean-all help install quick-test
+.PHONY: all build debug release rust-first-release rust-first-install update-binaries setup test clean clean-all help install quick-test
 
 # 🎯 Default target: Full 5-binary build + setup
 all: release
@@ -27,6 +27,15 @@ release: build update-binaries setup
 	@echo "  ./bin/nekoimpact       - Change impact analysis (2.8MB)"
 	@echo "  ./bin/nekoinc          - Incremental analysis (3.1MB)"
 	@echo "  ./bin/nekomcp          - MCP integration (3.6MB)"
+
+# 🦀 Explicit Rust-first release: stage only the canonical nekocode CLI.
+# The historical five-binary targets above remain unchanged for compatibility.
+rust-first-release:
+	@scripts/update_rust_first_release.sh
+
+# 🦀 Install only the canonical Rust-first CLI wrapper; legacy wrappers are untouched.
+rust-first-install:
+	@python3 releases/setup.py --install-rust-first
 
 # 📦 Copy all 5 binaries to user-friendly locations
 update-binaries: build
@@ -120,6 +129,8 @@ help:
 	@echo "🎯 Main targets:"
 	@echo "  make               - Build all 5 binaries + setup (default)"
 	@echo "  make release       - Full release build with setup"
+	@echo "  make rust-first-release - Stage only canonical releases/nekocode"
+	@echo "  make rust-first-install - Install only the Rust-first CLI wrapper"
 	@echo "  make quick-test    - Build and test all binaries"
 	@echo ""
 	@echo "🔧 Development:"

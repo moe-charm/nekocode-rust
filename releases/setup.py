@@ -4,6 +4,7 @@ NekoCode installer and wrappers (WSL-friendly)
 
 Provides:
 - --install: install PATH-safe wrappers to ~/.local/bin
+- --install-rust-first: install only the canonical Rust-first nekocode wrapper
 - --install-docker: install Docker-backed wrappers to ~/.local/bin
 - default: print MCP setup help (legacy behavior)
 """
@@ -105,6 +106,32 @@ def install_wrappers():
         print(f"    claude mcp add nekocode -- wsl.exe -e {abs_mcp} --stdio")
     except Exception:
         pass
+
+
+def install_rust_first_wrapper():
+    """Install only the canonical Rust-first CLI wrapper.
+
+    This deliberately leaves the legacy MCP wrapper untouched. The binary is
+    staged by ``scripts/update_rust_first_release.sh`` or supplied separately
+    by a release package.
+    """
+    nekocode_abs, _, _ = abs_paths()
+    local_bin = ensure_local_bin()
+    cli_path = os.path.join(local_bin, "nekocode")
+    cli_script = dedent(f"""
+        #!/usr/bin/env bash
+        set -euo pipefail
+        if [[ ! -x "{nekocode_abs}" ]]; then
+          echo "nekocode binary not found: {nekocode_abs}" >&2
+          echo "Run make rust-first-release first, or install a Rust-first release package." >&2
+          exit 1
+        fi
+        exec "{nekocode_abs}" "$@"
+    """)
+    write_executable(cli_path, cli_script)
+    print("✅ Installed Rust-first CLI wrapper:")
+    print(f"  - {cli_path}")
+    print("  (legacy MCP and five-binary wrappers were not changed)")
 
 
 def install_docker_wrappers(image: str = "ghcr.io/moe-charm/nekocode:latest"):
@@ -236,6 +263,10 @@ def main():
 
     if "--install" in args:
         install_wrappers()
+        return
+
+    if "--install-rust-first" in args:
+        install_rust_first_wrapper()
         return
 
     if "--install-docker" in args:
