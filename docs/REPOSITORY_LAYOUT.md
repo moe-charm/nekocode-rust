@@ -40,6 +40,12 @@ compiles or exposes the retained analyzer/session library. Cargo
 `default-members` likewise excludes the old standalone binaries. Building a
 legacy member now requires an explicit package name or `--workspace`.
 
+Inside `nekocode-core`, session/configuration/types/compact modules and their
+Tokio, SQLite, UUID, directory, walk, regex, and async dependencies are behind
+the non-default `legacy` feature. Frozen standalone binaries enable that
+feature explicitly. Normal core/CLI consumers cannot acquire those APIs or
+dependencies accidentally through defaults.
+
 ## Target physical shape
 
 The long-term shape is a small core plus adapters. The current workspace has

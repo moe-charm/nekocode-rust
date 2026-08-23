@@ -117,7 +117,10 @@ python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 
 Plain `cargo build`, `cargo check`, and `cargo test` use only the canonical
 core and CLI through Cargo `default-members`. Recoverable legacy crates require
-an explicit package or `--workspace`. Rust-first fixtures, schema,
+an explicit package or `--workspace`; their shared session API is also behind
+the non-default `nekocode-core/legacy` feature. The canonical core dependency
+graph contains no async runtime, SQLite, session storage, or language parser.
+Rust-first fixtures, schema,
 safety fixtures, and CLI/MCP smoke tests are the promotion gate for future
 semantic backends.
 
@@ -207,15 +210,18 @@ MCPは実行経路、SkillやPluginは呼び出し方・提示方法を定義す
 
 ```bash
 cd nekocode-workspace
-cargo test --workspace
-cargo check --workspace --all-targets
+cargo test
+cargo check --all-targets
 cd ..
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
-legacy crate由来のwarningが残るため、workspace全体のwarning-freeは現行契約では
-ありません。Rust fixture、schema、実行安全性fixture、CLI/MCP smoke testを、
-今後のsemantic backendを昇格させるゲートにします。
+通常のCargoコマンドは`default-members`により正規coreとCLIだけを対象にします。
+旧memberは明示packageまたは`--workspace`指定時だけ対象になり、共通session APIも
+non-defaultの`nekocode-core/legacy` featureに隔離されています。正規coreは
+async runtime、SQLite、session storage、言語parserへ依存しません。
+Rust fixture、schema、実行安全性fixture、CLI/MCP smoke testを、今後のsemantic
+backendを昇格させるゲートにします。
 
 ### 詳細
 

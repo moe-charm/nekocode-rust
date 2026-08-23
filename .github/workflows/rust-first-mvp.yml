@@ -80,6 +80,12 @@ jobs:
       - name: Check canonical CLI package
         run: cargo check -p nekocode --all-targets
 
+      - name: Verify legacy dependencies stay out of canonical core
+        run: |
+          cargo tree -p nekocode-core --depth 1 --edges normal > /tmp/nekocode-core-tree.txt
+          ! grep -Eq 'anyhow|async-trait|dirs |log |num_cpus|regex|rusqlite|tokio|uuid|walkdir' /tmp/nekocode-core-tree.txt
+          cargo check -p nekocode-core --features legacy
+
       - name: Verify the canonical CLI exposes only two use cases
         run: |
           cargo run -q -p nekocode -- --help > /tmp/nekocode-help.txt

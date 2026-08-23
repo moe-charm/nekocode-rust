@@ -8,7 +8,7 @@ name = "nekoinc"
 path = "src/main.rs"
 
 [dependencies]
-nekocode-core = { workspace = true }
+nekocode-core = { workspace = true, features = ["legacy"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

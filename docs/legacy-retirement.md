@@ -53,3 +53,8 @@ As of 2026-08-23, plain Cargo build/test and the generic Make targets resolve
 to `nekocode-core` plus the two-command `nekocode` CLI. Legacy workspace
 members and their explicit `legacy-*` recovery targets remain until the final
 tag/archive gate is completed.
+
+The retained core session API is compiled only by the explicit `legacy`
+feature. Canonical core/CLI builds do not resolve its async, SQLite, session,
+or generic-analysis dependencies. This is logical isolation, not yet physical
+archive: the source remains recoverable in the tree until the final tag gate.

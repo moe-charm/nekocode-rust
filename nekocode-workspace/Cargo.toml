@@ -51,7 +51,7 @@ tree-sitter-go = "0.20"
 tree-sitter-c-sharp = "0.20"
 
 # Internal dependencies
-nekocode-core = { path = "nekocode-core" }
+nekocode-core = { path = "nekocode-core", default-features = false }
 
 # Build optimizations for all workspace members
 [profile.release]
