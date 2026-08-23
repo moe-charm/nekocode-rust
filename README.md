@@ -6,7 +6,8 @@
 
 NekoCode is a read-only context layer for Rust workspaces. It collects
 Cargo metadata, Git changes, and optional `cargo check` diagnostics, then
-returns bounded, provenance-aware JSON for humans, AI clients, and MCP.
+returns bounded, provenance-aware JSON for AI/MCP clients or a deterministic
+human-readable summary of the same evidence.
 
 NekoCode does not replace `rustc`, Cargo, or rust-analyzer. Its value is the
 reproducible snapshot, diff context, diagnostic delta, and explicit budget
@@ -37,6 +38,10 @@ cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --budget 8000 --diagnostics
 
+# Read the same evidence as a concise terminal summary
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --format summary
+
 # Include staged, unstaged, and untracked working-tree markers
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --working-tree
@@ -45,6 +50,18 @@ cargo run -q -p nekocode -- context . \
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --working-tree --include-untracked-content
 ```
+
+### Human-readable change summary
+
+`context` returns the versioned `context-v1` JSON artifact by default. Add
+`--format summary` when a human wants a quick review of the same collected
+evidence. The summary shows changed files and hunks, visible patch line counts,
+compiler-diagnostic state and delta, comparability, budget use, omissions, and
+limitations. `--output` writes whichever format was selected.
+
+The summary is deterministic presentation, not a second analysis path. It does
+not invent a semantic explanation, resolve symbols, or declare breaking
+impact. JSON remains the machine contract used by MCP and durable artifacts.
 
 ### Snapshots and diagnostic deltas
 
@@ -135,8 +152,8 @@ archive branch named in the retirement decision.
 ### 現在の位置づけ
 
 NekoCodeは、RustのCargo workspaceを対象に、Cargo metadata・Git差分・
-必要に応じた`cargo check`診断を読み取り、AI/MCP向けの根拠付きJSONへ
-まとめる読み取り専用のコンテキスト層です。
+必要に応じた`cargo check`診断を読み取り、AI/MCP向けの根拠付きJSONまたは
+同じ根拠の人向けサマリーへまとめる読み取り専用のコンテキスト層です。
 
 Rustの意味解析を独自に再実装するものではありません。正しさの一次情報は
 Cargo、`rustc`、`cargo check`、rust-analyzer、Gitです。NekoCode固有の役割は、
@@ -163,6 +180,10 @@ cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --budget 8000 --diagnostics
 
+# 同じ根拠を、人がすぐ読める短いサマリーで表示
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --format summary
+
 # 未追跡ファイルは既定でmarkerだけ返す。内容を読む場合だけ明示する。
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --working-tree --include-untracked-content
@@ -173,6 +194,15 @@ cargo run -q -p nekocode -- snapshot . \
 cargo run -q -p nekocode -- context . \
   --baseline /tmp/nekocode-baseline.json --diagnostics
 ```
+
+`context`の既定出力は、versioned contractである`context-v1` JSONです。
+人が差分を素早く確認するときだけ`--format summary`を指定します。サマリーには
+変更ファイル・hunk・表示できたpatchの増減行数・compiler診断とdelta・比較可能性・
+budget・省略・制限を表示します。`--output`には選択した形式を書き込みます。
+
+このサマリーは同じ根拠の決定論的な表示であり、別の解析器ではありません。
+意味を推測した説明、symbol解決、breaking impact判定は追加しません。MCPと保存用の
+機械契約は引き続きJSONです。
 
 `compare_ref`はGitの変更範囲を指定するだけで、過去commitのcompiler結果を
 再現しません。diagnostic deltaは、保存したbaselineと現在のtoolchain・features・

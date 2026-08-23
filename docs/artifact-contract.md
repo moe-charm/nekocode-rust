@@ -48,6 +48,12 @@ The default Git base is explicit `HEAD` or a caller-provided ref. NekoCode does
 not infer a merge base. Untracked content is reported as a marker by default;
 reading it requires an explicit option.
 
+JSON is the canonical `context-v1` representation. A human-readable summary
+may project fields from the completed core artifact, but it must not infer new
+facts, define adapter-specific statuses, or change the underlying artifact.
+The summary must make truncated patch counts, omissions, incomplete evidence,
+and non-comparability visible.
+
 ## Comparability
 
 Diagnostic delta is not an empty list when a comparison cannot be made. The

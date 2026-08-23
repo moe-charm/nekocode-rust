@@ -3,7 +3,7 @@
 mod cli;
 
 use clap::Parser;
-use cli::{AnalysisArg, Cli, Commands};
+use cli::{AnalysisArg, Cli, Commands, OutputFormatArg};
 use nekocode_core::{AnalysisMode, ContextRequest, NekocodeError, Result, SnapshotRequest};
 use std::fs;
 
@@ -36,6 +36,7 @@ fn main() -> Result<()> {
             all_features,
             excerpt_lines,
             baseline,
+            format,
             output,
         } => context(
             ContextRequest {
@@ -49,6 +50,7 @@ fn main() -> Result<()> {
                 excerpt_lines,
                 baseline,
             },
+            format,
             output,
         ),
     }
@@ -71,7 +73,11 @@ fn snapshot(request: SnapshotRequest, output: Option<std::path::PathBuf>) -> Res
     Ok(())
 }
 
-fn context(request: ContextRequest, output: Option<std::path::PathBuf>) -> Result<()> {
+fn context(
+    request: ContextRequest,
+    format: OutputFormatArg,
+    output: Option<std::path::PathBuf>,
+) -> Result<()> {
     if request.excerpt_lines > 200 {
         return Err(NekocodeError::Config(
             "--excerpt-lines must be between 0 and 200".into(),
@@ -84,11 +90,17 @@ fn context(request: ContextRequest, output: Option<std::path::PathBuf>) -> Resul
     }
     let artifact =
         nekocode_core::sanitize_context_for_output(&nekocode_core::build_context(&request)?)?;
-    let json = serde_json::to_string_pretty(&artifact)?;
+    let rendered = match format {
+        OutputFormatArg::Json => serde_json::to_string_pretty(&artifact)?,
+        OutputFormatArg::Summary => nekocode_core::format_context_summary(&artifact),
+    };
     if let Some(path) = output {
-        fs::write(&path, &json)?;
+        fs::write(&path, &rendered)?;
         eprintln!("Rust context written to {}", path.display());
     }
-    println!("{json}");
+    print!("{rendered}");
+    if !rendered.ends_with('\n') {
+        println!();
+    }
     Ok(())
 }

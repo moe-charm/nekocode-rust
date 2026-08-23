@@ -113,6 +113,13 @@ jobs:
       - name: Smoke-test bounded Git context output
         run: cargo run -q -p nekocode -- context . --compare-ref HEAD^ --budget 2000 --diagnostics > /tmp/nekocode-rust-context.json && test -s /tmp/nekocode-rust-context.json
 
+      - name: Smoke-test human-readable change summary
+        run: |
+          cargo run -q -p nekocode -- context . --compare-ref HEAD^ --format summary > /tmp/nekocode-rust-summary.txt
+          grep -Fq 'NekoCode change summary' /tmp/nekocode-rust-summary.txt
+          grep -Fq 'Changes:' /tmp/nekocode-rust-summary.txt
+          grep -Fq 'Omissions:' /tmp/nekocode-rust-summary.txt
+
       - name: Smoke-test Rust-first MCP gateway
         working-directory: .
         run: python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'

@@ -1,6 +1,6 @@
 use nekocode_core::{
-    build_rust_context_with_config, build_rust_snapshot, sanitize_snapshot_for_output,
-    AnalysisMode, ComparisonStatus, RustContextOptions,
+    build_rust_context_with_config, build_rust_snapshot, format_context_summary,
+    sanitize_snapshot_for_output, AnalysisMode, ComparisonStatus, RustContextOptions,
 };
 use std::fs;
 use std::path::Path;
@@ -95,6 +95,15 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     assert!(excerpt.end_line >= 1);
     assert!(excerpt.content.contains("after"));
 
+    let summary = format_context_summary(&pack);
+    assert!(summary.starts_with("NekoCode change summary\n"));
+    assert!(summary.contains("Changes: 2 files (2 Rust), 1 hunk"));
+    assert!(summary.contains("Visible patch: +1/-1 lines"));
+    assert!(summary.contains("- M src/lib.rs [context-fixture] (1 hunk)"));
+    assert!(summary.contains("- ?? src/untracked.rs"));
+    assert!(summary.contains("Diagnostics: not run"));
+    assert_eq!(summary, format_context_summary(&pack));
+
     let mut content_options = RustContextOptions::new(Some("HEAD".to_string()), 8_000);
     content_options.include_working_tree = true;
     content_options.include_untracked_content = true;
@@ -153,6 +162,33 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     assert!(delta.resolved.is_empty());
     assert!(delta.persisting.is_empty());
 
+    fs::write(
+        root.join("src/lib.rs"),
+        "pub fn broken() { let _value: u32 = \"not a number\"; }\n",
+    )
+    .expect("invalid source");
+    let mut changed_options = RustContextOptions::new(None, 20_000);
+    changed_options.include_diagnostics = true;
+    changed_options.baseline = Some(root.join("state").join("baseline.json"));
+    let changed = build_rust_context_with_config(root, changed_options)
+        .expect("compiler errors should remain evidence");
+    let changed_delta = changed
+        .diagnostic_delta
+        .as_ref()
+        .expect("compatible baseline should produce a changed delta");
+    assert!(
+        changed_delta
+            .added
+            .iter()
+            .any(|diagnostic| diagnostic.code.as_deref() == Some("E0308")),
+        "unexpected diagnostic delta: {changed_delta:#?}"
+    );
+    let changed_summary = format_context_summary(&changed);
+    assert!(changed_summary
+        .contains("Diagnostics: completed_with_diagnostics; producer_status=failed;"));
+    assert!(changed_summary.contains("Diagnostic delta: comparable;"));
+    assert!(changed_summary.contains("- NEW [E0308]"));
+
     let mut missing_options = RustContextOptions::new(None, 20_000);
     missing_options.include_diagnostics = true;
     let missing = build_rust_context_with_config(root, missing_options)
@@ -162,6 +198,9 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
         .limitations
         .iter()
         .any(|item| item.contains("baseline_missing")));
+    let missing_summary = format_context_summary(&missing);
+    assert!(missing_summary.contains("Diagnostic delta: baseline_missing"));
+    assert!(missing_summary.contains("- CURRENT [E0308]"));
 }
 
 #[test]

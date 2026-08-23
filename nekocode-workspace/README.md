@@ -11,6 +11,7 @@ context model. The supported entry points are:
 ```bash
 cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --budget 8000
+cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --format summary
 cargo run -q -p nekocode -- context . --working-tree --include-untracked-content
 ```
 
@@ -19,7 +20,9 @@ bounded Git diff, optional source excerpts, and optional `cargo check`
 diagnostics. The external contracts are `snapshot-v1` and `context-v1`; both
 carry tool provenance, evidence, execution policy, comparability, budget, and
 limitations. Untracked contents are markers unless explicitly requested. The
-core is deliberately not an independent Rust semantic analyzer.
+core is deliberately not an independent Rust semantic analyzer. JSON is the
+default machine contract; `--format summary` is a deterministic human-readable
+view of the same evidence and does not add semantic inference.
 
 Useful development checks:
 
@@ -46,13 +49,15 @@ and the [repository layout](../docs/REPOSITORY_LAYOUT.md).
 ```bash
 cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --budget 8000
+cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --format summary
 ```
 
 `snapshot`はCargo workspace・package・targetの構造を取得し、`context`は予算制限付き
 Git差分、任意のsource excerpt、任意の`cargo check`診断を追加します。外部契約は
 `snapshot-v1`と`context-v1`で、tool provenance・evidence・execution policy・
 比較可能性・budget・limitationsを含みます。未追跡ファイルの内容は明示指定時だけ
-読み込みます。Rustの意味解析を独自に置き換えるものではありません。
+読み込みます。既定JSONが機械契約で、`--format summary`は同じ根拠を人向けに
+読みやすく表示するだけです。意味を推測せず、Rustの意味解析を独自に置き換えません。
 
 workspace memberはcoreとCLIの2つだけです。退役した実装はmainに残さず、ルート文書に
 記載したrecovery tag/branchからのみ取得できます。

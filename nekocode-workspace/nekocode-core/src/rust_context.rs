@@ -10,6 +10,7 @@ use crate::error::{NekocodeError, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write as FmtWrite;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -409,6 +410,336 @@ pub struct RustContextPack {
     pub limitations: Vec<String>,
     #[serde(default)]
     pub omissions: Vec<Omission>,
+}
+
+const SUMMARY_FILE_LIMIT: usize = 40;
+const SUMMARY_DIAGNOSTIC_LIMIT: usize = 10;
+const SUMMARY_LIMITATION_LIMIT: usize = 8;
+
+/// Render a deterministic, plain-text view of a context artifact.
+///
+/// This is a presentation of evidence already present in `ContextV1`; it does
+/// not infer symbols, references, or semantic impact. JSON remains the public
+/// machine contract used by MCP and other adapters.
+pub fn format_context_summary(pack: &ContextV1) -> String {
+    let mut output = String::new();
+    let rust_files = pack
+        .changed_files
+        .iter()
+        .filter(|file| file.is_rust)
+        .count();
+    let hunk_count: usize = pack.changed_files.iter().map(|file| file.hunks.len()).sum();
+    let changed_file_count = item_count(pack.changed_files.len(), "file", "files");
+    let changed_hunk_count = item_count(hunk_count, "hunk", "hunks");
+    let (additions, deletions) = pack
+        .diff
+        .as_ref()
+        .map(|diff| count_patch_lines(&diff.patch))
+        .unwrap_or((0, 0));
+
+    writeln!(output, "NekoCode change summary").expect("write to String");
+    writeln!(output, "Status: {}", artifact_status_name(pack.status)).expect("write to String");
+    writeln!(
+        output,
+        "Comparison: {}",
+        comparison_status_name(pack.comparison_status)
+    )
+    .expect("write to String");
+    writeln!(output, "Evidence: {}", evidence_level_name(pack.evidence)).expect("write to String");
+    writeln!(
+        output,
+        "Execution: {}; workspace_trust={}; process_network_isolation={}",
+        analysis_mode_name(pack.execution_policy.mode),
+        pack.execution_policy.workspace_trust,
+        pack.execution_policy.process_network_isolation
+    )
+    .expect("write to String");
+    writeln!(
+        output,
+        "Changes: {changed_file_count} ({rust_files} Rust), {changed_hunk_count}",
+    )
+    .expect("write to String");
+    if let Some(diff) = &pack.diff {
+        let truncation = if diff.patch_truncated {
+            format!("; truncated, {} bytes omitted", diff.omitted_patch_bytes)
+        } else {
+            String::new()
+        };
+        writeln!(
+            output,
+            "Visible patch: +{additions}/-{deletions} lines{truncation}"
+        )
+        .expect("write to String");
+    } else {
+        writeln!(output, "Visible patch: not requested").expect("write to String");
+    }
+
+    if pack.changed_files.is_empty() {
+        writeln!(output, "Files: none").expect("write to String");
+    } else {
+        writeln!(output, "Files:").expect("write to String");
+        for file in pack.changed_files.iter().take(SUMMARY_FILE_LIMIT) {
+            let old_path = file
+                .old_path
+                .as_ref()
+                .map(|path| format!(" <- {}", display_path(path)))
+                .unwrap_or_default();
+            let package = file
+                .package
+                .as_ref()
+                .map(|name| format!(" [{name}]"))
+                .unwrap_or_default();
+            writeln!(
+                output,
+                "- {} {}{}{} ({})",
+                file.status,
+                display_path(&file.path),
+                old_path,
+                package,
+                item_count(file.hunks.len(), "hunk", "hunks")
+            )
+            .expect("write to String");
+        }
+        if pack.changed_files.len() > SUMMARY_FILE_LIMIT {
+            writeln!(
+                output,
+                "- ... {} more included files not displayed",
+                pack.changed_files.len() - SUMMARY_FILE_LIMIT
+            )
+            .expect("write to String");
+        }
+    }
+
+    format_diagnostics(&mut output, pack);
+
+    writeln!(
+        output,
+        "Budget: {}/{} bytes; {}",
+        pack.budget.serialized_bytes,
+        pack.budget.max_bytes,
+        if pack.budget.exceeded {
+            "limit exceeded"
+        } else if pack.omissions.is_empty() {
+            "within limit"
+        } else {
+            "within limit with omissions"
+        }
+    )
+    .expect("write to String");
+
+    if pack.omissions.is_empty() {
+        writeln!(output, "Omissions: none").expect("write to String");
+    } else {
+        writeln!(output, "Omissions:").expect("write to String");
+        for omission in &pack.omissions {
+            writeln!(
+                output,
+                "- {}: {} omitted ({}, priority={})",
+                omission.kind, omission.omitted_count, omission.reason, omission.priority
+            )
+            .expect("write to String");
+        }
+    }
+
+    if !pack.limitations.is_empty() {
+        writeln!(output, "Limitations:").expect("write to String");
+        for limitation in pack.limitations.iter().take(SUMMARY_LIMITATION_LIMIT) {
+            writeln!(output, "- {}", single_line(limitation)).expect("write to String");
+        }
+        if pack.limitations.len() > SUMMARY_LIMITATION_LIMIT {
+            writeln!(
+                output,
+                "- ... {} more limitations not displayed",
+                pack.limitations.len() - SUMMARY_LIMITATION_LIMIT
+            )
+            .expect("write to String");
+        }
+    }
+
+    output
+}
+
+fn format_diagnostics(output: &mut String, pack: &ContextV1) {
+    if let Some(run) = &pack.diagnostics {
+        let errors = run
+            .messages
+            .iter()
+            .filter(|diagnostic| diagnostic.level == "error")
+            .count();
+        let warnings = run
+            .messages
+            .iter()
+            .filter(|diagnostic| diagnostic.level == "warning")
+            .count();
+        writeln!(
+            output,
+            "Diagnostics: {}; producer_status={}; {} total ({} errors, {} warnings)",
+            artifact_status_name(diagnostic_status(run)),
+            run.status,
+            run.messages.len(),
+            errors,
+            warnings
+        )
+        .expect("write to String");
+    } else {
+        writeln!(output, "Diagnostics: not run").expect("write to String");
+    }
+
+    if let Some(delta) = &pack.diagnostic_delta {
+        writeln!(
+            output,
+            "Diagnostic delta: {}; {} new, {} resolved, {} persisting",
+            comparison_status_name(delta.status),
+            delta.added.len(),
+            delta.resolved.len(),
+            delta.persisting.len()
+        )
+        .expect("write to String");
+        format_diagnostic_items(output, "NEW", &delta.added);
+        format_diagnostic_items(output, "RESOLVED", &delta.resolved);
+        if delta.status != ComparisonStatus::Comparable {
+            if let Some(run) = &pack.diagnostics {
+                format_diagnostic_items(output, "CURRENT", &run.messages);
+            }
+        }
+    } else if let Some(run) = &pack.diagnostics {
+        writeln!(
+            output,
+            "Diagnostic delta: {}",
+            comparison_status_name(pack.comparison_status)
+        )
+        .expect("write to String");
+        format_diagnostic_items(output, "CURRENT", &run.messages);
+    } else {
+        writeln!(output, "Diagnostic delta: not requested").expect("write to String");
+    }
+}
+
+fn format_diagnostic_items(output: &mut String, label: &str, diagnostics: &[RustDiagnostic]) {
+    for diagnostic in diagnostics.iter().take(SUMMARY_DIAGNOSTIC_LIMIT) {
+        let code = diagnostic
+            .code
+            .as_ref()
+            .map(|code| format!(" [{code}]"))
+            .unwrap_or_default();
+        let location = diagnostic_location(diagnostic);
+        writeln!(
+            output,
+            "- {label}{code}{location}: {}",
+            truncate_chars(&single_line(&diagnostic.message), 160)
+        )
+        .expect("write to String");
+    }
+    if diagnostics.len() > SUMMARY_DIAGNOSTIC_LIMIT {
+        writeln!(
+            output,
+            "- ... {} more {label} diagnostics not displayed",
+            diagnostics.len() - SUMMARY_DIAGNOSTIC_LIMIT
+        )
+        .expect("write to String");
+    }
+}
+
+fn diagnostic_location(diagnostic: &RustDiagnostic) -> String {
+    let Some(path) = diagnostic.file.as_ref() else {
+        return String::new();
+    };
+    let mut location = format!(" {}", display_path(path));
+    if let Some(line) = diagnostic.line {
+        write!(location, ":{line}").expect("write to String");
+        if let Some(column) = diagnostic.column {
+            write!(location, ":{column}").expect("write to String");
+        }
+    }
+    location
+}
+
+fn count_patch_lines(patch: &str) -> (usize, usize) {
+    let mut additions = 0;
+    let mut deletions = 0;
+    for line in patch.lines() {
+        if line.starts_with('+') && !line.starts_with("+++") {
+            additions += 1;
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            deletions += 1;
+        }
+    }
+    (additions, deletions)
+}
+
+fn single_line(value: &str) -> String {
+    escape_terminal_controls(&value.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+fn display_path(path: &Path) -> String {
+    escape_terminal_controls(&path.to_string_lossy())
+}
+
+fn escape_terminal_controls(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            character if character.is_control() => {
+                write!(escaped, "\\u{{{:x}}}", character as u32).expect("write to String");
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+fn truncate_chars(value: &str, limit: usize) -> String {
+    let mut chars = value.chars();
+    let prefix: String = chars.by_ref().take(limit).collect();
+    if chars.next().is_some() {
+        format!("{prefix}…")
+    } else {
+        prefix
+    }
+}
+
+fn item_count(count: usize, singular: &str, plural: &str) -> String {
+    format!("{count} {}", if count == 1 { singular } else { plural })
+}
+
+fn artifact_status_name(status: ArtifactStatus) -> &'static str {
+    match status {
+        ArtifactStatus::NotRun => "not_run",
+        ArtifactStatus::CompletedClean => "completed_clean",
+        ArtifactStatus::CompletedWithDiagnostics => "completed_with_diagnostics",
+        ArtifactStatus::ToolFailed => "tool_failed",
+        ArtifactStatus::TimedOut => "timed_out",
+        ArtifactStatus::OutputLimited => "output_limited",
+        ArtifactStatus::Partial => "partial",
+    }
+}
+
+fn comparison_status_name(status: ComparisonStatus) -> &'static str {
+    match status {
+        ComparisonStatus::Comparable => "comparable",
+        ComparisonStatus::BaselineMissing => "baseline_missing",
+        ComparisonStatus::NotComparable => "not_comparable",
+        ComparisonStatus::Partial => "partial",
+    }
+}
+
+fn evidence_level_name(level: EvidenceLevel) -> &'static str {
+    match level {
+        EvidenceLevel::ToolConfirmed => "tool-confirmed",
+        EvidenceLevel::SemanticResolved => "semantic-resolved",
+        EvidenceLevel::SyntaxOnly => "syntax-only",
+        EvidenceLevel::Incomplete => "incomplete",
+    }
+}
+
+fn analysis_mode_name(mode: AnalysisMode) -> &'static str {
+    match mode {
+        AnalysisMode::MetadataOnly => "metadata_only",
+        AnalysisMode::CargoCheck => "cargo_check",
+    }
 }
 
 /// Options for building a reproducible, bounded context pack.
@@ -945,9 +1276,12 @@ pub fn build_rust_context_with_config(
             },
         },
     };
-    if let Some(run) = diagnostics.as_ref().filter(|run| run.status != "success") {
+    if let Some(run) = diagnostics
+        .as_ref()
+        .filter(|run| !diagnostic_run_is_complete(run))
+    {
         extra_limitations.push(format!(
-            "cargo check did not succeed (status: {}); diagnostic delta is incomplete.",
+            "cargo check did not produce a complete diagnostic observation (status: {}); diagnostic delta is incomplete.",
             run.status
         ));
     }
@@ -1094,7 +1428,7 @@ pub fn build_rust_context_with_config(
     let diagnostic_failed = pack
         .diagnostics
         .as_ref()
-        .is_some_and(|run| run.status != "success");
+        .is_some_and(|run| !diagnostic_run_is_complete(run));
     let baseline_incomplete = pack.comparison_status != ComparisonStatus::Comparable
         || pack
             .diagnostic_delta
@@ -1138,6 +1472,13 @@ fn diagnostic_status(run: &RustDiagnosticRun) -> ArtifactStatus {
         "success" if run.messages.is_empty() => ArtifactStatus::CompletedClean,
         _ => ArtifactStatus::CompletedWithDiagnostics,
     }
+}
+
+fn diagnostic_run_is_complete(run: &RustDiagnosticRun) -> bool {
+    matches!(
+        diagnostic_status(run),
+        ArtifactStatus::CompletedClean | ArtifactStatus::CompletedWithDiagnostics
+    )
 }
 
 fn omissions_for_pack(pack: &RustContextPack) -> Vec<Omission> {
@@ -1354,15 +1695,17 @@ fn build_diagnostic_delta(
             .limitations
             .push("baseline and current diagnostic tool provenance differs".to_string());
     }
-    if baseline_run.status != "success" || current_run.status != "success" {
+    let baseline_complete = diagnostic_run_is_complete(baseline_run);
+    let current_complete = diagnostic_run_is_complete(current_run);
+    if !baseline_complete || !current_complete {
         delta.compatible = false;
-        delta
-            .limitations
-            .push("diagnostic delta requires successful baseline and current checks".to_string());
+        delta.limitations.push(
+            "diagnostic delta requires complete baseline and current observations".to_string(),
+        );
     }
 
     if !delta.compatible {
-        delta.status = if baseline_run.status != "success" || current_run.status != "success" {
+        delta.status = if !baseline_complete || !current_complete {
             ComparisonStatus::Partial
         } else {
             ComparisonStatus::NotComparable
@@ -2422,6 +2765,18 @@ mod tests {
         assert!(text.is_char_boundary(text.len()));
         assert!(omitted > 0);
         assert!(text.len() <= 5);
+    }
+
+    #[test]
+    fn summary_text_neutralizes_terminal_control_characters() {
+        assert_eq!(
+            display_path(Path::new("src/line\nbreak.rs")),
+            "src/line\\nbreak.rs"
+        );
+        assert_eq!(
+            single_line("message\n\u{1b}[31mred"),
+            "message \\u{1b}[31mred"
+        );
     }
 
     #[test]

@@ -55,6 +55,10 @@ cargo run -q -p nekocode -- snapshot . \
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD --baseline /tmp/nekocode-baseline.json \
   --diagnostics --budget 8000
+
+# Human-readable projection of the same context evidence
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD --format summary
 ```
 
 There is no compatibility alias or `analyze` command.
@@ -81,6 +85,12 @@ optional compiler diagnostics, and explicit status/provenance/budget fields.
 `compare_ref` selects a Git change set; it never recreates compiler output for
 an old commit. A diagnostic delta requires a saved snapshot containing a
 diagnostic observation under compatible conditions.
+
+JSON is the canonical machine artifact and remains the default output.
+`--format summary` renders a deterministic human-readable projection of that
+same `ContextV1`: file/hunk counts, visible patch line counts, diagnostics and
+delta, comparability, budget, omissions, and limitations. The formatter must
+not add semantic inference or become a second contract.
 
 ## Diagnostic comparability
 
@@ -149,7 +159,8 @@ blockers and fixtures.
 
 The current branch has the Rust context core, explicit snapshot persistence,
 Git hunk/excerpt support, diagnostic parsing, versioned artifact envelopes,
-execution policy, safe public path views, and a minimal two-tool stdio gateway.
+execution policy, safe public path views, a deterministic human summary, and a
+minimal two-tool stdio gateway.
 Untracked file content is opt-in. `snapshot` is the canonical CLI/MCP name.
 The execution fixture suite covers build-script
 and procedural-macro execution evidence without claiming sandboxing.

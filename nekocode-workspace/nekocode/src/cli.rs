@@ -20,6 +20,15 @@ pub enum AnalysisArg {
     CargoCheck,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum OutputFormatArg {
+    /// Versioned JSON artifact for machines, MCP, and durable storage.
+    Json,
+    /// Deterministic plain-text explanation of the collected evidence.
+    Summary,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Snapshot a Rust workspace using Cargo metadata.
@@ -52,6 +61,8 @@ pub enum Commands {
         excerpt_lines: usize,
         #[arg(long)]
         baseline: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = OutputFormatArg::Json)]
+        format: OutputFormatArg,
         #[arg(short, long)]
         output: Option<PathBuf>,
     },

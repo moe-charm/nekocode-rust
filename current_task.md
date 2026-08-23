@@ -25,6 +25,8 @@ workflow and stop conditions.
 - Cargo/Git/rustc evidence, diagnostic comparability, budgets, and omissions;
 - explicit trusted-workspace execution policy and safety fixtures;
 - CLI/MCP payload parity and two-tool gateway;
+- deterministic `context --format summary` projection while JSON remains the
+  machine contract;
 - Codex Skill v0;
 - final legacy recovery tag and archive branch;
 - physical removal of the old root crate, multi-binary workspace, analyzers,
@@ -38,7 +40,8 @@ Recovery points:
 ## Next implementation focus
 
 1. Stabilize and validate schema v1 golden artifacts.
-2. Strengthen diagnostic fingerprints and comparability fixtures.
+2. Strengthen diagnostic fingerprints and comparability fixtures, including
+   human-summary views of added/resolved diagnostics.
 3. Add property tests for byte/item/line budget invariants.
 4. Evaluate the local Skill workflow; do not add MCP tools or another language.
 
