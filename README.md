@@ -21,9 +21,10 @@ Git hunks/patches, provenance, deterministic truncation, and MCP-friendly
 budget reporting. It does not claim independent dead-code or type-analysis
 accuracy.
 
-次のRust-first段階では、明示的なJSON snapshot保存、変更hunk周辺のsource
-excerpt、保存済み`cargo check`同士のdiagnostic deltaを追加します。Gitの
-`compare_ref`だけから過去のコンパイル結果を推測することはありません。
+Rust-first Phase 2.1では、`index --snapshot FILE`による明示的なJSON snapshot、
+`context --excerpt-lines N`による変更hunk周辺source excerpt、保存済み
+`cargo check`同士のdiagnostic delta（`--baseline FILE --diagnostics`）を提供します。
+Gitの`compare_ref`だけから過去のコンパイル結果を推測することはありません。
 
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tree-sitter](https://img.shields.io/badge/Tree--sitter-20232A?style=for-the-badge&logo=tree-sitter&logoColor=white)](https://tree-sitter.github.io/)

@@ -49,7 +49,7 @@ Rustの公式・定番ツールを正しさの情報源として使い、NekoCod
 - Phase 0（方針とcurrent_taskの更新）: 完了
 - Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み）
 - Phase 2（Rust MVP）: index/contextの入口、Cargo/Git provenance、差分hunk/patch、budget制御を実装済み。semantic backendは未着手
-- Phase 2.1（次）: 明示JSON snapshot、hunk周辺excerpt、診断deltaをdocs先行で固定。実装前。
+- Phase 2.1: 明示JSON snapshot、hunk周辺excerpt、診断deltaを実装済み。schema version 3。
 - Phase 3（追加言語）: Rust昇格ゲート通過後
 
 検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。

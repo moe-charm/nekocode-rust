@@ -26,6 +26,13 @@ cargo run -q -p nekocode -- context . --compare-ref origin/main --budget 8000
 
 # 必要なときだけworkspace全targetのcargo check診断を含める
 cargo run -q -p nekocode -- context . --compare-ref origin/main --diagnostics
+
+# 後で診断差分に使う明示JSON snapshotを保存
+cargo run -q -p nekocode -- index . --snapshot /tmp/rust-baseline.json --diagnostics --all-features
+
+# hunk周辺のsource excerptと保存済み診断のdeltaを取得
+cargo run -q -p nekocode -- context . --compare-ref origin/main \
+  --excerpt-lines 8 --baseline /tmp/rust-baseline.json --diagnostics --all-features
 ```
 
 ## Canonical release staging
@@ -51,13 +58,13 @@ Rust-first stagingを既定にする。旧5-binaryのbuild/copyが必要な復�
 
 現在の `index` / `context` はCargo構造、package targets/features、入力ファイルdigest、rustc/cargoのtoolchain provenance、Git変更hunk/patchを返す。`--diagnostics`指定時は`cargo check --message-format=json`の診断を一次情報として追加する。予算に収まらないdiff・診断・変更は`omitted_*`、実測bytes/tokens、`budget_exceeded`、`evidence: incomplete`で示す。シンボル参照やbreaking-change判定はまだ出力せず、JSONの`limitations`に明示する。
 
-## 次の契約（Phase 2.1）
+## 現行契約（Phase 2.1）
 
-次に追加する機能は、意味解析を再実装せず、同じRust-first JSON契約の上に積む。
+Phase 2.1は、意味解析を再実装せず、同じRust-first JSON契約の上に実装済みである。
 
 ### Snapshot
 
-`index --snapshot FILE` は、Cargo workspace snapshotと任意の診断実行結果を、再利用可能なJSONとして保存する。これは当面「永続DB」ではなく、明示的なファイルsnapshotである。snapshotには次を含める。
+`index --snapshot FILE` は、Cargo workspace snapshotと任意の診断実行結果を、再利用可能なJSONとして保存する。これは当面「永続DB」ではなく、明示的なファイルsnapshotである。schema versionは3で、snapshotには次を含める。
 
 - schema version、workspace/package/target情報
 - toolchain、Cargo.toml/Cargo.lock/rust-toolchainのdigest
@@ -85,7 +92,7 @@ snapshot ID、常駐DB、過去commitの自動再解析はまだ実装しない�
 
 ### Diagnostic delta
 
-`context --baseline SNAPSHOT` は、同じtoolchain/features/targets条件で保存されたsnapshotと現在の`cargo check`結果を比較する。Gitの変更差分と診断差分は混同しない。
+`context --baseline SNAPSHOT --diagnostics` は、同じtoolchain/features/targets条件で保存されたsnapshotと現在の`cargo check`結果を比較する。Gitの変更差分と診断差分は混同しない。
 
 - `added`: 現在だけにある診断
 - `resolved`: baselineだけにある診断
@@ -94,6 +101,10 @@ snapshot ID、常駐DB、過去commitの自動再解析はまだ実装しない�
 - baseline/currentのtool provenanceと実行条件
 
 baseline条件が異なる、診断が保存されていない、または実行に失敗した場合はdeltaを断定せず、`incomplete`と理由を返す。
+
+`index`/`context`のJSONは、MCP gatewayからも同じ引数で利用できる。`--snapshot`、
+`--baseline`はcallerが指定するパスだけを読み書きし、gatewayは応答中の絶対パスを
+`<path>`へredactする。
 
 ## 証拠レベル
 
