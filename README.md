@@ -17,8 +17,8 @@ handling around those tools.
 ### Current contract
 
 - **Rust-first:** the supported MVP target is a Cargo workspace.
-- **Two canonical commands:** `index` and `context`.
-- **JSON schema v3:** responses include provenance and an explicit evidence level.
+- **Two canonical commands:** `snapshot` and `context`.
+- **Versioned artifacts:** external contracts are `snapshot-v1` and `context-v1`.
 - **Read-only:** no source editing, hidden database, or automatic commit/push.
 - **No unmeasured accuracy claims:** NekoCode does not claim independent
   dead-code, reference, type, or breaking-change accuracy.
@@ -31,7 +31,7 @@ handling around those tools.
 cd nekocode-workspace
 
 # Cargo workspace/package/target structure
-cargo run -q -p nekocode -- index .
+cargo run -q -p nekocode -- snapshot .
 
 # Bounded Git context for an AI or review workflow
 cargo run -q -p nekocode -- context . \
@@ -49,8 +49,8 @@ hidden database and are not created automatically.
 
 ```bash
 # Save a reproducible Cargo/toolchain/diagnostic baseline
-cargo run -q -p nekocode -- index . \
-  --snapshot /tmp/nekocode-baseline.json --diagnostics --all-features
+cargo run -q -p nekocode -- snapshot . \
+  --analysis cargo-check --output /tmp/nekocode-baseline.json --all-features
 
 # Compare the current check with that saved baseline
 cargo run -q -p nekocode -- context . \
@@ -66,12 +66,12 @@ and current toolchain, features, and targets are compatible. The result keeps
 
 ### What the JSON contains
 
-`index` records Cargo workspace/package/target information, input file
+`snapshot` records Cargo workspace/package/target information, input file
 digests, toolchain information, and command provenance. `context` adds the
 resolved Git refs, changed files, diff hunks/patch, optional source excerpts,
 optional structured compiler diagnostics, and diagnostic delta information.
 
-Every response reports its `schema_version`, `evidence`, budget fields, and
+Every response reports its contract version, `evidence`, budget fields, and
 `limitations`. When a request is too large, NekoCode records what was omitted
 instead of silently presenting an incomplete result as complete. Source
 excerpts are display context around Git hunks; they are not symbol resolution.
@@ -84,7 +84,7 @@ The Rust-first stdio gateway exposes the same two operations:
 python3 mcp-nekocode-server/mcp_server_rust_first.py
 ```
 
-`index` and `context` are the only public tools in this gateway. It uses
+`snapshot` and `context` are the only public tools in this gateway. It uses
 argument-vector execution, keeps logs out of stdout, and redacts absolute
 paths in responses. See
 [`mcp-nekocode-server/README_RUST_FIRST.md`](mcp-nekocode-server/README_RUST_FIRST.md)
@@ -135,8 +135,8 @@ Cargo、`rustc`、`cargo check`、rust-analyzer、Gitです。NekoCode固有の�
 現行MVPの契約は次の通りです。
 
 - 対象はRust/Cargo workspaceを優先する。
-- 正規CLIは`index`と`context`の2コマンド。
-- JSON schemaはv3で、provenance・evidence・制限情報を含む。
+- 正規CLIは`snapshot`と`context`の2コマンド。
+- 外部artifact契約は`snapshot-v1`と`context-v1`で、provenance・evidence・制限情報を含む。
 - ソース編集、隠しDB、自動commit/pushは行わない。
 - dead code・参照・型・breaking changeの独自精度や、未測定の精度パーセントは主張しない。
 - 他言語と旧5バイナリ、旧refactor/watch/impact/MCPはlegacyまたはexperimentalであり、現行契約外。
@@ -147,15 +147,15 @@ Cargo、`rustc`、`cargo check`、rust-analyzer、Gitです。NekoCode固有の�
 cd nekocode-workspace
 
 # Cargo workspaceの構造を取得
-cargo run -q -p nekocode -- index .
+cargo run -q -p nekocode -- snapshot .
 
 # Git差分とcompiler診断を含む、予算制限付きコンテキスト
 cargo run -q -p nekocode -- context . \
   --compare-ref HEAD~1 --budget 8000 --diagnostics
 
 # 明示的なbaselineを保存し、後でdiagnostic deltaを比較
-cargo run -q -p nekocode -- index . \
-  --snapshot /tmp/nekocode-baseline.json --diagnostics --all-features
+cargo run -q -p nekocode -- snapshot . \
+  --analysis cargo-check --output /tmp/nekocode-baseline.json --all-features
 cargo run -q -p nekocode -- context . \
   --baseline /tmp/nekocode-baseline.json --diagnostics
 ```
@@ -168,7 +168,7 @@ targetsが互換する場合だけ比較し、`added`・`resolved`・`persisting
 
 ### MCP・Skill・Pluginの境界
 
-Rust-first MCP gatewayは、CLIと同じ`index`/`context`だけをstdioで公開します。
+Rust-first MCP gatewayは、CLIと同じ`snapshot`/`context`だけをstdioで公開します。
 
 ```bash
 python3 mcp-nekocode-server/mcp_server_rust_first.py

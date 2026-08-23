@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moe-charm/nekocode/blob/main/schemas/snapshot-v1.schema.json",
+  "title": "NekoCode Snapshot v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "artifact_kind",
+    "status",
+    "analysis_mode",
+    "generated_at",
+    "workspace",
+    "limitations"
+  ],
+  "properties": {
+    "contract_version": { "const": "snapshot-v1" },
+    "artifact_kind": { "const": "snapshot" },
+    "status": {
+      "enum": [
+        "not_run",
+        "completed_clean",
+        "completed_with_diagnostics",
+        "tool_failed",
+        "timed_out",
+        "output_limited",
+        "partial"
+      ]
+    },
+    "analysis_mode": { "enum": ["metadata_only", "cargo_check"] },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "workspace": { "type": "object" },
+    "diagnostics": { "type": ["object", "null"] },
+    "canonical_hash": { "type": ["string", "null"] },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "provenance": { "type": "array", "items": { "type": "object" } },
+    "omissions": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

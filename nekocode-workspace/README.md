@@ -9,11 +9,11 @@ The workspace provides the `nekocode` package and the shared `nekocode-core`
 context model. The supported entry points are:
 
 ```bash
-cargo run -q -p nekocode -- index .
+cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --budget 8000
 ```
 
-`index` records Cargo workspace/package/target metadata. `context` adds a
+`snapshot` records Cargo workspace/package/target metadata. `context` adds a
 bounded Git diff, optional source excerpts, and optional `cargo check`
 diagnostics. The JSON schema is v3 and carries tool provenance, evidence, and
 limitations. It is deliberately not an independent Rust semantic analyzer.
@@ -41,11 +41,11 @@ and the [repository layout](../docs/REPOSITORY_LAYOUT.md).
 が次の2コマンドを提供します。
 
 ```bash
-cargo run -q -p nekocode -- index .
+cargo run -q -p nekocode -- snapshot .
 cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --budget 8000
 ```
 
-`index`はCargo workspace・package・targetの構造を取得し、`context`は予算制限付き
+`snapshot`はCargo workspace・package・targetの構造を取得し、`context`は予算制限付き
 Git差分、任意のsource excerpt、任意の`cargo check`診断を追加します。JSON schemaは
 v3で、tool provenance・evidence・limitationsを含みます。Rustの意味解析を独自に
 置き換えるものではありません。

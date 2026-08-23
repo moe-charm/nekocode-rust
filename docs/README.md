@@ -1,50 +1,34 @@
-# 📚 NekoCode Documentation
+# NekoCode documentation
 
-Welcome to the NekoCode documentation!
+This directory documents the Rust-first code context layer. The primary
+contract is deliberately small: `snapshot` and `context`.
 
-## 🆕 Essential Documents
+## Current design decisions
 
-### 📋 **[CLI & MCP Command Reference](CLI_MCP_REFERENCE.md)** 🆕 NEW!
-Complete command reference with CLI ↔️ MCP mapping, Direct Mode editing, and practical examples
+- [Product boundary](product-boundary.md) — what NekoCode is and is not;
+- [Execution trust model](execution-trust.md) — metadata-only vs opt-in Cargo execution;
+- [Artifact contract](artifact-contract.md) — snapshot-v1/context-v1, comparability, and omissions;
+- [Legacy retirement](legacy-retirement.md) — freeze and physical-archive gates;
+- [Rust-first MVP contract](RUST_FIRST_MVP.md) — canonical architecture and acceptance gates;
+- [Repository layout](REPOSITORY_LAYOUT.md) — current paths and migration boundary;
+- [Legacy dependency audit](LEGACY_DEPENDENCY_AUDIT.md) — audited recovery dependencies.
 
-### 🏗️ **[Architecture Guide](ARCHITECTURE.md)** ⭐ MUST READ
-Complete system architecture, data flow, and component relationships
+## Current implementation guides
 
-### 🌍 Usage Guides
-- [**English Usage Guide**](USAGE.md) - Complete guide for using NekoCode
-- [**日本語使い方ガイド**](USAGE_jp.md) - NekoCodeの詳しい使い方
-  - Note: Build output goes to `bin/`. Use `./bin/nekocode_ai` or add `bin/` to your `PATH`.
+- [Rust-first MCP gateway](../mcp-nekocode-server/README_RUST_FIRST.md);
+- [Root README](../README.md);
+- [Canonical workspace README](../nekocode-workspace/README.md).
 
-### 🚀 Advanced Features
-- [**Include Analysis Guide**](INCLUDE_ANALYSIS_GUIDE.md) - C++ compile time optimization 
-- [**Performance Guide**](PERFORMANCE_GUIDE.md) - Optimization tips for large projects
-- [**Debug Guide**](DEBUG_GUIDE.md) - Troubleshooting and debugging
-- [**Token Limit Configuration**](TOKEN_LIMIT_CONFIGURATION.md) - 🆕 AST output size management
+The older usage, performance, refactoring, and multi-language documents are
+historical recovery material. They are not the current product contract and do
+not override the documents above.
 
-### 🤖 Claude Code Integration
-- [**Claude Code Index**](claude-code/INDEX.md) - Claude Code specific features
-- [**Design Philosophy**](claude-code/DESIGN_PHILOSOPHY.md) - Why NekoCode is optimized for AI
+## English / 日本語
 
-### 📦 Project Links
-- [Main README](../README.md) - Project overview and quick start
-- [Contributing](../CONTRIBUTING.md) - How to contribute
+The root README contains the current English and Japanese quick starts. CLI
+and MCP names are intentionally the same in both languages:
 
-## Document Overview
-
-### For New Users
-Start with the usage guide in your preferred language:
-- English speakers → [USAGE.md](USAGE.md)
-- 日本語話者 → [USAGE_jp.md](USAGE_jp.md)
-
-### For AI Developers
-Check out the "AI Developer Guide" section in the usage guides for specific instructions on using NekoCode with:
-- Claude Code
-- GitHub Copilot
-- Other AI assistants
-
-### For Contributors
-Read [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup and contribution guidelines.
-
----
-
-*Need help? Create an issue on [GitHub](https://github.com/moe-charm/nekocode/issues)!*
+```text
+nekocode snapshot PATH
+nekocode context PATH --baseline SNAPSHOT.json
+```

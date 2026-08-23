@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moe-charm/nekocode/blob/main/schemas/context-v1.schema.json",
+  "title": "NekoCode Context v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "artifact_kind",
+    "status",
+    "comparison_status",
+    "workspace",
+    "changed_files",
+    "limitations"
+  ],
+  "properties": {
+    "contract_version": { "const": "context-v1" },
+    "artifact_kind": { "const": "context" },
+    "status": {
+      "enum": [
+        "not_run",
+        "completed_clean",
+        "completed_with_diagnostics",
+        "tool_failed",
+        "timed_out",
+        "output_limited",
+        "partial"
+      ]
+    },
+    "comparison_status": {
+      "enum": ["comparable", "baseline_missing", "not_comparable", "partial"]
+    },
+    "workspace": { "type": "object" },
+    "changed_files": { "type": "array", "items": { "type": "object" } },
+    "diff": { "type": ["object", "null"] },
+    "source_excerpts": { "type": "array", "items": { "type": "object" } },
+    "diagnostics": { "type": ["object", "null"] },
+    "diagnostic_delta": { "type": ["object", "null"] },
+    "budget": { "type": "object" },
+    "omissions": { "type": "array", "items": { "type": "object" } },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

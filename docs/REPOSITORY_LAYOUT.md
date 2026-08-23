@@ -1,28 +1,31 @@
 # Repository layout during the Rust-first migration
 
-The repository is intentionally kept recoverable while the new contract is
-being validated. Existing code and uncommitted work are not deleted or moved
-under a broad archive operation.
+Status: canonical layout policy, 2026-08-23.
 
-## Canonical path
+The repository is intentionally recoverable while the new artifact contract
+and execution-trust gates are validated. The logical boundary is active now;
+physical removal waits for [legacy-retirement.md](legacy-retirement.md).
 
-The current Rust-first implementation lives under `nekocode-workspace/`:
+## Current canonical path
 
-- `nekocode-core/src/rust_context.rs`: Cargo/Git/diagnostic context model
-- `nekocode-core/tests/`: Rust fixture and integration coverage
-- `nekocode/src/cli.rs` and `nekocode/src/main.rs`: `index` and `context` CLI
-- `mcp-nekocode-server/mcp_server_rust_first.py`: read-only stdio MCP adapter
-- `scripts/update_rust_first_release.sh`: canonical CLI-only release staging
-- `Dockerfile.rust-first`: prebuilt CLI + minimal MCP image
+The supported implementation currently lives under `nekocode-workspace/`:
 
-Rust-first context artifacts are explicit files supplied by the caller (for
-example `index --snapshot /tmp/project.snapshot.json`). They are not hidden
-inside the repository, are not committed automatically, and can be used as
-inputs to `context --baseline FILE --diagnostics`. Source excerpts and
-diagnostic delta are read-only context features; they do not introduce an
-independent Rust semantic analyzer.
-- `Dockerfile`: legacy all-in-one image retained only for recovery
-- `.github/workflows/rust-first-mvp.yml`: focused verification workflow
+- `nekocode-core/src/rust_context.rs`: Cargo/Git/diagnostic context model;
+- `nekocode-core/tests/`: Rust fixtures and integration coverage;
+- `nekocode/src/cli.rs` and `nekocode/src/main.rs`: canonical CLI;
+- `mcp-nekocode-server/mcp_server_rust_first.py`: thin stdio adapter;
+- `scripts/update_rust_first_release.sh`: CLI-only release staging;
+- `Dockerfile.rust-first`: prebuilt CLI/minimal gateway image.
+
+The four design decisions are kept at the repository root under `docs/`:
+
+- `product-boundary.md`;
+- `execution-trust.md`;
+- `artifact-contract.md`;
+- `legacy-retirement.md`.
+
+The checked-in external schemas live under `schemas/`. They are contract
+artifacts, not a second implementation of the core model.
 
 Use the nested workspace for development and CI:
 
@@ -32,24 +35,40 @@ cargo test -p nekocode-core
 cargo check -p nekocode
 ```
 
+## Target physical shape
+
+The long-term shape is a small core plus adapters. The current workspace has
+not yet been physically renamed to `crates/`; do not create a second parallel
+workspace just to match a diagram.
+
+```text
+nekocode-workspace/
+├── nekocode-core/       # canonical core (current path)
+├── nekocode/            # canonical CLI (current path)
+└── ...                  # recoverable legacy members
+schemas/
+docs/
+```
+
+The core may later be split into `snapshot/`, `context/`, `rust/`, `git/`,
+`contract/`, `comparability/`, `budget/`, `provenance/`, and `execution/`
+modules. It should not be split into many crates until a real dependency
+boundary requires it. CLI and MCP depend on core in one direction.
+
 ## Legacy boundary
 
-The root single-package Cargo project and the remaining five-binary features
-are retained as legacy history for now. Their dead-code, multi-language,
-refactor, split, watch, and impact claims are not part of the Rust-first MVP.
-They may be archived to a tag or separate branch after the working tree is
-committed and a release owner confirms that no downstream path still depends
-on them.
+The root single-package Cargo project and remaining five-binary features are
+legacy recovery material. Their dead-code, multi-language, refactor, split,
+watch, and impact claims are not part of the Rust-first contract. The old
+MCP/server files remain available for recovery but are not the canonical
+gateway.
 
-This avoids mixing an irreversible archive operation with the accuracy work.
-The migration gate is: Rust fixtures pass, the JSON schema is stable, and the
-CLI smoke tests pass on a clean checkout.
+Legacy code may be moved to a final tag/read-only branch after:
 
-Current status: Stage A (logical archive and canonical workspace selection) is
-complete. The dependency audit is recorded in [`LEGACY_DEPENDENCY_AUDIT.md`](LEGACY_DEPENDENCY_AUDIT.md).
-Stage B's clean-checkout gate, Rust-first MCP smoke, the legacy recovery tag
-`legacy-2026-pre-rust-first`, manual-only isolation of old build/release/PR
-workflows, the canonical CLI-only release/prebuilt-Docker path, and canonical
-cargo-deny/CodeQL build selection are complete. The legacy Dockerfile and
-explicit five-binary recovery route remain before Stage C.
-Stage C (physical move) follows the root/MCP/distribution migration.
+1. snapshot/context golden artifacts and parity tests pass;
+2. canonical install/release/CI paths use one CLI;
+3. no canonical crate depends on legacy code;
+4. old binary names appear only in migration documentation.
+
+This avoids mixing an irreversible archive operation with contract and
+execution-safety work.

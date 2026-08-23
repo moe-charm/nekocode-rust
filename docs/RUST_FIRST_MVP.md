@@ -1,135 +1,177 @@
-# Rust-first MVP
+# Rust-first MVP contract
 
-このリポジトリは、旧来の「多言語・多機能コード解析ツール」から、Rustの公式ツールを束ねるコード・コンテキスト層へ段階的に移行する。
+Status: canonical design, 2026-08-23.
 
-## 正規の責務
+NekoCode is a Rust-first code context layer. It does not reimplement Rust
+semantic analysis. Cargo metadata, `rustc`/`cargo check`, Git, and later
+explicitly enabled official backends remain the sources of meaning.
 
-NekoCodeはRustの意味解析を再実装しない。正しさの情報源は次の通り。
+The product definition is:
 
-- Cargo metadata: workspace/package/target構造
-- rustc・cargo check・Clippy: compiler/lint diagnostics
-- rust-analyzer: symbol/reference/semantic operations（後続backend）
-- Git: baseline/headの変更集合
+> NekoCode converts Rust official-tool results and Git changes into
+> comparable, budgeted, evidence-backed code context.
 
-NekoCode固有の価値は、これらをスナップショット化し、差分・履歴・根拠・AI向け予算に合わせて返すことにある。
+Read the companion decisions first:
 
-## MVPコマンド
+- [Product boundary](product-boundary.md)
+- [Execution trust model](execution-trust.md)
+- [Artifact contract](artifact-contract.md)
+- [Legacy retirement](legacy-retirement.md)
+
+## Canonical architecture
+
+```text
+human / CI ────────> nekocode CLI
+                         │
+Skill / Plugin ───> thin MCP gateway
+                         │
+                         ▼
+                   nekocode-core
+              snapshot / context / delta
+                         │
+                    Git / Cargo / rustc
+```
+
+`nekocode-core` owns request/response meaning, evidence, comparability,
+budget, provenance, and safety. The CLI is the canonical execution entry.
+MCP is a transport adapter. Skill is workflow guidance. Plugin is packaging.
+App UI is optional and never the required execution path.
+
+## Canonical commands
+
+The public command names are deliberately not `index` or `analyze`:
 
 ```bash
 cd nekocode-workspace
 
-# Cargo workspace構造をJSONで取得
-cargo run -q -p nekocode -- index .
+# Metadata-only workspace observation (default; no workspace code execution)
+cargo run -q -p nekocode -- snapshot .
 
-# Git差分を含む、制限付きAIコンテキストを取得
-cargo run -q -p nekocode -- context . --compare-ref origin/main --budget 8000
+# Explicit diagnostic observation for a reusable baseline
+cargo run -q -p nekocode -- snapshot . \
+  --analysis cargo-check --output /tmp/nekocode-baseline.json
 
-# 必要なときだけworkspace全targetのcargo check診断を含める
-cargo run -q -p nekocode -- context . --compare-ref origin/main --diagnostics
-
-# 後で診断差分に使う明示JSON snapshotを保存
-cargo run -q -p nekocode -- index . --snapshot /tmp/rust-baseline.json --diagnostics --all-features
-
-# hunk周辺のsource excerptと保存済み診断のdeltaを取得
-cargo run -q -p nekocode -- context . --compare-ref origin/main \
-  --excerpt-lines 8 --baseline /tmp/rust-baseline.json --diagnostics --all-features
+# Git context with optional current diagnostics and a saved baseline
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD --baseline /tmp/nekocode-baseline.json \
+  --diagnostics --budget 8000
 ```
 
-## Canonical release staging
+For one migration release, the CLI may accept `index` as a hidden compatibility
+alias. Documentation and MCP expose `snapshot` only. There is no canonical
+`analyze` command.
 
-旧5バイナリの`Makefile`や`update_releases.sh`とは分離し、Rust-first CLIだけを
-`releases/nekocode`へ更新する。
+## Snapshot contract
 
-```bash
-scripts/update_rust_first_release.sh
-# 既存のrelease binaryを別ディレクトリへ検査する場合
-scripts/update_rust_first_release.sh --skip-build --output /tmp/nekocode-release-check
+The external artifact is `snapshot-v1`. It is an explicit caller-selected JSON
+file; NekoCode never chooses an implicit latest snapshot or hidden database.
+
+Metadata includes workspace/package/target/features, toolchain and target
+profile, relevant input digests, Git state, execution policy, and provenance.
+`--analysis cargo-check` adds a structured diagnostic observation. The default
+is `metadata-only` and must not run `build.rs` or procedural macros.
+
+The canonical payload hash excludes timestamps and storage paths. Path values
+in the artifact are normalized to the workspace boundary where possible.
+
+## Context contract
+
+The external artifact is `context-v1`. It contains the caller-selected Git
+base, staged/unstaged/working-tree change markers, hunks, bounded excerpts,
+optional compiler diagnostics, and explicit status/provenance/budget fields.
+
+`compare_ref` selects a Git change set; it never recreates compiler output for
+an old commit. A diagnostic delta requires a saved snapshot containing a
+diagnostic observation under compatible conditions.
+
+## Diagnostic comparability
+
+The response must distinguish:
+
+```text
+comparable
+baseline_missing
+not_comparable
+partial
 ```
 
-このスクリプトは`nekocode`だけをコピーし、`nekorefactor`等のlegacy artifactを
-削除・上書きしない。自動commit/pushもしないため、成果物の確認後に明示的に
-コミットする。
+Toolchain, target, package, feature/default-feature, compiler-affecting
+configuration, or analysis-profile changes produce `not_comparable` with
+reasons. A baseline without diagnostics produces `baseline_missing`, never an
+empty successful delta. MVP matching is exact and multiset-based; fuzzy line
+movement matching is not implemented.
 
-ルートの`make`、`nekocode-workspace/build.sh`、`build-and-deploy.sh`もこの
-Rust-first stagingを既定にする。旧5-binaryのbuild/copyが必要な復旧時だけ
-`make legacy-release`または各scriptの`--legacy`を明示する。`releases/setup.py
---install`と`--direct-json`もRust-first CLI/MCPを登録し、旧登録は
-`--install-legacy` / `--direct-json-legacy`で分離している。
+Compiler result states are also explicit:
 
-現在の `index` / `context` はCargo構造、package targets/features、入力ファイルdigest、rustc/cargoのtoolchain provenance、Git変更hunk/patchを返す。`--diagnostics`指定時は`cargo check --message-format=json`の診断を一次情報として追加する。予算に収まらないdiff・診断・変更は`omitted_*`、実測bytes/tokens、`budget_exceeded`、`evidence: incomplete`で示す。シンボル参照やbreaking-change判定はまだ出力せず、JSONの`limitations`に明示する。
-
-## 現行契約（Phase 2.1）
-
-Phase 2.1は、意味解析を再実装せず、同じRust-first JSON契約の上に実装済みである。
-
-### Snapshot
-
-`index --snapshot FILE` は、Cargo workspace snapshotと任意の診断実行結果を、再利用可能なJSONとして保存する。これは当面「永続DB」ではなく、明示的なファイルsnapshotである。schema versionは3で、snapshotには次を含める。
-
-- schema version、workspace/package/target情報
-- toolchain、Cargo.toml/Cargo.lock/rust-toolchainのdigest
-- 実行コマンド、cwd、tool version、exit code
-- `--diagnostics`を指定した場合のcargo check結果
-
-snapshot ID、常駐DB、過去commitの自動再解析はまだ実装しない。書き込みは指定されたsnapshot pathだけに限定し、atomic replaceを使う。
-
-### Source excerpts
-
-`context` は変更hunkの前後を、明示した行数だけworkspace-relativeに抜粋する。
-
-```json
-{
-  "path": "src/lib.rs",
-  "start_line": 10,
-  "end_line": 24,
-  "content": "...",
-  "source": "git-diff-hunk",
-  "truncated": false
-}
+```text
+not_run
+completed_clean
+completed_with_diagnostics
+tool_failed
+timed_out
+output_limited
+partial
 ```
 
-抜粋はsyntax-onlyの表示補助であり、symbol/reference解決を意味しない。budgetを超える場合は抜粋単位で省略し、`omitted_excerpts`へ記録する。
+Compiler errors are observations. Operational failures are separate from a
+valid diagnostic stream.
 
-### Diagnostic delta
+## Budget and evidence
 
-`context --baseline SNAPSHOT --diagnostics` は、同じtoolchain/features/targets条件で保存されたsnapshotと現在の`cargo check`結果を比較する。Gitの変更差分と診断差分は混同しない。
+Hard limits are bytes, item counts, and lines. Token estimates are advisory.
+The envelope always keeps status, provenance, and omission information. Every
+omitted group records a reason, count, and priority; silent truncation is not
+allowed.
 
-- `added`: 現在だけにある診断
-- `resolved`: baselineだけにある診断
-- `persisting`: 両方にある診断
-- fingerprint: code、workspace-relative path、line、正規化message
-- baseline/currentのtool provenanceと実行条件
+Evidence levels are:
 
-baseline条件が異なる、診断が保存されていない、または実行に失敗した場合はdeltaを断定せず、`incomplete`と理由を返す。
+- `tool-confirmed`: directly reported by Cargo, rustc, or Git;
+- `semantic-resolved`: a future explicitly enabled semantic backend;
+- `syntax-only`: display-only syntax information;
+- `incomplete`: unavailable, incompatible, failed, or budget-truncated data.
 
-`index`/`context`のJSONは、MCP gatewayからも同じ引数で利用できる。`--snapshot`、
-`--baseline`はcallerが指定するパスだけを読み書きし、gatewayは応答中の絶対パスを
-`<path>`へredactする。
+These levels are evidence categories, not accuracy percentages.
 
-## 証拠レベル
+## Execution trust
 
-出力の`evidence`は信頼度の代用品ではなく、根拠の種類を表す。
+`metadata-only` is the default. `cargo-check` is opt-in and requires a trusted
+workspace because Cargo may execute build scripts, procedural macros, and
+compiler wrappers. Until OS-level isolation exists, NekoCode must report that
+process network isolation is not enforced and must not call the operation
+"sandboxed".
 
-- `tool-confirmed`: Cargo/Git等の外部ツールが直接返した情報
-- `semantic-resolved`: 意味解析backendで解決した情報
-- `syntax-only`: 構文解析だけで得た情報
-- `incomplete`: 予算超過またはbackend未接続などで不完全な情報
+The implementation must bound process time/output, redact secrets, keep source
+reads inside the workspace, reject symlink escapes, and disable Git external
+diff/textconv. See [execution-trust.md](execution-trust.md) for the release
+blockers and fixtures.
 
-未測定の「90%」「95%」のような数字は使わない。
+## Current implementation and promotion gates
 
-## Rust昇格ゲート
+The current branch has the Rust context core, explicit snapshot persistence,
+Git hunk/excerpt support, diagnostic parsing, and a minimal two-tool stdio
+gateway. The next implementation step makes `snapshot` canonical, adds the
+versioned artifact envelope/schema, and preserves only the short-lived CLI
+`index` alias.
 
-新しいRust backendを追加する前に、次をfixtureと回帰テストで固定する。
+Before a semantic backend or a second language is promoted, fixtures must cover
+trait/impl/macro/cfg/features, workspaces and targets, toolchain/profile
+changes, diagnostics, UTF-8 boundaries, rename/delete/untracked/binary Git
+states, budget omissions, and CLI/MCP payload parity.
 
-- trait / impl / macro / cfg / feature
-- workspace / 複数crate / tests / examples
-- 同名シンボル、可視性、span、解析エラー
-- false positive / false negativeと実行条件
+## Legacy boundary
 
-このゲートを通過するまでは、他言語は`experimental`扱いとし、READMEの「完全対応」には含めない。
+The root package, old five binaries, multi-language analyzers, refactoring,
+dead-code/impact heuristics, watch, security/quality suites, and extra MCP
+tools remain recoverable legacy only. They receive no new product claims.
 
-## 旧実装との境界
+Physical archive waits for the gates in
+[legacy-retirement.md](legacy-retirement.md): final tag, clean canonical
+dependency graph, golden artifacts, parity tests, one install binary, and no
+legacy route in primary docs.
 
-旧単一バイナリと旧5バイナリの機能はlegacyとして保守対象を限定する。独自dead-code判定、smart refactor、split、strip-comments、watch、security/quality/circular解析をMVPの正規導線に戻さない。
+## Version policy
 
-リポジトリ上のcanonical/legacy境界と、アーカイブを保留している理由は [`REPOSITORY_LAYOUT.md`](REPOSITORY_LAYOUT.md) に記載する。
+The checked-in schemas under `schemas/` are the external contract. Additive
+optional fields remain within v1. A breaking field/status/meaning change is v2.
+Core Rust types are the semantic source; CLI and MCP must consume the same
+payload rather than defining adapter-specific DTOs.
