@@ -1,4 +1,7 @@
-use nekocode_core::{build_rust_context_with_config, RustContextOptions};
+use nekocode_core::{
+    build_rust_context_with_config, build_rust_snapshot, sanitize_snapshot_for_output,
+    AnalysisMode, ComparisonStatus, RustContextOptions,
+};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -43,6 +46,11 @@ fn context_contains_hunks_packages_and_working_tree_files() {
     options.include_working_tree = true;
     let pack = build_rust_context_with_config(root, options).expect("context should build");
 
+    assert_eq!(pack.contract_version, "context-v1");
+    assert_eq!(pack.artifact_kind, "context");
+    assert_eq!(pack.comparison_status, ComparisonStatus::Comparable);
+    assert_eq!(pack.budget.requested_tokens, 8_000);
+    assert!(pack.budget.max_bytes >= pack.serialized_bytes);
     assert!(pack
         .diff
         .as_ref()
@@ -94,6 +102,10 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     let snapshot =
         nekocode_core::build_rust_snapshot(root, true, false).expect("snapshot should build");
     assert_eq!(snapshot.schema_version, 3);
+    assert_eq!(snapshot.contract_version, "snapshot-v1");
+    assert_eq!(snapshot.artifact_kind, "snapshot");
+    assert_eq!(snapshot.analysis_mode, AnalysisMode::CargoCheck);
+    assert!(snapshot.canonical_hash.is_some());
     assert!(!snapshot.generated_at.is_empty());
     assert!(snapshot.diagnostics.is_some());
 
@@ -112,9 +124,45 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
         .diagnostic_delta
         .expect("matching diagnostic baseline should produce a delta");
     assert!(delta.compatible);
+    assert_eq!(delta.status, ComparisonStatus::Comparable);
     assert!(delta.added.is_empty());
     assert!(delta.resolved.is_empty());
     assert!(delta.persisting.is_empty());
+
+    let mut missing_options = RustContextOptions::new(None, 20_000);
+    missing_options.include_diagnostics = true;
+    let missing = build_rust_context_with_config(root, missing_options)
+        .expect("context without baseline should still build");
+    assert_eq!(missing.comparison_status, ComparisonStatus::BaselineMissing);
+    assert!(missing
+        .limitations
+        .iter()
+        .any(|item| item.contains("baseline_missing")));
+}
+
+#[test]
+fn metadata_snapshot_has_stable_contract_and_safe_public_paths() {
+    let directory = tempdir().expect("temporary workspace");
+    let root = directory.path();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"metadata-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::create_dir(root.join("src")).expect("src directory");
+    fs::write(root.join("src/lib.rs"), "pub fn stable() {}\n").expect("source");
+
+    let first = build_rust_snapshot(root, false, false).expect("snapshot should build");
+    let second = build_rust_snapshot(root, false, false).expect("snapshot should build twice");
+    assert_eq!(first.contract_version, "snapshot-v1");
+    assert_eq!(first.analysis_mode, AnalysisMode::MetadataOnly);
+    assert_eq!(first.canonical_hash, second.canonical_hash);
+
+    let public = sanitize_snapshot_for_output(&first).expect("public view should serialize");
+    assert_eq!(public.workspace.root, std::path::Path::new("$WORKSPACE"));
+    assert!(!serde_json::to_string(&public)
+        .expect("public snapshot should serialize")
+        .contains(root.to_string_lossy().as_ref()));
 }
 
 #[test]

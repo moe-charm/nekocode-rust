@@ -8,8 +8,11 @@
     "artifact_kind",
     "status",
     "comparison_status",
+    "schema_version",
+    "evidence",
     "workspace",
     "changed_files",
+    "budget",
     "limitations"
   ],
   "properties": {
@@ -28,6 +31,10 @@
     },
     "comparison_status": {
       "enum": ["comparable", "baseline_missing", "not_comparable", "partial"]
+    },
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "evidence": {
+      "enum": ["tool-confirmed", "semantic-resolved", "syntax-only", "incomplete"]
     },
     "workspace": { "type": "object" },
     "changed_files": { "type": "array", "items": { "type": "object" } },

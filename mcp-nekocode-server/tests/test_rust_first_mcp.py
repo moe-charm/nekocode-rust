@@ -28,7 +28,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         if process.stderr is not None and not process.stderr.closed:
             process.stderr.close()
 
-    def test_initialize_list_and_index_over_stdio(self) -> None:
+    def test_initialize_list_and_snapshot_over_stdio(self) -> None:
         process = subprocess.Popen(
             [sys.executable, str(SERVER)],
             cwd=REPO_ROOT,
@@ -48,7 +48,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "index", "arguments": {"path": "."}},
+                "params": {"name": "nekocode_snapshot", "arguments": {"path": "."}},
             },
         ]
         for request in requests:
@@ -58,12 +58,15 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         responses = [json.loads(process.stdout.readline()) for _ in requests]
         self.assertEqual(responses[0]["result"]["serverInfo"]["name"], "nekocode-rust-first")
         self.assertEqual(
-            [tool["name"] for tool in responses[1]["result"]["tools"]], ["index", "context"]
+            [tool["name"] for tool in responses[1]["result"]["tools"]],
+            ["nekocode_snapshot", "nekocode_context"],
         )
-        index_result = responses[2]["result"]
-        self.assertFalse(index_result["isError"])
-        self.assertEqual(index_result["structuredContent"]["evidence"], "tool-confirmed")
-        self.assertNotIn(str(REPO_ROOT), index_result["content"][0]["text"])
+        snapshot_result = responses[2]["result"]
+        self.assertFalse(snapshot_result["isError"])
+        self.assertEqual(snapshot_result["structuredContent"]["evidence"], "tool-confirmed")
+        self.assertEqual(snapshot_result["structuredContent"]["contract_version"], "snapshot-v1")
+        self.assertEqual(snapshot_result["structuredContent"]["artifact_kind"], "snapshot")
+        self.assertNotIn(str(REPO_ROOT), snapshot_result["content"][0]["text"])
 
         process.stdin.close()
         process.wait(timeout=10)
@@ -83,7 +86,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
             fake_cli.chmod(0o755)
             server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
             result = server.handle_tool_call(
-                {"name": "index", "arguments": {"path": "."}}
+                {"name": "nekocode_snapshot", "arguments": {"path": "."}}
             )
 
         self.assertFalse(result["isError"])
@@ -105,7 +108,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
             server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
             result = server.handle_tool_call(
                 {
-                    "name": "context",
+                    "name": "nekocode_context",
                     "arguments": {
                         "path": ".",
                         "compare_ref": "HEAD~1",
@@ -132,7 +135,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertIn("--baseline", argv)
         self.assertIn("<path>", argv)
 
-    def test_index_forwards_explicit_snapshot_options(self) -> None:
+    def test_snapshot_forwards_explicit_options(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -148,11 +151,11 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
             server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
             result = server.handle_tool_call(
                 {
-                    "name": "index",
+                    "name": "nekocode_snapshot",
                     "arguments": {
                         "path": ".",
-                        "snapshot": "/tmp/baseline.json",
-                        "diagnostics": True,
+                        "analysis": "cargo-check",
+                        "output": "/tmp/baseline.json",
                         "all_features": True,
                     },
                 }
@@ -160,10 +163,11 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
 
         self.assertFalse(result["isError"])
         argv = result["structuredContent"]["argv"]
-        self.assertEqual(argv[:2], ["index", "."])
-        self.assertIn("--snapshot", argv)
+        self.assertEqual(argv[:2], ["snapshot", "."])
+        self.assertIn("--analysis", argv)
+        self.assertIn("cargo-check", argv)
+        self.assertIn("--output", argv)
         self.assertIn("<path>", argv)
-        self.assertIn("--diagnostics", argv)
         self.assertIn("--all-features", argv)
 
 

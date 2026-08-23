@@ -1,9 +1,9 @@
 //! CLI interface for NekoCode
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
-/// NekoCode - Core analysis engine with Tree-sitter support
+/// NekoCode - Rust-first evidence-backed code context layer
 #[derive(Parser, Debug)]
 #[command(name = "nekocode")]
 #[command(author, version, about, long_about = None)]
@@ -13,29 +13,42 @@ pub struct Cli {
     pub command: Commands,
 }
 
+/// Public snapshot analysis mode. Metadata-only is deliberately the default.
+#[derive(Clone, Debug, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum AnalysisArg {
+    MetadataOnly,
+    CargoCheck,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Index a Rust workspace using Cargo metadata.
+    /// Snapshot a Rust workspace using Cargo metadata.
     ///
-    /// This is the Rust-first MVP entry point. It records workspace/package
-    /// structure without pretending to replace rustc or rust-analyzer.
-    Index {
+    /// This is the Rust-first MVP entry point. Metadata-only is the default;
+    /// cargo-check is an explicit trusted-workspace operation.
+    #[command(name = "snapshot", alias = "index")]
+    Snapshot {
         /// Path to a Rust workspace or Cargo.toml
         path: PathBuf,
 
-        /// Write the JSON snapshot to a file instead of stdout
+        /// Write the explicit snapshot artifact to a file instead of stdout
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Persist an explicit Rust context snapshot for later baselines
-        #[arg(long)]
-        snapshot: Option<PathBuf>,
+        /// Select metadata-only or explicit Cargo diagnostics.
+        #[arg(long, value_enum, default_value_t = AnalysisArg::MetadataOnly)]
+        analysis: AnalysisArg,
 
-        /// Include a workspace-wide cargo check in the persisted snapshot
-        #[arg(long)]
+        /// Legacy artifact path accepted only by the hidden `index` alias.
+        #[arg(long = "snapshot", hide = true)]
+        legacy_snapshot: Option<PathBuf>,
+
+        /// Legacy spelling for `--analysis cargo-check`.
+        #[arg(long, hide = true)]
         diagnostics: bool,
 
-        /// Run the snapshot cargo check with every workspace feature enabled
+        /// Run the explicit snapshot check with every workspace feature enabled.
         #[arg(long)]
         all_features: bool,
     },

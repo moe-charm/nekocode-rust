@@ -2,7 +2,7 @@
 name = "nekocode-core"
 version = "1.2.0"
 edition = "2021"
-description = "Core library for NekoCode - Session management, types, and common functionality"
+description = "Rust-first evidence-backed snapshot and code context core"
 authors = ["NekoCode Team"]
 license = "MIT"
 

@@ -25,26 +25,28 @@ cargo_registry_network: policy-controlled
 process_network_isolation: not-enforced
 ```
 
-## Required controls
+## Current controls and gaps
 
-Before exposing `cargo-check` as a supported operation, the implementation
-must provide or explicitly report:
+The current implementation exposes `cargo-check` only as an explicit opt-in
+and records tool provenance, compiler status, structured diagnostics, and
+budget omissions. The MCP subprocess adapter also applies an input limit,
+redacts absolute paths, and has a wall-clock timeout. Git diff calls disable
+external diff helpers; this is not an OS sandbox.
 
-- an opt-in execution mode with metadata-only as the default;
-- a timeout and process-tree termination;
-- bounded stdout, stderr, diagnostics, and serialized output;
-- a dedicated target directory where practical;
-- a documented environment allowlist and secret redaction;
-- workspace-root/path-jail checks for excerpts and artifacts;
-- symlink escape rejection for files read as source context;
-- Git invocation with external diff/textconv disabled;
-- an execution policy and tool provenance in every observation;
-- `not_run`, `tool_failed`, `timed_out`, `output_limited`, and `partial`
-  states distinct from a clean compiler result.
+The following controls are **not yet enforced** by the core and remain release
+blockers for untrusted workspaces:
 
-The current implementation is allowed to be conservative: if a control is
-not enforced, it must be represented as a limitation rather than described as
-"sandboxed".
+- process-tree termination after a Cargo timeout;
+- a dedicated target directory and environment allowlist;
+- OS-level network/process isolation;
+- canonical-root and symlink escape checks for every source read;
+- bounded Cargo stdout/stderr before parsing;
+- a sandboxed build-script/procedural-macro execution boundary.
+
+Until those controls are implemented and tested, callers must trust the
+workspace and the product must not describe `cargo-check` as sandboxed. An
+unimplemented control is reported as a limitation rather than implied by a
+generic “read-only” label.
 
 ## Compiler result states
 

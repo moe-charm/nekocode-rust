@@ -1,4 +1,4 @@
-//! NekoCode - Core analysis engine with Tree-sitter support
+//! NekoCode - Rust-first evidence-backed code context CLI
 
 use clap::Parser;
 use std::fs;
@@ -14,7 +14,7 @@ use nekocode::{
     SessionCommands, SessionUpdater,
     DeadCodeAnalyzer, DeadItem, DeadCodeReport
 };
-use nekocode::cli::Commands;
+use nekocode::cli::{AnalysisArg, Commands};
 
 fn main() -> Result<()> {
     // Initialize logger
@@ -41,14 +41,22 @@ async fn async_main(cli: Cli) -> Result<()> {
     
     // Execute command
     match cli.command {
-        Commands::Index {
+        Commands::Snapshot {
             path,
             output,
-            snapshot,
+            analysis,
+            legacy_snapshot,
             diagnostics,
             all_features,
         } => {
-            handle_rust_index_command(path, output, snapshot, diagnostics, all_features)?;
+            handle_rust_snapshot_command(
+                path,
+                output,
+                legacy_snapshot,
+                analysis,
+                diagnostics,
+                all_features,
+            )?;
         }
 
         Commands::Context {
@@ -336,60 +344,46 @@ async fn async_main(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-/// Emit the Rust-first Cargo workspace snapshot.
-fn handle_rust_index_command(
+/// Emit the Rust-first snapshot artifact.
+fn handle_rust_snapshot_command(
     path: std::path::PathBuf,
     output: Option<std::path::PathBuf>,
-    snapshot_path: Option<std::path::PathBuf>,
+    legacy_snapshot_path: Option<std::path::PathBuf>,
+    analysis: AnalysisArg,
     diagnostics: bool,
     all_features: bool,
 ) -> Result<()> {
-    if snapshot_path.is_some() && output.is_some() {
+    if legacy_snapshot_path.is_some() && output.is_some() {
         return Err(NekocodeError::Config(
             "--snapshot and --output cannot be used together".to_string(),
         ));
     }
-    if all_features && !diagnostics {
+    let cargo_check = diagnostics || matches!(analysis, AnalysisArg::CargoCheck);
+    if all_features && !cargo_check {
         return Err(NekocodeError::Config(
-            "--all-features requires --diagnostics for index".to_string(),
+            "--all-features requires --analysis cargo-check".to_string(),
         ));
     }
 
-    if let Some(snapshot_path) = snapshot_path {
-        let snapshot =
-            nekocode_core::build_rust_snapshot(&path, diagnostics, all_features)?;
-        nekocode_core::write_rust_snapshot(&snapshot_path, &snapshot)?;
-        println!("{}", serde_json::to_string_pretty(&snapshot)?);
-        return Ok(());
-    }
-
-    if diagnostics {
-        let snapshot =
-            nekocode_core::build_rust_snapshot(&path, diagnostics, all_features)?;
-        let json = serde_json::to_string_pretty(&snapshot)?;
-        if let Some(output_path) = output {
-            fs::write(&output_path, json)?;
-            println!(
-                "✅ Rust workspace snapshot written to {}",
-                output_path.display()
-            );
+    let request = nekocode_core::SnapshotRequest {
+        path,
+        analysis: if cargo_check {
+            nekocode_core::AnalysisMode::CargoCheck
         } else {
-            println!("{}", json);
-        }
-        return Ok(());
-    }
-
-    let workspace = nekocode_core::index_rust_workspace(&path)?;
-    let json = serde_json::to_string_pretty(&workspace)?;
-    if let Some(output_path) = output {
-        fs::write(&output_path, json)?;
-        println!(
-            "✅ Rust workspace snapshot written to {}",
+            nekocode_core::AnalysisMode::MetadataOnly
+        },
+        all_features,
+    };
+    let snapshot = nekocode_core::build_snapshot(&request)?;
+    let public_snapshot = nekocode_core::sanitize_snapshot_for_output(&snapshot)?;
+    if let Some(output_path) = output.or(legacy_snapshot_path) {
+        nekocode_core::write_rust_snapshot(&output_path, &public_snapshot)?;
+        eprintln!(
+            "✅ Rust snapshot written to {}",
             output_path.display()
         );
-    } else {
-        println!("{}", json);
     }
+    println!("{}", serde_json::to_string_pretty(&public_snapshot)?);
     Ok(())
 }
 
@@ -410,20 +404,24 @@ fn handle_rust_context_command(
             "--excerpt-lines must be between 0 and 200".to_string(),
         ));
     }
-    let mut options = nekocode_core::RustContextOptions::new(compare_ref, budget);
-    options.include_diagnostics = diagnostics;
-    options.include_working_tree = working_tree;
-    options.all_features = all_features;
-    options.excerpt_lines = excerpt_lines;
-    options.baseline = baseline;
-    let pack = nekocode_core::build_rust_context_with_config(&path, options)?;
-    let json = serde_json::to_string_pretty(&pack)?;
+    let request = nekocode_core::ContextRequest {
+        path,
+        compare_ref,
+        budget,
+        diagnostics,
+        working_tree,
+        all_features,
+        excerpt_lines,
+        baseline,
+    };
+    let pack = nekocode_core::build_context(&request)?;
+    let public_pack = nekocode_core::sanitize_context_for_output(&pack)?;
+    let json = serde_json::to_string_pretty(&public_pack)?;
     if let Some(output_path) = output {
         fs::write(&output_path, json)?;
-        println!("✅ Rust context pack written to {}", output_path.display());
-    } else {
-        println!("{}", json);
+        eprintln!("✅ Rust context pack written to {}", output_path.display());
     }
+    println!("{}", serde_json::to_string_pretty(&public_pack)?);
     Ok(())
 }
 

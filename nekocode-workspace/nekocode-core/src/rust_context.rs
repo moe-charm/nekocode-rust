@@ -7,13 +7,17 @@
 //! contract established here.
 
 use crate::error::{NekocodeError, Result};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const SCHEMA_VERSION: u32 = 3;
+/// Internal compatibility marker retained while the public artifacts use
+/// versioned `snapshot-v1` and `context-v1` envelopes.
+pub const SCHEMA_VERSION: u32 = 3;
+pub const SNAPSHOT_CONTRACT_VERSION: &str = "snapshot-v1";
+pub const CONTEXT_CONTRACT_VERSION: &str = "context-v1";
 const MAX_SOURCE_EXCERPT_BYTES: usize = 32 * 1024;
 
 /// Provenance for one external tool invocation.
@@ -45,6 +49,73 @@ pub enum EvidenceLevel {
     SyntaxOnly,
     /// The requested backend could not provide complete information.
     Incomplete,
+}
+
+/// Whether a snapshot performs metadata observation or invokes Cargo.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AnalysisMode {
+    MetadataOnly,
+    CargoCheck,
+}
+
+impl Default for AnalysisMode {
+    fn default() -> Self {
+        Self::MetadataOnly
+    }
+}
+
+/// Lifecycle state of a snapshot/context operation.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactStatus {
+    NotRun,
+    CompletedClean,
+    CompletedWithDiagnostics,
+    ToolFailed,
+    TimedOut,
+    OutputLimited,
+    Partial,
+}
+
+impl Default for ArtifactStatus {
+    fn default() -> Self {
+        Self::CompletedClean
+    }
+}
+
+/// Status of a requested baseline comparison.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ComparisonStatus {
+    Comparable,
+    BaselineMissing,
+    NotComparable,
+    Partial,
+}
+
+impl Default for ComparisonStatus {
+    fn default() -> Self {
+        Self::BaselineMissing
+    }
+}
+
+/// A machine-readable record of content omitted by a hard budget.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Omission {
+    pub kind: String,
+    pub reason: String,
+    pub omitted_count: usize,
+    pub priority: String,
+}
+
+/// Hard serialized-byte budget plus the caller's advisory token request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct BudgetReport {
+    pub requested_tokens: usize,
+    pub max_bytes: usize,
+    pub serialized_bytes: usize,
+    pub exceeded: bool,
 }
 
 /// Tool versions used to produce a workspace snapshot.
@@ -93,16 +164,52 @@ pub struct RustWorkspaceSnapshot {
     pub provenance: ToolProvenance,
 }
 
+fn default_snapshot_contract_version() -> String {
+    SNAPSHOT_CONTRACT_VERSION.to_string()
+}
+
+fn default_context_contract_version() -> String {
+    CONTEXT_CONTRACT_VERSION.to_string()
+}
+
+fn default_snapshot_artifact_kind() -> String {
+    "snapshot".to_string()
+}
+
+fn default_context_artifact_kind() -> String {
+    "context".to_string()
+}
+
+fn default_evidence_level() -> EvidenceLevel {
+    EvidenceLevel::ToolConfirmed
+}
+
 /// A complete, explicit JSON snapshot that can be used as a later baseline.
 ///
 /// The snapshot is deliberately a file supplied by the caller. NekoCode does
 /// not maintain a hidden database or silently create history.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RustContextSnapshot {
+    #[serde(default = "default_snapshot_contract_version")]
+    pub contract_version: String,
+    #[serde(default = "default_snapshot_artifact_kind")]
+    pub artifact_kind: String,
+    #[serde(default)]
+    pub status: ArtifactStatus,
+    #[serde(default)]
+    pub analysis_mode: AnalysisMode,
     pub schema_version: u32,
+    #[serde(default = "default_evidence_level")]
+    pub evidence: EvidenceLevel,
     pub generated_at: String,
     pub workspace: RustWorkspaceSnapshot,
     pub diagnostics: Option<RustDiagnosticRun>,
+    #[serde(default)]
+    pub canonical_hash: Option<String>,
+    #[serde(default)]
+    pub limitations: Vec<String>,
+    #[serde(default)]
+    pub omissions: Vec<Omission>,
 }
 
 /// A file reported by `git diff --name-status`.
@@ -184,6 +291,8 @@ pub struct RustDiagnosticRun {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RustDiagnosticDelta {
     pub baseline_path: PathBuf,
+    #[serde(default)]
+    pub status: ComparisonStatus,
     pub compatible: bool,
     pub added: Vec<RustDiagnostic>,
     pub resolved: Vec<RustDiagnostic>,
@@ -205,6 +314,14 @@ pub struct RustSourceExcerpt {
 /// Compact context pack intended for MCP/AI consumers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RustContextPack {
+    #[serde(default = "default_context_contract_version")]
+    pub contract_version: String,
+    #[serde(default = "default_context_artifact_kind")]
+    pub artifact_kind: String,
+    #[serde(default)]
+    pub status: ArtifactStatus,
+    #[serde(default)]
+    pub comparison_status: ComparisonStatus,
     pub schema_version: u32,
     pub evidence: EvidenceLevel,
     pub root: PathBuf,
@@ -216,6 +333,8 @@ pub struct RustContextPack {
     pub diagnostics: Option<RustDiagnosticRun>,
     pub baseline: Option<PathBuf>,
     pub diagnostic_delta: Option<RustDiagnosticDelta>,
+    #[serde(default)]
+    pub budget: BudgetReport,
     pub budget_tokens: usize,
     pub estimated_tokens: usize,
     pub serialized_bytes: usize,
@@ -229,6 +348,8 @@ pub struct RustContextPack {
     pub omitted_diff_bytes: usize,
     pub truncation_order: Vec<String>,
     pub limitations: Vec<String>,
+    #[serde(default)]
+    pub omissions: Vec<Omission>,
 }
 
 /// Options for building a reproducible, bounded context pack.
@@ -259,8 +380,87 @@ impl RustContextOptions {
     }
 }
 
+/// Shared request consumed by CLI and adapters for the snapshot use case.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SnapshotRequest {
+    pub path: PathBuf,
+    pub analysis: AnalysisMode,
+    pub all_features: bool,
+}
+
+impl SnapshotRequest {
+    pub fn metadata_only(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            analysis: AnalysisMode::MetadataOnly,
+            all_features: false,
+        }
+    }
+}
+
+/// Shared request consumed by CLI and adapters for the context use case.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContextRequest {
+    pub path: PathBuf,
+    pub compare_ref: Option<String>,
+    pub budget: usize,
+    pub diagnostics: bool,
+    pub working_tree: bool,
+    pub all_features: bool,
+    pub excerpt_lines: usize,
+    pub baseline: Option<PathBuf>,
+}
+
+impl ContextRequest {
+    pub fn new(path: impl Into<PathBuf>, budget: usize) -> Self {
+        Self {
+            path: path.into(),
+            compare_ref: None,
+            budget,
+            diagnostics: false,
+            working_tree: false,
+            all_features: false,
+            excerpt_lines: 8,
+            baseline: None,
+        }
+    }
+}
+
+/// Public contract aliases used by CLI/MCP parity tests.
+pub type SnapshotV1 = RustContextSnapshot;
+pub type ContextV1 = RustContextPack;
+
+/// Build the shared snapshot response for a request.
+pub fn build_snapshot(request: &SnapshotRequest) -> Result<SnapshotV1> {
+    build_rust_snapshot_with_mode(
+        &request.path,
+        matches!(request.analysis, AnalysisMode::CargoCheck),
+        request.all_features,
+    )
+}
+
+/// Build the shared context response for a request.
+pub fn build_context(request: &ContextRequest) -> Result<ContextV1> {
+    let mut options = RustContextOptions::new(request.compare_ref.clone(), request.budget);
+    options.include_diagnostics = request.diagnostics;
+    options.include_working_tree = request.working_tree;
+    options.all_features = request.all_features;
+    options.excerpt_lines = request.excerpt_lines;
+    options.baseline = request.baseline.clone();
+    build_rust_context_with_config(&request.path, options)
+}
+
 /// Build a complete explicit JSON snapshot for a Rust workspace.
 pub fn build_rust_snapshot(
+    path: impl AsRef<Path>,
+    include_diagnostics: bool,
+    all_features: bool,
+) -> Result<RustContextSnapshot> {
+    build_rust_snapshot_with_mode(path, include_diagnostics, all_features)
+}
+
+/// Build a snapshot with explicit analysis mode semantics.
+pub fn build_rust_snapshot_with_mode(
     path: impl AsRef<Path>,
     include_diagnostics: bool,
     all_features: bool,
@@ -271,12 +471,37 @@ pub fn build_rust_snapshot(
     } else {
         None
     };
-    Ok(RustContextSnapshot {
+    let status = diagnostics
+        .as_ref()
+        .map_or(ArtifactStatus::CompletedClean, diagnostic_status);
+    let analysis_mode = if include_diagnostics {
+        AnalysisMode::CargoCheck
+    } else {
+        AnalysisMode::MetadataOnly
+    };
+    let mut snapshot = RustContextSnapshot {
+        contract_version: SNAPSHOT_CONTRACT_VERSION.to_string(),
+        artifact_kind: "snapshot".to_string(),
+        status,
+        analysis_mode,
         schema_version: SCHEMA_VERSION,
+        evidence: EvidenceLevel::ToolConfirmed,
         generated_at: chrono::Utc::now().to_rfc3339(),
         workspace,
         diagnostics,
-    })
+        canonical_hash: None,
+        limitations: if include_diagnostics {
+            vec![
+                "cargo-check may execute trusted workspace build scripts and procedural macros."
+                    .to_string(),
+            ]
+        } else {
+            vec!["Compiler diagnostics were not requested.".to_string()]
+        },
+        omissions: Vec::new(),
+    };
+    snapshot.canonical_hash = Some(canonical_snapshot_hash(&snapshot)?);
+    Ok(snapshot)
 }
 
 /// Atomically replace an explicit snapshot path with pretty JSON.
@@ -315,6 +540,126 @@ pub fn read_rust_snapshot(path: impl AsRef<Path>) -> Result<RustContextSnapshot>
         )));
     }
     Ok(snapshot)
+}
+
+fn canonical_snapshot_hash(snapshot: &RustContextSnapshot) -> Result<String> {
+    let mut value = serde_json::to_value(snapshot)?;
+    let workspace_root = snapshot.workspace.workspace_root.clone();
+    normalize_hash_value(&mut value, None, &workspace_root);
+    let bytes = serde_json::to_vec(&value)?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("sha256:{:x}", hasher.finalize()))
+}
+
+/// Return the public snapshot view without machine-specific absolute paths.
+pub fn sanitize_snapshot_for_output(snapshot: &SnapshotV1) -> Result<SnapshotV1> {
+    sanitize_artifact_paths(snapshot, &snapshot.workspace.workspace_root)
+}
+
+/// Return the public context view without machine-specific absolute paths.
+pub fn sanitize_context_for_output(context: &ContextV1) -> Result<ContextV1> {
+    sanitize_artifact_paths(context, &context.workspace.workspace_root)
+}
+
+fn sanitize_artifact_paths<T>(value: &T, workspace_root: &Path) -> Result<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    let mut json = serde_json::to_value(value)?;
+    let normalized_root = workspace_root.to_string_lossy().replace('\\', "/");
+    sanitize_public_json(&mut json, None, &normalized_root);
+    Ok(serde_json::from_value(json)?)
+}
+
+fn sanitize_public_json(value: &mut serde_json::Value, key: Option<&str>, workspace_root: &str) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (child_key, child) in map.iter_mut() {
+                sanitize_public_json(child, Some(child_key), workspace_root);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                sanitize_public_json(item, key, workspace_root);
+            }
+        }
+        serde_json::Value::String(text) => {
+            let normalized = text.replace('\\', "/");
+            if normalized.contains(workspace_root) {
+                *text = normalized.replace(workspace_root, "$WORKSPACE");
+            } else if matches!(
+                key,
+                Some(
+                    "root"
+                        | "workspace_root"
+                        | "cwd"
+                        | "manifest_path"
+                        | "src_path"
+                        | "file"
+                        | "file_name"
+                        | "filename"
+                        | "path"
+                        | "old_path"
+                        | "baseline_path"
+                )
+            ) && (normalized.starts_with('/') || is_windows_absolute(&normalized))
+            {
+                *text = "$EXTERNAL".to_string();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_windows_absolute(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3 && bytes[1] == b':' && bytes[2] == b'/'
+}
+
+fn normalize_hash_value(value: &mut serde_json::Value, key: Option<&str>, workspace_root: &Path) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("generated_at");
+            map.remove("canonical_hash");
+            for (child_key, child) in map.iter_mut() {
+                normalize_hash_value(child, Some(child_key), workspace_root);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                normalize_hash_value(item, key, workspace_root);
+            }
+        }
+        serde_json::Value::String(text) => {
+            let normalized = text.replace('\\', "/");
+            let root_text = workspace_root.to_string_lossy().replace('\\', "/");
+            if normalized.contains(&root_text) {
+                *text = normalized.replace(&root_text, "$WORKSPACE");
+            } else if matches!(
+                key,
+                Some(
+                    "root"
+                        | "workspace_root"
+                        | "cwd"
+                        | "manifest_path"
+                        | "src_path"
+                        | "file"
+                        | "file_name"
+                        | "filename"
+                        | "path"
+                        | "old_path"
+                        | "baseline_path"
+                )
+            ) {
+                let candidate = Path::new(text.as_str());
+                if candidate.is_absolute() || is_windows_absolute(&normalized) {
+                    *text = "$EXTERNAL".to_string();
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Read Cargo workspace metadata without attempting to parse Rust semantics.
@@ -446,14 +791,28 @@ pub fn build_rust_context_with_config(
         None
     };
     let mut extra_limitations = Vec::new();
+    let mut comparison_status = if options.include_diagnostics {
+        ComparisonStatus::BaselineMissing
+    } else {
+        ComparisonStatus::Comparable
+    };
     let diagnostic_delta = match options.baseline.as_ref() {
-        None => None,
+        None => {
+            if options.include_diagnostics {
+                extra_limitations.push(
+                    "No diagnostic baseline was supplied; comparison status is baseline_missing."
+                        .to_string(),
+                );
+            }
+            None
+        }
         Some(baseline_path) => match diagnostics.as_ref() {
             None => {
                 extra_limitations.push(
                     "Diagnostic baseline was supplied without --diagnostics; no delta was computed."
                         .to_string(),
                 );
+                comparison_status = ComparisonStatus::BaselineMissing;
                 None
             }
             Some(current_run) => match read_rust_snapshot(baseline_path) {
@@ -461,7 +820,7 @@ pub fn build_rust_context_with_config(
                     let baseline_run = baseline.diagnostics.as_ref();
                     if baseline_run.is_none() {
                         extra_limitations.push(
-                            "Diagnostic baseline does not contain a saved cargo check run; no delta was computed."
+                            "Diagnostic baseline does not contain a saved cargo check run; comparison status is baseline_missing."
                                 .to_string(),
                         );
                     }
@@ -472,6 +831,7 @@ pub fn build_rust_context_with_config(
                         &workspace,
                         current_run,
                     );
+                    comparison_status = delta.status;
                     extra_limitations.extend(delta.limitations.iter().cloned());
                     Some(delta)
                 }
@@ -479,6 +839,7 @@ pub fn build_rust_context_with_config(
                     extra_limitations.push(format!(
                         "Diagnostic baseline could not be read; no delta was computed: {error}"
                     ));
+                    comparison_status = ComparisonStatus::NotComparable;
                     None
                 }
             },
@@ -496,6 +857,10 @@ pub fn build_rust_context_with_config(
     // token, and the caller can request a larger budget when needed.
     let byte_budget = options.budget_tokens.saturating_mul(4);
     let mut pack = RustContextPack {
+        contract_version: CONTEXT_CONTRACT_VERSION.to_string(),
+        artifact_kind: "context".to_string(),
+        status: diagnostics_status(diagnostics.as_ref()),
+        comparison_status,
         schema_version: SCHEMA_VERSION,
         evidence: EvidenceLevel::ToolConfirmed,
         root: workspace.root.clone(),
@@ -507,6 +872,12 @@ pub fn build_rust_context_with_config(
         diagnostics,
         baseline: options.baseline.clone(),
         diagnostic_delta,
+        budget: BudgetReport {
+            requested_tokens: options.budget_tokens,
+            max_bytes: byte_budget,
+            serialized_bytes: 0,
+            exceeded: false,
+        },
         budget_tokens: options.budget_tokens,
         estimated_tokens: 0,
         serialized_bytes: 0,
@@ -531,6 +902,7 @@ pub fn build_rust_context_with_config(
             &extra_limitations,
             false,
         ),
+        omissions: Vec::new(),
     };
 
     // Patch text is the largest and least structured field. Keep a bounded
@@ -600,17 +972,28 @@ pub fn build_rust_context_with_config(
         break;
     }
 
+    pack.omissions = omissions_for_pack(&pack);
     pack.serialized_bytes = serialized_size(&pack)?;
     pack.estimated_tokens = pack.serialized_bytes.div_ceil(4);
     pack.budget_exceeded = pack.serialized_bytes > byte_budget;
+    pack.budget.serialized_bytes = pack.serialized_bytes;
+    pack.budget.exceeded = pack.budget_exceeded;
+    if pack.budget_exceeded {
+        pack.status = ArtifactStatus::OutputLimited;
+        pack.omissions = omissions_for_pack(&pack);
+        pack.serialized_bytes = serialized_size(&pack)?;
+        pack.estimated_tokens = pack.serialized_bytes.div_ceil(4);
+        pack.budget.serialized_bytes = pack.serialized_bytes;
+    }
     let diagnostic_failed = pack
         .diagnostics
         .as_ref()
         .is_some_and(|run| run.status != "success");
-    let baseline_incomplete = pack
-        .diagnostic_delta
-        .as_ref()
-        .is_some_and(|delta| !delta.compatible)
+    let baseline_incomplete = pack.comparison_status != ComparisonStatus::Comparable
+        || pack
+            .diagnostic_delta
+            .as_ref()
+            .is_some_and(|delta| !delta.compatible)
         || !extra_limitations.is_empty();
     if pack.omitted_changed_files > 0
         || pack.omitted_excerpts > 0
@@ -635,6 +1018,46 @@ pub fn build_rust_context_with_config(
             || pack.budget_exceeded,
     );
     Ok(pack)
+}
+
+fn diagnostics_status(diagnostics: Option<&RustDiagnosticRun>) -> ArtifactStatus {
+    diagnostics.map_or(ArtifactStatus::CompletedClean, diagnostic_status)
+}
+
+fn diagnostic_status(run: &RustDiagnosticRun) -> ArtifactStatus {
+    if run.status != "success" || !run.messages.is_empty() {
+        ArtifactStatus::CompletedWithDiagnostics
+    } else {
+        ArtifactStatus::CompletedClean
+    }
+}
+
+fn omissions_for_pack(pack: &RustContextPack) -> Vec<Omission> {
+    let mut omissions = Vec::new();
+    let mut push = |kind: &str, count: usize, priority: &str| {
+        if count > 0 {
+            omissions.push(Omission {
+                kind: kind.to_string(),
+                reason: "item_limit".to_string(),
+                omitted_count: count,
+                priority: priority.to_string(),
+            });
+        }
+    };
+    push("changed_files", pack.omitted_changed_files, "context");
+    push("source_excerpts", pack.omitted_excerpts, "context");
+    push("diagnostics", pack.omitted_diagnostics, "warning");
+    push("diagnostic_delta", pack.omitted_delta_items, "warning");
+    push("diff_bytes", pack.omitted_diff_bytes, "context");
+    if pack.budget_exceeded {
+        omissions.push(Omission {
+            kind: "context".to_string(),
+            reason: "byte_budget".to_string(),
+            omitted_count: 1,
+            priority: "envelope".to_string(),
+        });
+    }
+    omissions
 }
 
 fn build_source_excerpts(
@@ -763,6 +1186,7 @@ fn build_diagnostic_delta(
 ) -> RustDiagnosticDelta {
     let mut delta = RustDiagnosticDelta {
         baseline_path: baseline_path.to_path_buf(),
+        status: ComparisonStatus::Comparable,
         compatible: true,
         added: Vec::new(),
         resolved: Vec::new(),
@@ -771,6 +1195,7 @@ fn build_diagnostic_delta(
     };
 
     let Some(baseline_run) = baseline_run else {
+        delta.status = ComparisonStatus::BaselineMissing;
         delta.compatible = false;
         delta
             .limitations
@@ -812,6 +1237,11 @@ fn build_diagnostic_delta(
     }
 
     if !delta.compatible {
+        delta.status = if baseline_run.status != "success" || current_run.status != "success" {
+            ComparisonStatus::Partial
+        } else {
+            ComparisonStatus::NotComparable
+        };
         return delta;
     }
 
@@ -829,6 +1259,7 @@ fn build_diagnostic_delta(
             delta.resolved.push(diagnostic.clone());
         }
     }
+    delta.status = ComparisonStatus::Comparable;
     delta
 }
 

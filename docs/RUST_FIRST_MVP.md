@@ -148,10 +148,10 @@ blockers and fixtures.
 ## Current implementation and promotion gates
 
 The current branch has the Rust context core, explicit snapshot persistence,
-Git hunk/excerpt support, diagnostic parsing, and a minimal two-tool stdio
-gateway. The next implementation step makes `snapshot` canonical, adds the
-versioned artifact envelope/schema, and preserves only the short-lived CLI
-`index` alias.
+Git hunk/excerpt support, diagnostic parsing, versioned artifact envelopes,
+safe public path views, and a minimal two-tool stdio gateway. `snapshot` is the
+canonical CLI/MCP name; the CLI preserves only the short-lived hidden `index`
+alias for migration scripts.
 
 Before a semantic backend or a second language is promoted, fixtures must cover
 trait/impl/macro/cfg/features, workspaces and targets, toolchain/profile

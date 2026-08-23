@@ -2,7 +2,7 @@
 """A deliberately small Rust-first MCP server for NekoCode.
 
 The server speaks newline-delimited JSON-RPC 2.0 on stdio and exposes only
-the Rust-first ``index`` and ``context`` commands.  It is intentionally
+the Rust-first ``snapshot`` and ``context`` commands.  It is intentionally
 independent from the legacy MCP implementations in this directory.
 """
 
@@ -20,9 +20,11 @@ from typing import Any, Dict, Optional, Tuple
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "nekocode-rust-first"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 MAX_BUDGET = 100_000
 COMMAND_TIMEOUT_SECONDS = 180
+SNAPSHOT_TOOL = "nekocode_snapshot"
+CONTEXT_TOOL = "nekocode_context"
 
 
 class ToolInputError(ValueError):
@@ -93,8 +95,8 @@ class RustFirstMCPServer:
     def tools() -> list[Dict[str, Any]]:
         return [
             {
-                "name": "index",
-                "description": "Index a Rust workspace using Cargo metadata.",
+                "name": SNAPSHOT_TOOL,
+                "description": "Create an explicit Rust workspace snapshot.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -102,13 +104,14 @@ class RustFirstMCPServer:
                             "type": "string",
                             "description": "Rust workspace or Cargo.toml path.",
                         },
-                        "snapshot": {
+                        "analysis": {
+                            "type": "string",
+                            "enum": ["metadata-only", "cargo-check"],
+                            "default": "metadata-only",
+                        },
+                        "output": {
                             "type": "string",
                             "description": "Explicit JSON snapshot path to write.",
-                        },
-                        "diagnostics": {
-                            "type": "boolean",
-                            "default": False,
                         },
                         "all_features": {
                             "type": "boolean",
@@ -121,7 +124,7 @@ class RustFirstMCPServer:
                 },
             },
             {
-                "name": "context",
+                "name": CONTEXT_TOOL,
                 "description": "Build a bounded Rust context pack from a Git diff.",
                 "inputSchema": {
                     "type": "object",
@@ -225,18 +228,18 @@ class RustFirstMCPServer:
         return command
 
     @staticmethod
-    def _index_arguments(args: Dict[str, Any]) -> list[str]:
+    def _snapshot_arguments(args: Dict[str, Any]) -> list[str]:
         command: list[str] = []
-        snapshot = args.get("snapshot")
-        if snapshot is not None:
-            if not isinstance(snapshot, str) or not snapshot.strip() or "\x00" in snapshot:
-                raise ToolInputError("'snapshot' must be a non-empty string")
-            command.extend(["--snapshot", snapshot])
-        diagnostics = args.get("diagnostics", False)
-        if not isinstance(diagnostics, bool):
-            raise ToolInputError("'diagnostics' must be a boolean")
-        if diagnostics:
-            command.append("--diagnostics")
+        analysis = args.get("analysis", "metadata-only")
+        if analysis not in {"metadata-only", "cargo-check"}:
+            raise ToolInputError("'analysis' must be metadata-only or cargo-check")
+        if analysis != "metadata-only":
+            command.extend(["--analysis", analysis])
+        output = args.get("output")
+        if output is not None:
+            if not isinstance(output, str) or not output.strip() or "\x00" in output:
+                raise ToolInputError("'output' must be a non-empty string")
+            command.extend(["--output", output])
         all_features = args.get("all_features", False)
         if not isinstance(all_features, bool):
             raise ToolInputError("'all_features' must be a boolean")
@@ -246,10 +249,11 @@ class RustFirstMCPServer:
 
     def _run_cli(self, tool: str, args: Dict[str, Any]) -> Any:
         path = self._path_argument(args)
+        cli_tool = "snapshot" if tool == SNAPSHOT_TOOL else "context"
         if self.binary_path is not None:
             if not self.binary_path.is_file():
                 raise CommandError("Configured Rust CLI is unavailable")
-            command = [str(self.binary_path), tool, path]
+            command = [str(self.binary_path), cli_tool, path]
             configured_cwd = os.environ.get("NEKOCODE_CLI_CWD")
             command_cwd = Path(configured_cwd).expanduser() if configured_cwd else Path.cwd()
         else:
@@ -258,11 +262,11 @@ class RustFirstMCPServer:
             cargo = shutil.which("cargo")
             if cargo is None:
                 raise CommandError("Cargo is unavailable")
-            command = [cargo, "run", "-q", "-p", "nekocode", "--", tool, path]
+            command = [cargo, "run", "-q", "-p", "nekocode", "--", cli_tool, path]
             command_cwd = self.workspace_dir
-        if tool == "index":
-            command.extend(self._index_arguments(args))
-        elif tool == "context":
+        if tool == SNAPSHOT_TOOL:
+            command.extend(self._snapshot_arguments(args))
+        elif tool == CONTEXT_TOOL:
             command.extend(self._context_arguments(args))
 
         env = os.environ.copy()
@@ -298,8 +302,11 @@ class RustFirstMCPServer:
             return _tool_result({"error": "tools/call params must be an object"}, True)
         name = params.get("name")
         args = params.get("arguments", {})
-        if name not in {"index", "context"}:
-            return _tool_result({"error": "unknown tool; only index and context are available"}, True)
+        if name not in {SNAPSHOT_TOOL, CONTEXT_TOOL}:
+            return _tool_result(
+                {"error": "unknown tool; only nekocode_snapshot and nekocode_context are available"},
+                True,
+            )
         if not isinstance(args, dict):
             return _tool_result({"error": "tool arguments must be an object"}, True)
         if set(args) - {
@@ -309,19 +316,20 @@ class RustFirstMCPServer:
             "diagnostics",
             "working_tree",
             "all_features",
-            "snapshot",
+            "analysis",
+            "output",
             "excerpt_lines",
             "baseline",
         }:
             return _tool_result({"error": "unsupported tool argument"}, True)
-        if name == "index" and set(args) - {
+        if name == SNAPSHOT_TOOL and set(args) - {
             "path",
-            "snapshot",
-            "diagnostics",
+            "analysis",
+            "output",
             "all_features",
         }:
-            return _tool_result({"error": "unsupported index argument"}, True)
-        if name == "context" and set(args) - {
+            return _tool_result({"error": "unsupported snapshot argument"}, True)
+        if name == CONTEXT_TOOL and set(args) - {
             "path",
             "compare_ref",
             "budget",

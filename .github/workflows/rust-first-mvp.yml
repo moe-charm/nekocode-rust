@@ -11,6 +11,9 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'schemas/**'
+      - 'docs/**'
+      - 'README.md'
       - 'scripts/update_rust_first_release.sh'
       - 'releases/setup.py'
       - 'Makefile'
@@ -28,6 +31,9 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'schemas/**'
+      - 'docs/**'
+      - 'README.md'
       - 'scripts/update_rust_first_release.sh'
       - 'releases/setup.py'
       - 'Makefile'
@@ -63,8 +69,8 @@ jobs:
       - name: Check canonical CLI package
         run: cargo check -p nekocode
 
-      - name: Smoke-test Cargo index output
-        run: cargo run -q -p nekocode -- index . --output /tmp/nekocode-rust-index.json && test -s /tmp/nekocode-rust-index.json
+      - name: Smoke-test Rust snapshot output
+        run: cargo run -q -p nekocode -- snapshot . --output /tmp/nekocode-rust-snapshot.json && test -s /tmp/nekocode-rust-snapshot.json
 
       - name: Smoke-test bounded Git context output
         run: cargo run -q -p nekocode -- context . --compare-ref HEAD^ --budget 2000 --diagnostics > /tmp/nekocode-rust-context.json && test -s /tmp/nekocode-rust-context.json

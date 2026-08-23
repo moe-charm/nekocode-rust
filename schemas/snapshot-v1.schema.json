@@ -8,6 +8,8 @@
     "artifact_kind",
     "status",
     "analysis_mode",
+    "schema_version",
+    "evidence",
     "generated_at",
     "workspace",
     "limitations"
@@ -27,6 +29,10 @@
       ]
     },
     "analysis_mode": { "enum": ["metadata_only", "cargo_check"] },
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "evidence": {
+      "enum": ["tool-confirmed", "semantic-resolved", "syntax-only", "incomplete"]
+    },
     "generated_at": { "type": "string", "format": "date-time" },
     "workspace": { "type": "object" },
     "diagnostics": { "type": ["object", "null"] },

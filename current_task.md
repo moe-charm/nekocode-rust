@@ -1,66 +1,68 @@
-# 📌 Current Task — Rust-first 再構築（2026-08-23）
+# 📌 Current Task — Rust-first context layer（2026-08-23）
 
-> この節が現在の正規方針です。以下に残る2025年の計画は履歴であり、矛盾する項目（多言語同時拡張、未検証の精度宣言、42個のMCPコマンド追加など）は実行しません。
+> この節が現在の正規方針です。以下に残る2025年の計画は履歴であり、矛盾する項目（多言語同時拡張、未検証の精度宣言、旧MCPコマンド追加など）は実行しません。
 
-## 目的
+## 製品定義
 
-NekoCodeを「多言語解析器」から、Rustの公式・定番ツールの結果を永続化し、Git差分とともにAI/MCPへ返すローカルコード・コンテキスト層へ再定義する。
+NekoCodeは、Rust公式ツールの結果とGit差分を、比較可能・予算制限付き・根拠付きのコードコンテキストへ変換する。Rust解析器、IDEバックエンド、意味インデックスとは呼ばない。
+
+設計の正本は次の文書です。
+
+- [`docs/product-boundary.md`](docs/product-boundary.md)
+- [`docs/execution-trust.md`](docs/execution-trust.md)
+- [`docs/artifact-contract.md`](docs/artifact-contract.md)
+- [`docs/legacy-retirement.md`](docs/legacy-retirement.md)
 
 ## 決定事項
 
-- Rustを唯一のTier 1対応言語とする。
-- `rustc`、`cargo check`、Clippy、rust-analyzer、Cargo metadataを正しさの情報源とする。
-- NekoCode独自の役割は、スナップショット、差分、根拠、履歴、AI向け圧縮に限定する。
-- 旧単一バイナリ版と旧5バイナリ版を同時に正規実装として保守しない。
-- まず読み取り専用で安定させ、編集・分割・常駐監視は凍結する。
-- 精度は未測定のパーセントで表さず、`tool-confirmed` / `semantic-resolved` / `syntax-only` / `incomplete` の証拠レベルで表す。
+- 意味的な本体・SSOTは小さなRustライブラリ`nekocode-core`とする。
+- 正規実行入口はCLI `nekocode`とする。公開use caseは`snapshot`と`context`の2つ。
+- MCPは同じcore payloadを運ぶ薄いgateway、Skillは作業順序と停止条件、Pluginは配布単位とする。
+- Rustを唯一のTier 1対象とし、他言語はRust昇格ゲート後のexperimental候補とする。
+- 未測定の60%/90%/95%精度、「完全対応」「商用グレード」は使わない。
+- 独自dead-code、symbol/reference index、refactor、split、strip-comments、watch、security/quality/impactは凍結する。
+- `metadata-only`を既定とし、`cargo-check`はtrusted workspaceで明示opt-inにする。sandbox済みとは表現しない。
 
-## MVPの利用面
+## 正規コマンド
 
-1. `index PATH` — Rust workspaceのCargo構造をスナップショット化（実装済み）
-2. `context PATH --compare-ref REF --budget N` — Git変更と診断をAI向けに圧縮（実装済み）
-3. `query SYMBOL` — 参照・関連ファイルを返す意味解析入口（semantic backend後に実装）
+```bash
+cd nekocode-workspace
+nekocode snapshot PATH
+nekocode snapshot PATH --analysis cargo-check --output baseline.json
+nekocode context PATH --baseline baseline.json --diagnostics
+```
+
+既存スクリプトのためCLIに限り`index` aliasを短期間残すが、READMEとMCPでは`snapshot`だけを公開する。`analyze`は作らない。
+
+## Artifact契約
+
+- 外部artifactは`snapshot-v1`と`context-v1`。
+- snapshotは明示pathだけに保存し、hidden latestや自動履歴を作らない。
+- baseline diagnosticsが無い場合は`baseline_missing`であり、空deltaにしない。
+- toolchain・target・package・features・compiler config・analysis profileが不一致なら`not_comparable`と理由を返す。
+- diagnostic deltaはexact/multiset比較のみ。fuzzy line matchingはしない。
+- budgetはbytes/items/linesをhard limitとし、全省略にreason/count/priorityを付ける。
 
 ## 実行順序
 
-1. 現在の実装をlegacyブランチ/タグとして固定し、既存の未コミット変更を保護する。
-2. 正規Cargo workspace、README、CI、Makefile、Release導線を一本化する。
-3. Rust専用のgolden fixtureと回帰テストを先に作る。
-4. Rust MVPを実装し、`cargo test`、`cargo fmt --check`、`cargo clippy -- -D warnings`、実CLI smoke testを通す。
-5. Rustの精度・速度・JSON schemaが基準を満たした後に、PythonまたはJavaScriptを一言語ずつexperimental backendとして追加する。
-
-## 物理アーカイブ計画
-
-- 現在は論理アーカイブ段階。旧root package・旧5バイナリを移動/削除せず、canonicalを`nekocode-workspace`に限定する。
-- Rust MVPのJSON schema、golden fixture、CLI smoke testが安定したため、移行前commit `c4bb63d` に`legacy-2026-pre-rust-first`タグを作成した。現行Rust-first実装は後続commitで追跡する。
-- その後、release/MCP/setup scriptの旧パス参照を検査し、依存がないことを確認してから旧実装を`archive/legacy`または別branchへ移す。
-- 移動後もcanonicalのclean checkoutで`cargo test`・`cargo check`・CLI smokeを実行し、問題があればタグから復旧する。
-- 物理移動の完了までは、旧実装を「保守対象」ではなく「復旧用legacy」として扱う。
-
-## Rust昇格ゲート
-
-- `trait`、`impl`、macro、`cfg`、feature、workspace、tests/examples、同名シンボルを含むfixtureがある。
-- シンボル名、span、visibility、参照、解析エラーを期待値比較する。
-- false positive / false negativeを記録し、精度の分母・分子を説明できる。
-- 解析失敗、対象toolchain、features、target、workspace範囲をJSONに記録する。
-- 変更影響を断定する前に、`cargo check`等の一次情報を提示する。
-
-## 凍結する機能
-
-独自dead-code判定、未実装security/quality/circular/graph、smart move/refactor、split-file、strip-comments、memory、常駐watch、クラウド構想、未検証の性能・精度宣伝。
+1. docsとschemaをSSOTとして固定する。
+2. coreの共通request/response型、snapshot/context、comparability、budget、provenanceを整える。
+3. CLIを`snapshot`正規化し、MCPも同名二toolへ揃える。
+4. golden fixture、schema validation、CLI/MCP parity、execution-trust fixtureを通す。
+5. 条件成立後にlegacy final tagとread-only archiveを作り、mainから物理削除する。
+6. Rust昇格ゲート後にのみ追加backend/言語を検討する。
 
 ## 作業状態
 
-- Phase 0（方針とcurrent_taskの更新）: 完了
-- Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み。旧build/release/PR workflowはmanual-onlyへ隔離済み）
-- Phase 2（Rust MVP）: index/contextの最小入口、Cargo features/toolchain provenance、canonical CLI-only release staging、prebuilt CLI MCP/Docker入口、Rust-first既定のsetup/build導線を実装済み。semantic backendは未着手
-- Phase 3（追加言語）: Rust昇格ゲート通過後
+- Phase 0（製品境界・信頼モデル・artifact・legacy退役の文書化）: 完了
+- Phase 1（core契約・snapshot改名・schema・parity）: 実装済み（CLI snapshot、index alias、MCP二tool、schema/omission/comparabilityを追加）
+- Phase 2（診断delta・budget・安全性fixture）: 一部実装済み。cargo-checkはtrusted workspaceで明示opt-in、OS sandboxは未実装
+- Phase 3（Skill v0）: schema安定後
+- Phase 4（MCP hardening・legacy archive）: parityと安全性ゲート後
 
-検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。
+検証メモ: workspace test、core/CLI check、snapshot/context smoke、schemaチェック、Rust-first MCP smokeは通過済み。legacy crateのwarning-freeは現行契約ではない。
 
-アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。Stage Bはdependency audit、baseline tag、clean checkout検証、旧build/release/PR workflowのmanual-only切替、canonical CLI-only release staging、prebuilt CLI MCP/Docker入口、securityの主要artifact切替、cargo-deny/CodeQLのcanonical build指定、setup/buildのRust-first既定化、legacy Dockerfileの明示化まで完了。明示的legacy 5-binary routeの物理移動判断が残り、Stage C（物理移動）はその後。
-
-監査状態: root旧package、5-binary配布、MCPの依存監査を完了。golden fixtureとclean checkout（core 9 tests、CLI check/index）を検証済み。物理移動前に旧導線の切替が必要。
+アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。物理archiveは[`docs/legacy-retirement.md`](docs/legacy-retirement.md)の全条件を満たすまで実施しない。
 
 ---
 

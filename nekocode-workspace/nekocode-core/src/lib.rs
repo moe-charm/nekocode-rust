@@ -1,11 +1,8 @@
-//! NekoCode Core Library
-//! 
-//! Provides shared functionality for all NekoCode tools:
-//! - Session management
-//! - Configuration handling
-//! - Common types and traits
-//! - File I/O utilities
-//! - Memory management
+//! NekoCode core library.
+//!
+//! The Rust-first SSOT for explicit workspace snapshots and bounded context
+//! packs. Legacy session/configuration modules remain available for recovery,
+//! but they are not part of the canonical snapshot/context contract.
 
 pub mod session;
 pub mod sqlite_session;
@@ -31,12 +28,16 @@ pub use io::{FileProcessor, PathUtils};
 pub use memory::{MemoryManager, MemoryType, MemoryEntry};
 pub use compact::{OutputMode, CompactSerializer, HumanFormatter};
 pub use rust_context::{
-    build_rust_context, build_rust_context_with_config, build_rust_context_with_options,
-    build_rust_snapshot, index_rust_workspace, read_rust_snapshot, write_rust_snapshot,
-    ChangedRustFile, EvidenceLevel, RustContextOptions, RustContextPack, RustContextSnapshot,
+    build_context, build_rust_context, build_rust_context_with_config,
+    build_rust_context_with_options, build_rust_snapshot, build_rust_snapshot_with_mode,
+    build_snapshot, index_rust_workspace, read_rust_snapshot, sanitize_context_for_output,
+    sanitize_snapshot_for_output, write_rust_snapshot,
+    AnalysisMode, ArtifactStatus, BudgetReport, ChangedRustFile, ComparisonStatus, ContextRequest,
+    ContextV1, EvidenceLevel, Omission, RustContextOptions, RustContextPack, RustContextSnapshot,
     RustDiagnostic, RustDiagnosticDelta, RustDiagnosticRun, RustDiagnosticSpan, RustDiffHunk,
     RustDiffSummary, RustInputDigest, RustPackage, RustSourceExcerpt, RustTarget,
-    RustToolchainInfo, RustWorkspaceSnapshot, ToolProvenance,
+    RustToolchainInfo, RustWorkspaceSnapshot, SnapshotRequest, SnapshotV1, ToolProvenance,
+    CONTEXT_CONTRACT_VERSION, SCHEMA_VERSION, SNAPSHOT_CONTRACT_VERSION,
 };
 
 /// NekoCode Core version

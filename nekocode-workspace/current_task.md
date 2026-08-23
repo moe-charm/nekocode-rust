@@ -54,13 +54,13 @@ nekocode context PATH --baseline baseline.json --diagnostics
 
 ## 作業状態
 
-- Phase 0（製品境界・信頼モデル・artifact・legacy退役の文書化）: 実施中
-- Phase 1（core契約・snapshot改名・schema・parity）: 次の実装
-- Phase 2（診断delta・budget・安全性fixture）: 一部実装済み、受け入れ条件を再整理
+- Phase 0（製品境界・信頼モデル・artifact・legacy退役の文書化）: 完了
+- Phase 1（core契約・snapshot改名・schema・parity）: 実装済み（CLI snapshot、index alias、MCP二tool、schema/omission/comparabilityを追加）
+- Phase 2（診断delta・budget・安全性fixture）: 一部実装済み。cargo-checkはtrusted workspaceで明示opt-in、OS sandboxは未実装
 - Phase 3（Skill v0）: schema安定後
 - Phase 4（MCP hardening・legacy archive）: parityと安全性ゲート後
 
-検証メモ: 既存workspace test、core/CLI check、Rust-first MCP smokeは通過済み。legacy crateのwarning-freeは現行契約ではない。
+検証メモ: workspace test、core/CLI check、snapshot/context smoke、schemaチェック、Rust-first MCP smokeは通過済み。legacy crateのwarning-freeは現行契約ではない。
 
 アーカイブ状態: Stage A（論理アーカイブ・canonical固定）完了。物理archiveは[`docs/legacy-retirement.md`](../docs/legacy-retirement.md)の全条件を満たすまで実施しない。
 

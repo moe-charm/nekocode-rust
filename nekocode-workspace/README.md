@@ -15,8 +15,9 @@ cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --budget 8000
 
 `snapshot` records Cargo workspace/package/target metadata. `context` adds a
 bounded Git diff, optional source excerpts, and optional `cargo check`
-diagnostics. The JSON schema is v3 and carries tool provenance, evidence, and
-limitations. It is deliberately not an independent Rust semantic analyzer.
+diagnostics. The external contracts are `snapshot-v1` and `context-v1`; both
+carry tool provenance, evidence, comparability, budget, and limitations. The
+core is deliberately not an independent Rust semantic analyzer.
 
 Useful development checks:
 
@@ -46,9 +47,9 @@ cargo run -q -p nekocode -- context . --compare-ref HEAD~1 --budget 8000
 ```
 
 `snapshot`はCargo workspace・package・targetの構造を取得し、`context`は予算制限付き
-Git差分、任意のsource excerpt、任意の`cargo check`診断を追加します。JSON schemaは
-v3で、tool provenance・evidence・limitationsを含みます。Rustの意味解析を独自に
-置き換えるものではありません。
+Git差分、任意のsource excerpt、任意の`cargo check`診断を追加します。外部契約は
+`snapshot-v1`と`context-v1`で、tool provenance・evidence・比較可能性・budget・
+limitationsを含みます。Rustの意味解析を独自に置き換えるものではありません。
 
 workspace内には復旧用のlegacy member（`nekorefactor`、`nekoimpact`、`nekoinc`など）
 が残っています。旧多言語・session・refactor・impact・watch機能は現行契約外です。
