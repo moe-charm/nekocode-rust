@@ -245,27 +245,26 @@ impl CommentStripper {
         // Collect all comment nodes
         let mut comments_to_remove = Vec::new();
         self.collect_comments(&root_node, source, &mut comments_to_remove, &mut stats)?;
-        
+
         // Sort comments by position (reverse order for safe removal)
         comments_to_remove.sort_by(|a, b| b.start_byte.cmp(&a.start_byte));
-        
-        // Build result string
+
+        // Build result string (always compute the processed content for consistent stats/preview)
         let mut result = source.to_string();
-        
-        // Set correct removed/kept counts based on what we actually plan to do
+
+        // Removed/kept counts are based on detection above
         stats.removed_comments = comments_to_remove.len();
         // Note: kept_comments is already set in collect_comments
-        
-        if !self.options.preview && !self.options.stats_only {
-            // Actually remove comments
-            for comment_range in comments_to_remove {
-                let start = comment_range.start_byte;
-                let end = comment_range.end_byte;
-                
-                // Replace comment with appropriate whitespace
-                let replacement = self.get_replacement(&source[start..end]);
-                result.replace_range(start..end, &replacement);
-            }
+
+        // Always compute the processed content in-memory to ensure
+        // stats/preview/real-apply report identical size deltas
+        for comment_range in comments_to_remove {
+            let start = comment_range.start_byte;
+            let end = comment_range.end_byte;
+
+            // Replace comment with appropriate whitespace
+            let replacement = self.get_replacement(&source[start..end]);
+            result.replace_range(start..end, &replacement);
         }
         
         stats.bytes_after = result.len();
