@@ -83,6 +83,8 @@ __pycache__/
 .nekocode_cache/
 /nekocode-workspace/.nekocode_history/
 /nekocode-workspace/.nekocode_sessions/
+/nekocode-workspace/_cli_config/
+/nekocode-workspace/_temp_home/
 *.nekocode_backup
 
 # 🧪 Test workspace - HUGE (871MB)!

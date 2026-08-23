@@ -1133,6 +1133,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nekosplit_rust"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "env_logger",
+ "log",
+ "regex",
+ "serde_json",
+ "walkdir",
+]
+
+[[package]]
 name = "notify"
 version = "6.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
