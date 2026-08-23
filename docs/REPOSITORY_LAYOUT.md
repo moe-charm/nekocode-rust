@@ -14,6 +14,13 @@ The current Rust-first implementation lives under `nekocode-workspace/`:
 - `mcp-nekocode-server/mcp_server_rust_first.py`: read-only stdio MCP adapter
 - `scripts/update_rust_first_release.sh`: canonical CLI-only release staging
 - `Dockerfile.rust-first`: prebuilt CLI + minimal MCP image
+
+Rust-first context artifacts are explicit files supplied by the caller (for
+example `index --snapshot /tmp/project.snapshot.json`). They are not hidden
+inside the repository, are not committed automatically, and should be treated
+as inputs to a later diagnostic-delta comparison. The planned source excerpts
+and diagnostic delta remain read-only context features; they do not introduce
+an independent Rust semantic analyzer.
 - `Dockerfile`: legacy all-in-one image retained only for recovery
 - `.github/workflows/rust-first-mvp.yml`: focused verification workflow
 

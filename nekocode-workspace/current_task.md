@@ -9,7 +9,7 @@ Rustの公式・定番ツールを正しさの情報源として使い、NekoCod
 ## 決定事項
 
 - Rustを唯一のTier 1対応言語とする。他言語はgolden fixture整備後のexperimental backend。
-- 正規MVPは `index PATH`、`context PATH --compare-ref REF --budget N`。`query SYMBOL`はsemantic backend後に追加する。
+- 正規MVPは `index PATH`、`context PATH --compare-ref REF --budget N`。`--working-tree`、`--all-features`、`--diagnostics`は根拠付きcontextの明示オプション。`query SYMBOL`はsemantic backend後に追加する。
 - 旧単一バイナリ版と5バイナリ版を同時に正規実装として扱わない。
 - 未測定の60%/90%/95%精度や「完全対応」「商用グレード」表記を使わない。
 - 独自dead-code判定、smart refactor、split、strip-comments、watch、security/quality/circularは凍結する。
@@ -36,11 +36,20 @@ Rustの公式・定番ツールを正しさの情報源として使い、NekoCod
 
 出力には `tool-confirmed`、`semantic-resolved`、`syntax-only`、`incomplete` と、toolchain/features/target/workspace/失敗情報を記録する。
 
+## Phase 2.1 契約（実装前に固定）
+
+- `index --snapshot FILE --diagnostics` は、workspace metadata・入力digest・tool provenance・cargo check結果を明示pathへatomic保存する。隠しDBや自動履歴はまだ作らない。
+- `context --excerpt-lines N` はGit hunk周辺のworkspace-relative source excerptを返す。これはsyntax-onlyの表示補助で、参照解決ではない。
+- `context --baseline FILE --diagnostics` は、条件が一致するsnapshotとの `added` / `resolved` / `persisting` diagnostic deltaだけを返す。Git差分と診断差分は別物として扱う。
+- snapshot条件（toolchain、features、targets）が一致しない場合、deltaを断定せず`evidence: incomplete`と理由を返す。
+- 予算はserialized bytesから保守的に推定し、`estimated_tokens`、`serialized_bytes`、`budget_exceeded`、`omitted_*`を返す。
+
 ## 作業状態
 
 - Phase 0（方針とcurrent_taskの更新）: 完了
 - Phase 1（リポジトリ一本化とRust評価基盤）: 完了（Cargo/Gitコンテキスト基盤、統合テスト、Rust-first CIを追加済み）
-- Phase 2（Rust MVP）: index/contextの最小入口とCargo features/toolchain provenanceを実装済み。semantic backendは未着手
+- Phase 2（Rust MVP）: index/contextの入口、Cargo/Git provenance、差分hunk/patch、budget制御を実装済み。semantic backendは未着手
+- Phase 2.1（次）: 明示JSON snapshot、hunk周辺excerpt、診断deltaをdocs先行で固定。実装前。
 - Phase 3（追加言語）: Rust昇格ゲート通過後
 
 検証メモ: workspace test、core/CLI check、index/context smokeは通過。workspace全体のfmt/`clippy -D warnings`はlegacyコードの既存違反で未達のため、Rust昇格ゲートまでに分離・整理する。

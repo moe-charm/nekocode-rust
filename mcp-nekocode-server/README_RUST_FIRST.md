@@ -54,6 +54,24 @@ package/target provenance, stderr, exit status, and the exact Cargo command.
 Every response reports its evidence level and whether the requested budget was
 exceeded; no accuracy percentage is inferred from these fields.
 
+## Next context contract
+
+The next Rust-first increment will add three opt-in capabilities without
+replacing rustc or rust-analyzer:
+
+- `index --snapshot FILE --diagnostics` will persist a reproducible JSON
+  snapshot for later comparison. It is an explicit file, not a hidden database.
+- `context --excerpt-lines N` will return bounded source excerpts around Git
+  hunks. Excerpts are syntax-only display context, not symbol resolution.
+- `context --baseline FILE --diagnostics` will return `added`, `resolved`, and
+  `persisting` compiler diagnostics only when the baseline has matching
+  toolchain/features/target provenance. Git changes and diagnostic changes stay
+  separate.
+
+Until these options are implemented, clients must not infer a diagnostic delta
+from `compare_ref` alone: a Git commit does not contain the result of a past
+`cargo check`.
+
 The gateway uses argument-vector subprocess execution (no shell), rejects
 unknown arguments, and returns client-safe MCP errors when Cargo or CLI JSON
 fails.
