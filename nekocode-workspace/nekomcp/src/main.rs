@@ -55,18 +55,6 @@ async fn main() -> Result<()> {
 /// Test MCP server functionality
 async fn test_functionality(function: Option<&str>, data: Option<&PathBuf>) -> Result<()> {
     match function {
-        Some("analyze") => {
-            let default_path = PathBuf::from("../test-workspace/test-files/");
-            let test_path = data.unwrap_or(&default_path);
-            println!("Testing analysis functionality with path: {:?}", test_path);
-            
-            // Create test state
-            let _state = McpServerState::new();
-            
-            // Test analysis
-            println!("✅ Analysis test completed");
-        }
-        
         Some("session") => {
             println!("Testing session management...");
             let _state = McpServerState::new();
@@ -74,15 +62,7 @@ async fn test_functionality(function: Option<&str>, data: Option<&PathBuf>) -> R
         }
         
         None => {
-            println!("Running all tests...");
-            
-            // Test analysis
-            let default_path = PathBuf::from("../test-workspace/test-files/");
-            let test_path = data.unwrap_or(&default_path);
-            println!("Testing analysis functionality with path: {:?}", test_path);
-            let _state = McpServerState::new();
-            println!("✅ Analysis test completed");
-            
+            println!("Running session tests...");
             // Test session management
             println!("Testing session management...");
             let _state = McpServerState::new();
@@ -116,7 +96,6 @@ fn show_capabilities() {
         "name": "NekoCode MCP Server",
         "version": env!("CARGO_PKG_VERSION"),
         "capabilities": [
-            "analyze",
             "session_management", 
             "incremental_analysis",
             "ast_operations",
@@ -136,7 +115,6 @@ fn show_capabilities() {
         "endpoints": [
             "/health",
             "/capabilities",
-            "/analyze",
             "/session/create",
             "/session/update", 
             "/session/stats",
@@ -161,7 +139,7 @@ fn generate_config(output: Option<&PathBuf>, format: &str) -> Result<()> {
                     "cors": false
                 },
                 "features": {
-                    "analyze": true,
+                    "analyze": false,
                     "sessions": true,
                     "incremental": true,
                     "ast": true,
