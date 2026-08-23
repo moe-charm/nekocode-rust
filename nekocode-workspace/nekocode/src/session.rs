@@ -31,10 +31,8 @@ impl SessionCommands {
     pub async fn ast_stats(&mut self, session_id: &str) -> Result<String> {
         let session = self.session_manager.get_session_mut(session_id)?;
         
-        let total_nodes = 0;
         let mut total_functions = 0;
         let mut total_classes = 0;
-        let max_depth = 0;
         
         for result in &session.info.analysis_results {
             total_functions += result.functions.len();
@@ -45,15 +43,11 @@ impl SessionCommands {
             "📊 AST Statistics for session {}\n\
              Files analyzed: {}\n\
              Total functions: {}\n\
-             Total classes: {}\n\
-             Total nodes: {}\n\
-             Max AST depth: {}",
+             Total classes: {}",
             session_id,
             session.info.analysis_results.len(),
             total_functions,
-            total_classes,
-            total_nodes,
-            max_depth
+            total_classes
         ))
     }
     
@@ -137,8 +131,43 @@ impl SessionCommands {
                 }
                 Ok(output)
             }
+            "flat" => {
+                // Flat list of symbols: one per line
+                let mut lines = Vec::new();
+                for result in &session.info.analysis_results {
+                    for func in &result.functions {
+                        lines.push(format!(
+                            "FUNC\t{}\t{}:{}-{}",
+                            result.file_info.path.display(),
+                            func.symbol.name,
+                            func.symbol.line_start,
+                            func.symbol.line_end
+                        ));
+                    }
+                    for class in &result.classes {
+                        lines.push(format!(
+                            "CLASS\t{}\t{}:{}-{}",
+                            result.file_info.path.display(),
+                            class.symbol.name,
+                            class.symbol.line_start,
+                            class.symbol.line_end
+                        ));
+                    }
+                }
+                Ok(lines.join("\n"))
+            }
+            "summary" => {
+                // Summary totals across the session
+                let file_count = session.info.analysis_results.len();
+                let func_total: usize = session.info.analysis_results.iter().map(|r| r.functions.len()).sum();
+                let class_total: usize = session.info.analysis_results.iter().map(|r| r.classes.len()).sum();
+                Ok(format!(
+                    "AST Summary for session {}\nFiles: {}\nFunctions: {}\nClasses: {}",
+                    session_id, file_count, func_total, class_total
+                ))
+            }
             _ => {
-                Ok(format!("Unknown format: {}. Supported: json, tree", format))
+                Ok(format!("Unknown format: {}. Supported: json, tree, flat, summary", format))
             }
         }
     }
@@ -194,11 +223,6 @@ impl SessionUpdater {
         session.info.analysis_results = analysis_results;
         session.info.update_stats();  // Update file_count and other statistics
         session.save()?;
-        
-        println!("✅ Created session {} with {} files analyzed", 
-            session_id, 
-            session.info.analysis_results.len()
-        );
         
         Ok(session_id.to_string())
     }
