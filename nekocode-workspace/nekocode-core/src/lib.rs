@@ -31,9 +31,11 @@ pub use io::{FileProcessor, PathUtils};
 pub use memory::{MemoryManager, MemoryType, MemoryEntry};
 pub use compact::{OutputMode, CompactSerializer, HumanFormatter};
 pub use rust_context::{
-    build_rust_context, build_rust_context_with_options, index_rust_workspace,
-    ChangedRustFile, EvidenceLevel, RustContextPack, RustDiagnostic, RustDiagnosticRun,
-    RustPackage, RustToolchainInfo, RustWorkspaceSnapshot,
+    build_rust_context, build_rust_context_with_config, build_rust_context_with_options,
+    index_rust_workspace, ChangedRustFile, EvidenceLevel, RustContextOptions, RustContextPack,
+    RustDiagnostic, RustDiagnosticRun, RustDiagnosticSpan, RustDiffHunk, RustDiffSummary,
+    RustInputDigest, RustPackage, RustTarget, RustToolchainInfo, RustWorkspaceSnapshot,
+    ToolProvenance,
 };
 
 /// NekoCode Core version
