@@ -5,6 +5,22 @@
 正規workspaceとlegacy境界の整理方針は [`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md) にあります。
 ソースから試す場合は `cd nekocode-workspace && cargo run -p nekocode -- index .` を使ってください。ルートの旧Cargo packageはlegacyです。
 
+## Rust-first quick start
+
+```bash
+cd nekocode-workspace
+cargo run -p nekocode -- index .
+cargo run -p nekocode -- context . --compare-ref HEAD~1 --budget 8000 --diagnostics
+# Include staged/unstaged/untracked files and every workspace feature when needed:
+cargo run -p nekocode -- context . --compare-ref HEAD~1 --working-tree --all-features
+```
+
+The output is an evidence-backed JSON context pack. Cargo metadata and
+`cargo check` remain the semantic source of truth; NekoCode adds input hashes,
+Git hunks/patches, provenance, deterministic truncation, and MCP-friendly
+budget reporting. It does not claim independent dead-code or type-analysis
+accuracy.
+
 [![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tree-sitter](https://img.shields.io/badge/Tree--sitter-20232A?style=for-the-badge&logo=tree-sitter&logoColor=white)](https://tree-sitter.github.io/)
 [![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)

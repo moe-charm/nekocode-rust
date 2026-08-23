@@ -4,7 +4,7 @@
 only two tools backed by the canonical `nekocode-workspace` CLI:
 
 - `index` → `nekocode index <path>`
-- `context` → `nekocode context <path> [--compare-ref REF] [--budget N] [--diagnostics]`
+- `context` → `nekocode context <path> [--compare-ref REF] [--budget N] [--diagnostics] [--working-tree] [--all-features]`
 
 It does not invoke or replace `mcp_server_real.py`; the two servers may coexist
 while the repository moves to the Rust-first surface.
@@ -33,11 +33,26 @@ absolute paths in returned data are replaced with `<path>`.
 ```
 
 `context` requires `path` and accepts a simple Git reference, a budget from 1
-to 100000, and a `diagnostics` boolean:
+to 100000, and booleans for compiler diagnostics, working-tree changes, and
+feature coverage:
 
 ```json
-{"path":".","compare_ref":"HEAD~1","budget":2000,"diagnostics":false}
+{
+  "path":".",
+  "compare_ref":"HEAD~1",
+  "budget":2000,
+  "diagnostics":true,
+  "working_tree":true,
+  "all_features":true
+}
 ```
+
+The context response includes Cargo package/target metadata, input-file
+digests, resolved Git refs, unified-diff hunks and a bounded patch.  With
+`diagnostics`, it also includes structured rustc spans, rendered messages,
+package/target provenance, stderr, exit status, and the exact Cargo command.
+Every response reports its evidence level and whether the requested budget was
+exceeded; no accuracy percentage is inferred from these fields.
 
 The gateway uses argument-vector subprocess execution (no shell), rejects
 unknown arguments, and returns client-safe MCP errors when Cargo or CLI JSON
