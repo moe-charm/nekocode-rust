@@ -116,3 +116,39 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
     assert!(delta.resolved.is_empty());
     assert!(delta.persisting.is_empty());
 }
+
+#[test]
+fn git_paths_are_relative_to_the_nested_workspace() {
+    let directory = tempdir().expect("temporary repository");
+    let repository = directory.path();
+    let root = repository.join("workspace");
+    fs::create_dir_all(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"nested-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(root.join("src/lib.rs"), "pub fn before() -> u32 { 1 }\n").expect("source");
+
+    git(repository, &["init", "-q"]);
+    git(
+        repository,
+        &["config", "user.email", "context@example.invalid"],
+    );
+    git(repository, &["config", "user.name", "Context Fixture"]);
+    git(repository, &["add", "."]);
+    git(repository, &["commit", "-qm", "initial"]);
+
+    fs::write(root.join("src/lib.rs"), "pub fn after() -> u32 { 2 }\n").expect("modified source");
+    let mut options = RustContextOptions::new(Some("HEAD".to_string()), 8_000);
+    options.include_working_tree = true;
+    let pack = build_rust_context_with_config(&root, options).expect("context should build");
+
+    assert!(pack
+        .changed_files
+        .iter()
+        .any(|file| file.path == Path::new("src/lib.rs")));
+    assert!(pack.source_excerpts.iter().any(
+        |excerpt| excerpt.path == Path::new("src/lib.rs") && excerpt.content.contains("after")
+    ));
+}

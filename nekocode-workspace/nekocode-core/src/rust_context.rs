@@ -1102,6 +1102,7 @@ fn git_context(
         let spec = format!("{reference}...HEAD");
         let args = vec![
             "diff".to_string(),
+            "--relative".to_string(),
             "--name-status".to_string(),
             "--no-ext-diff".to_string(),
             spec.clone(),
@@ -1111,6 +1112,7 @@ fn git_context(
         if include_patch {
             let patch_args = vec![
                 "diff".to_string(),
+                "--relative".to_string(),
                 "--no-ext-diff".to_string(),
                 "--unified=3".to_string(),
                 spec,
@@ -1124,6 +1126,7 @@ fn git_context(
         let base = compare_ref.unwrap_or("HEAD");
         let args = vec![
             "diff".to_string(),
+            "--relative".to_string(),
             "--name-status".to_string(),
             "--no-ext-diff".to_string(),
             base.to_string(),
@@ -1133,6 +1136,7 @@ fn git_context(
         if include_patch {
             let patch_args = vec![
                 "diff".to_string(),
+                "--relative".to_string(),
                 "--no-ext-diff".to_string(),
                 "--unified=3".to_string(),
                 base.to_string(),
