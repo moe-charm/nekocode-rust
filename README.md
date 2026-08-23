@@ -1,712 +1,202 @@
-# 🦀 NekoCode - Rust-first Code Context Layer
+# 🦀 NekoCode
 
-> **Rust-first reset (2026-08-23)**: 現在の正規MVPは、`nekocode-workspace` の `nekocode` CLIからCargo workspace構造とGit差分を根拠付きJSONとしてAI/MCPへ返す `index` / `context` です。旧来の多言語・多機能セクションは移行中のlegacy情報であり、対応言語数や精度パーセントを保証しません。詳細は [`docs/RUST_FIRST_MVP.md`](docs/RUST_FIRST_MVP.md) を参照してください。
+## Rust-first code context layer / Rust-first コードコンテキスト層
 
-正規workspaceとlegacy境界の整理方針は [`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md) にあります。
-ソースから試す場合は `cd nekocode-workspace && cargo run -p nekocode -- index .` を使ってください。ルートの旧Cargo packageはlegacyです。
+[English](#english) · [日本語](#日本語)
 
-## Rust-first quick start
+NekoCode is a read-only context layer for Rust workspaces. It collects
+Cargo metadata, Git changes, and optional `cargo check` diagnostics, then
+returns bounded, provenance-aware JSON for humans, AI clients, and MCP.
+
+NekoCode does not replace `rustc`, Cargo, or rust-analyzer. Its value is the
+reproducible snapshot, diff context, diagnostic delta, and explicit budget
+handling around those tools.
+
+## English
+
+### Current contract
+
+- **Rust-first:** the supported MVP target is a Cargo workspace.
+- **Two canonical commands:** `index` and `context`.
+- **JSON schema v3:** responses include provenance and an explicit evidence level.
+- **Read-only:** no source editing, hidden database, or automatic commit/push.
+- **No unmeasured accuracy claims:** NekoCode does not claim independent
+  dead-code, reference, type, or breaking-change accuracy.
+- Other languages and the older multi-binary/refactoring surface remain
+  legacy or experimental; they are not part of this contract.
+
+### Quick start
 
 ```bash
 cd nekocode-workspace
-cargo run -p nekocode -- index .
-cargo run -p nekocode -- context . --compare-ref HEAD~1 --budget 8000 --diagnostics
-# Include staged/unstaged/untracked files and every workspace feature when needed:
-cargo run -p nekocode -- context . --compare-ref HEAD~1 --working-tree --all-features
+
+# Cargo workspace/package/target structure
+cargo run -q -p nekocode -- index .
+
+# Bounded Git context for an AI or review workflow
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --budget 8000 --diagnostics
+
+# Include staged, unstaged, and untracked working-tree changes
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --working-tree --all-features
 ```
 
-The output is an evidence-backed JSON context pack. Cargo metadata and
-`cargo check` remain the semantic source of truth; NekoCode adds input hashes,
-Git hunks/patches, provenance, deterministic truncation, and MCP-friendly
-budget reporting. It does not claim independent dead-code or type-analysis
-accuracy.
+### Snapshots and diagnostic deltas
 
-Rust-first Phase 2.1では、`index --snapshot FILE`による明示的なJSON snapshot、
-`context --excerpt-lines N`による変更hunk周辺source excerpt、保存済み
-`cargo check`同士のdiagnostic delta（`--baseline FILE --diagnostics`）を提供します。
-Gitの`compare_ref`だけから過去のコンパイル結果を推測することはありません。
-
-[![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tree-sitter](https://img.shields.io/badge/Tree--sitter-20232A?style=for-the-badge&logo=tree-sitter&logoColor=white)](https://tree-sitter.github.io/)
-[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/features/actions)
-
-> Legacy tagline (historical and unverified): 16x faster / 8 languages / PR automation.
-
-## 🗃️ Legacy feature history (not the current contract)
-
-- **⚡ Lightning-fast analysis**: Analyze 1000+ files in seconds using Tree-sitter
-- **🔍 PR Impact Detection**: Automatically detect breaking changes in Pull Requests  
-- **🤖 GitHub Actions Integration**: Auto-comment PR analysis results
-- **🌐 Multi-language**: JavaScript, TypeScript, Python, C++, C#, Go, Rust, C
-- **🔧 Advanced Features**: Sessions, AST queries, Claude Code integration
-
-## 📦 Quick Start
-
-### Installation
-```bash
-# Linux/macOS
-curl -L https://github.com/moe-charm/nekocode-rust/releases/latest/download/nekocode-rust > nekocode
-chmod +x nekocode
-
-# Or build from source
-cargo build --release
-```
-
-### Basic Usage
-```bash
-# Analyze a directory
-./nekocode analyze src/
-
-# Get detailed analysis
-./nekocode analyze src/ --output json
-
-# Analyze specific languages
-./nekocode analyze . --type js
-```
-
-## 🔧 Quick Install (WSL/Docker)
-
-### WSL Local (No Docker)
-- Clone and install user-level dependencies (no sudo):
-  - `git clone https://github.com/moe-charm/nekocode-rust.git && cd nekocode-rust`
-  - `bash nekocode-rust-clean/releases/install.sh`
-- Install PATH-safe wrappers:
-  - `python3 nekocode-rust-clean/releases/setup.py --install`
-  - `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
-- Run:
-  - `nekocode session-create . --complete --external --format summary`
-
-### Docker (Zero Local Dependencies)
-- Install Docker-backed wrappers:
-  - `python3 nekocode-rust-clean/releases/setup.py --install-docker`
-- Run:
-  - `nekocode session-create . --complete --external --format summary`
-
-### Claude MCP Registration
-- If Claude CLI is available in WSL:
-  - `claude mcp add nekocode -- mcp-nekocode --stdio`
-- Or register from Windows by calling WSL wrapper:
-  - Edit `C:\\Users\\<you>\\AppData\\Roaming\\Claude\\claude_desktop_config.json` and add:
-    - `"mcpServers": { "nekocode": { "command": "wsl", "args": ["bash","-lc","mcp-nekocode --stdio"] } }`
-  - Restart Claude
-
-## 🎯 Core Features
-
-### 1. **Complete Code Analysis** (Enhanced with Dead Code Detection!)
-
-**Supported Languages:**
-- **JavaScript/TypeScript** - Functions, classes, imports/exports
-- **Python** - Functions, classes, imports, decorators  
-- **C/C++** - Functions, classes, includes, namespaces
-- **C#** - Methods, classes, using statements, properties
-- **Go** - Functions, structs, imports, interfaces
-- **Rust** - Functions, structs, traits, modules + **Dead code detection** ⭐
-
-**What it detects:**
-```bash
-✅ Functions and methods with parameters
-✅ Classes and structs with inheritance  
-✅ Import/export dependencies
-✅ Complexity metrics and line counts
-✅ Cross-file references and calls
-🆕 Dead code detection (legacy path; accuracy unverified)
-🆕 Unused dependencies analysis (cargo-machete integration)
-```
-
-### 🗃️ **Legacy Dead Code Detection** - ⚠️ **Accuracy claims removed**
-
-**🚨 IMPORTANT:** This legacy path has no measured accuracy claim. Use the
-Rust-first `context --diagnostics` path for compiler-confirmed diagnostics.
-
-**Correct Usage (High Accuracy):**
-```bash
-# ✅ RECOMMENDED: Use external tools for accurate detection
-./nekocode session-create project/ --complete --external --format text
-./nekocode deadcode SESSION_ID --external --min-confidence 85
-
-# The tool will guide you:
-💡 Tip: External tools detected! Use --external flag for better accuracy
-```
-
-**External Tools by Language:**
-| Language | Tool | Accuracy | What it Detects |
-|----------|------|----------|-----------------|
-| **Rust** | cargo clippy | unverified | Functions, structs, variables |
-| **Rust** | cargo-machete | unverified | Unused dependencies |
-| **Python** | vulture | unverified | Unused code, imports |
-| **Go** | staticcheck | unverified | Dead code, bugs |
-| **JavaScript/TypeScript** | Internal only | unverified | Basic unused detection |
-
-**Installation for Better Accuracy:**
-```bash
-# Rust projects
-cargo install cargo-machete
-
-# Python projects  
-pip install vulture
-
-# Go projects
-go install honnef.co/go/tools/cmd/staticcheck@latest
-```
-
-**Example Output:**
-```json
-{
-  "functions": [
-    {
-      "name": "getUserById", 
-      "line": 25,
-      "parameters": ["id", "includeMetadata"],
-      "complexity": 3
-    }
-  ],
-  "references": [
-    {"file": "api.js", "line": 15, "type": "call"}
-  ]
-}
-```
-
-### 2. **PR Impact Analysis** (GitHub Integration)
-
-**Automatically detect breaking changes in Pull Requests:**
+Snapshots are explicit JSON files supplied by the caller. They are not a
+hidden database and are not created automatically.
 
 ```bash
-# Compare branches for breaking changes
-./nekocode analyze-impact src/ --compare-ref master --format github-comment
+# Save a reproducible Cargo/toolchain/diagnostic baseline
+cargo run -q -p nekocode -- index . \
+  --snapshot /tmp/nekocode-baseline.json --diagnostics --all-features
+
+# Compare the current check with that saved baseline
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 \
+  --baseline /tmp/nekocode-baseline.json \
+  --diagnostics --excerpt-lines 8
 ```
 
-**What it catches:**
-- ❌ **Deleted functions** with existing references
-- ⚠️ **Signature changes** that may break calls
-- ✅ **New functions** (safe additions)
-- 🔄 **Renamed functions** needing updates
+`compare_ref` describes a Git change set; it does not recreate the compiler
+result of an older commit. A diagnostic delta is reported only when the saved
+and current toolchain, features, and targets are compatible. The result keeps
+`added`, `resolved`, and `persisting` diagnostics separate from Git changes.
 
-**GitHub Actions Setup:**
-```yaml
-# .github/workflows/pr-analysis.yml
-name: PR Impact Analysis
-on: [pull_request]
-jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Run NekoCode Analysis
-      run: |
-        ./nekocode analyze-impact src/ --compare-ref origin/${{ github.base_ref }} --format github-comment
-```
+### What the JSON contains
 
-**Auto-generated PR Comments:**
-```markdown
-🔍 **Impact Analysis Results**
+`index` records Cargo workspace/package/target information, input file
+digests, toolchain information, and command provenance. `context` adds the
+resolved Git refs, changed files, diff hunks/patch, optional source excerpts,
+optional structured compiler diagnostics, and diagnostic delta information.
 
-⚠️ **BREAKING CHANGES DETECTED**
-- `getUser()` function deleted (3 references found)
-- `src/api.js:25` - calls getUser() ❌
-- `src/order.js:18` - calls getUser() ❌
+Every response reports its `schema_version`, `evidence`, budget fields, and
+`limitations`. When a request is too large, NekoCode records what was omitted
+instead of silently presenting an incomplete result as complete. Source
+excerpts are display context around Git hunks; they are not symbol resolution.
 
-**Risk Level:** 🔴 High - Manual fixes required before merge
-```
+### MCP and workflow integrations
 
-## 🔧 Advanced Features
-
-### 🆕 5-Binary Unix Toolchain (New Architecture!)
-
-NekoCode now follows Unix philosophy with 5 specialized tools:
-
-#### **1. nekocode** - Core Analysis Engine (67.8MB)
-```bash
-# Project analysis and session management
-./nekocode analyze src/
-./nekocode session-create src/
-
-# 🆕 Complete dead code analysis with external tools
-./nekocode session-create rust-project/ --complete --external --min-confidence 80
-./nekocode deadcode SESSION_ID --external --format github-comment
-
-# AST operations
-./nekocode ast-query SESSION_ID "MyClass::myMethod"
-```
-
-#### **2. nekorefactor** - Safe Code Refactoring (51.4MB) ⭐ NEW!
-```bash
-# 🆕 Create files with templates
-./nekorefactor create-file todo.py --template python-cli
-./nekorefactor create-file lib.rs --template rust-lib
-
-# 🆕 Smart semantic positioning (immediate by default, Git as safety net)
-./nekorefactor insert file.py "def helper(): pass" --after-function main
-./nekorefactor insert file.py "import json" --in-imports
-./nekorefactor insert file.cpp "private:" --after-class MyClass
-
-# Text replacement (immediate by default)
-./nekorefactor replace file.js "oldName" "newName"
-
-# Optional preview mode for safety checks
-./nekorefactor replace file.js "oldName" "newName" --preview
-./nekorefactor insert file.py "def helper(): pass" --after-function main --preview
-```
-
-#### **3. nekoimpact** - Change Impact Analysis (51.2MB)
-```bash
-# Impact analysis for PR reviews
-./nekoimpact analyze SESSION_ID --format github-comment
-./nekoimpact compare --base SESSION1 --head SESSION2
-```
-
-#### **4. nekoinc** - Incremental Analysis (57.8MB)
-```bash
-# High-speed incremental updates
-./nekoinc update SESSION_ID --verbose
-./nekoinc watch SESSION_ID --debounce 500
-./nekoinc export SESSION_ID -o changes.json
-```
-
-#### **5. nekomcp** - MCP Integration Gateway
-Claude Code integration via Model Context Protocol (existing implementation).
-
-### Session Management & Incremental Analysis ⚡
-```bash
-# Create persistent analysis session
-./nekocode session-create src/
-./nekocode session-command <id> stats
-./nekocode session-command <id> ast-query "MyClass::myMethod"
-
-# 🚀 NEW: Incremental Analysis (Ultra-fast updates)
-./nekocode session-update <session_id>                 # Update changed files only
-./nekocode session-update <session_id> --verbose       # Detailed JSON output
-./nekocode session-update <session_id> --dry-run       # Preview changes only
-```
-
-### 🔍 File Watching System (NEW!)
-```bash
-# Start watching a session for automatic updates
-./nekocode watch-start <session_id>
-
-# Check watching status
-./nekocode watch-status                                 # All sessions
-./nekocode watch-status <session_id>                   # Specific session
-
-# Stop watching
-./nekocode watch-stop <session_id>                     # Stop one session
-./nekocode watch-stop-all                              # Stop all watchers
-```
-
-**Smart File Detection:**
-- **Code files**: `.js`, `.ts`, `.py`, `.rs`, `.cpp`, `.go`, `.cs`
-- **Config files**: `Makefile`, `Dockerfile`, `package.json`, `Cargo.toml`
-- **Important files**: `README`, `LICENSE`, `.gitignore`
-- **Auto-debouncing**: 500ms delay to prevent spam updates
-
-### 💾 Memory System (NEW!)
-```bash
-# Save analysis results and memos
-./nekocode memory save auto "analysis-results" "..."
-./nekocode memory save memo "bug-notes" "Found issue in auth.js"
-
-# Load and search memories
-./nekocode memory load memo "bug-notes"
-./nekocode memory list                                  # All memories
-./nekocode memory timeline --days 7                    # Recent memories
-```
-
-**🚀 Incremental Performance Results (nyash project - 85 files):**
-- **Initial analysis**: 267ms (baseline)
-- **Incremental updates**: 23-49ms (**918-1956x speedup!**)
-- **Change detection**: Detects modified files in < 1ms
-- **Proven results**: Production tested on real codebases
-
-### 🌳 AST Revolution - Deep Syntax Analysis (ENHANCED!)
-```bash
-# AST statistics and structure analysis
-./nekocode session-command <id> ast-stats              # Node counts, complexity
-./nekocode session-command <id> ast-dump               # Full structure visualization
-./nekocode session-command <id> scope-analysis 42     # Analyze scope at line 42
-
-# AST queries (🔧 Under active development)
-./nekocode session-command <id> ast-query "MyClass"    # Search for classes/functions
-./nekocode session-command <id> ast-query "MyClass::myMethod"  # Method search
-```
-
-**Recent AST Infrastructure Fixes (2025-08-13):**
-- ✅ **Fixed scope path construction** across all 6 languages (Python, JS, C++, C#, Go, Rust)
-- ✅ **Improved AST node hierarchy** using proper `add_child()` method
-- ✅ **Enhanced debugging capabilities** with detailed AST dump output
-- 🔧 **AST query search engine** currently under development
-
-**What works now:**
-- **ast-stats**: Complete statistics (nodes, depth, complexity)
-- **ast-dump**: Full tree visualization with proper scope paths
-- **scope-analysis**: Context-aware scope detection
-
-**Coming soon:**
-- **ast-query**: Full search functionality for classes/methods/functions
-
-### 🛠️ Configuration System (NEW!)
-All settings are customizable via `nekocode_config.json`:
-
-```json
-{
-  "file_watching": {
-    "debounce_ms": 500,
-    "include_extensions": ["js", "ts", "py", "rs"],
-    "include_important_files": ["Makefile", "Dockerfile", "LICENSE"],
-    "exclude_patterns": [".git", "node_modules", "target"]
-  },
-  "token_limits": {
-    "ast_dump_max": 8000,
-    "allow_force_output": true
-  },
-  "memory": {
-    "edit_history": { "max_size_mb": 10 }
-  }
-}
-```
-
-### 🤖 Claude Code Integration (ENHANCED!)
-```bash
-# MCP server for Claude Code (with token limits & config support)
-python mcp-nekocode-server/mcp_server_real.py
-```
-
-**Available MCP Tools (28+ total):**
-
-**🔍 Core Analysis:**
-- `mcp__nekocode__analyze` - Fast project analysis with stats-only option
-- `mcp__nekocode__list_languages` - Show supported languages
-
-**🆕 Complete Dead Code Analysis:**
-- `session-create --complete` - One-command complete analysis with dead code detection
-- `deadcode SESSION_ID --external` - Run external tools (cargo clippy + cargo-machete)
-- Automatic tool detection with installation guidance for missing tools
-
-**🎮 Session Management:**
-- `mcp__nekocode__session_create` - Create persistent analysis sessions
-- `mcp__nekocode__session_stats` - Get session statistics (lightning fast)
-- `mcp__nekocode__session_update` - Incremental updates (918-1956x speedup)
-
-**🌳 AST Revolution:**
-- `mcp__nekocode__ast_stats` - AST node statistics and complexity
-- `mcp__nekocode__ast_query` - Search for classes/methods (🔧 under development)
-- `mcp__nekocode__ast_dump` - Full AST tree visualization
-- `mcp__nekocode__scope_analysis` - Context-aware scope analysis
-
-**🔍 File Watching System (NEW!):**
-- `mcp__nekocode__watch_start` - Start real-time file monitoring
-- `mcp__nekocode__watch_status` - Check monitoring status
-- `mcp__nekocode__watch_stop` - Stop watching specific session
-- `mcp__nekocode__watch_stop_all` - Stop all active watchers  
-- `mcp__nekocode__watch_config` - Display watch configuration
-
-**✏️ Code Editing & Refactoring:**
-- `mcp__nekocode__replace_preview` - Preview text replacements
-- `mcp__nekocode__replace_confirm` - Execute replacements
-- `mcp__nekocode__insert_preview` - Preview insertions
-- `mcp__nekocode__insert_confirm` - Execute insertions
-- `mcp__nekocode__movelines_preview` - Preview line movements
-- `mcp__nekocode__movelines_confirm` - Execute line movements
-- `mcp__nekocode__moveclass_preview` - Preview class movements
-- `mcp__nekocode__moveclass_confirm` - Execute class movements
-
-**📚 History & Memory:**
-- `mcp__nekocode__edit_history` - View editing history
-- `mcp__nekocode__edit_show` - Show specific edit details
-- `mcp__nekocode__memory_save` - Save analysis results/memos
-- `mcp__nekocode__memory_load` - Load saved memories
-- `mcp__nekocode__memory_list` - List all memories
-- `mcp__nekocode__memory_timeline` - Timeline view of memories
-
-**⚙️ Configuration:**
-- `mcp__nekocode__config_show` - Display current configuration
-- `mcp__nekocode__config_set` - Update configuration settings
-
-## 📊 Performance Comparison
-
-### Initial Analysis Performance
-| Parser | Time (TypeScript 68 files) | Speed vs PEGTL |
-|--------|----------------------------|-----------------|
-| 🦀 **NekoCode (Tree-sitter)** | **1.2s** | **16.38x faster** |
-| C++ PEGTL | 19.5s | 1.00x baseline |
-| Rust PEST | 60.7s | 0.32x slower |
-
-### ⚡ Incremental Analysis Performance (Real Production Results)
-| Operation | Rust Project (85 files) | Speedup vs Full Analysis |
-|-----------|-------------------------|--------------------------|
-| **Initial Analysis** | 267ms | 1.00x baseline |
-| **🚀 Incremental Update** | **23-49ms** | **918-1956x faster!** |
-| **Change Detection** | < 1ms | **45000x faster!** |
-| **Dry-run Preview** | < 1ms | Instant feedback |
-
-*Results from nyash programming language project testing*
-
-## 🎮 Examples & Use Cases
-
-### Use Case 1: Daily Development  
-```bash
-# Quick analysis for commit reviews
-./nekocode analyze src/ --stats-only
-# "Added 3 new functions, modified 2 existing"
-
-# 🚀 NEW: Lightning-fast iterative development  
-./nekocode session-create src/                # One-time setup (267ms)
-./nekocode watch-start abc123                 # Start file watching
-# Edit files... (auto-updates every 500ms with smart debouncing)
-./nekocode session-command abc123 stats       # Get latest results instantly
-# "Changed 1 file, analyzed in 23ms (1956x speedup)"
-
-# Alternative: Manual updates
-./nekocode session-update abc123 --verbose    # Manual incremental update
-./nekocode session-update abc123 --dry-run    # Preview what would change
-```
-
-**🎯 Claude Code Integration Example:**
-```python
-# In Claude Code, create session and start watching
-session = await mcp__nekocode__session_create("/path/to/project")
-await mcp__nekocode__watch_start(session["session_id"])
-
-# Real-time development feedback
-await mcp__nekocode__watch_status()           # Check monitoring status
-await mcp__nekocode__ast_stats(session_id)    # Get AST statistics
-await mcp__nekocode__memory_save("memo", "refactor_notes", "Fixed auth system")
-```
-
-### Use Case 2: PR Reviews
-```bash
-# Automated in GitHub Actions
-# Reviewer sees: "⚠️ Breaking change: getUserData() deleted, 5 references found"
-```
-
-### Use Case 3: Refactoring Safety
-```bash
-# Before large refactor - baseline analysis
-./nekocode analyze . > baseline.json
-
-# After refactor - compare
-./nekocode analyze-impact . --compare-ref baseline-commit
-# Shows exactly what broke and needs fixing
-```
-
-### Use Case 4: ⚡ Real-time Development Workflow
-```bash
-# Set up session once
-./nekocode session-create large-project/
-# Session: 4f7a2b89 created (1.5s for 500+ files)
-
-# Development loop - lightning fast feedback
-vim src/main.rs                              # Edit code
-./nekocode session-update 4f7a2b89           # Update (50ms!)
-./nekocode session-update 4f7a2b89 --dry-run # Preview changes
-# "1 file changed, would analyze main.rs"
-
-vim src/lib.rs                               # Edit another file  
-./nekocode session-update 4f7a2b89 --verbose # Detailed output (30ms!)
-# "2 files changed, speedup: 1666x faster than full analysis"
-```
-
-## 🛠️ Installation & Setup
-
-### Requirements
-- **Rust 1.70+** (for building from source)
-- **Git** (for PR analysis features)  
-- **GitHub CLI** (optional, for GitHub Actions)
-
-### Build from Source
-```bash
-git clone https://github.com/moe-charm/nekocode-rust.git
-cd nekocode-rust
-cargo build --release
-./target/release/nekocode-rust --help
-```
-
-### GitHub Actions Integration
-1. **Copy binary to your repository**
-2. **Create `.github/workflows/pr-analysis.yml`** (see example above)
-3. **Set repository permissions**: Settings → Actions → Read and write permissions
-
-## 🤝 Contributing
-
-1. **Report issues**: Especially for language parsing edge cases
-2. **Test new languages**: Add grammar files for additional languages  
-3. **Improve accuracy**: Help enhance PR impact detection
-4. **Add integrations**: VS Code extensions, CI/CD plugins
-
-## 👤 Author & Support
-
-**Created by CharmPic** 🐱
-
-- 🐙 **GitHub**: [@moe-charm](https://github.com/moe-charm)
-- 🐦 **Twitter**: [@CharmNexusCore](https://x.com/CharmNexusCore)
-- ☕ **Support**: [Buy me a coffee](https://buymeacoffee.com/moecharmde6)
-
-*If NekoCode helps your development workflow, consider supporting the project!*
-
-## 📄 License
-
-MIT License - feel free to use in commercial projects.
-
----
-
-## 🌏 日本語 (Japanese)
-
-<details>
-<summary>🎌 日本語版README (クリックして展開)</summary>
-
-# 🦀 NekoCode - 超高速多言語コード解析ツール
-
-> **従来パーサーの16倍高速** • **8言語対応** • **GitHub PR自動化対応**
-
-## 🚀 NekoCodeができること
-
-- **⚡ 超高速解析**: Tree-sitterで1000+ファイルを秒単位で解析
-- **🔍 PR影響検出**: プルリクエストの破壊的変更を自動検出
-- **🤖 GitHub Actions統合**: PRに分析結果を自動コメント投稿
-- **🌐 多言語対応**: JavaScript、TypeScript、Python、C++、C#、Go、Rust、C
-- **🔧 高度機能**: セッション、AST、Claude Code統合
-
-## 📦 クイックスタート
-
-### インストール
-```bash
-# Linux/macOS
-curl -L https://github.com/moe-charm/nekocode-rust/releases/latest/download/nekocode-rust > nekocode
-chmod +x nekocode
-
-# またはソースからビルド
-cargo build --release
-```
-
-### 基本的な使用方法
-```bash
-# ディレクトリを解析
-./nekocode analyze src/
-
-# 詳細な解析結果
-./nekocode analyze src/ --output json
-
-# 特定言語のみ解析
-./nekocode analyze . --type js
-```
-
-## 🎯 主要機能
-
-### 1. **コード解析** (コア機能)
-
-**対応言語:**
-- **JavaScript/TypeScript** - 関数、クラス、import/export
-- **Python** - 関数、クラス、import、デコレータ
-- **C/C++** - 関数、クラス、include、namespace
-- **C#** - メソッド、クラス、using、プロパティ
-- **Go** - 関数、構造体、import、interface
-- **Rust** - 関数、構造体、trait、モジュール
-
-### 2. **PR影響分析** (GitHub統合)
-
-**プルリクエストの破壊的変更を自動検出:**
+The Rust-first stdio gateway exposes the same two operations:
 
 ```bash
-# ブランチ間の破壊的変更を比較
-./nekocode analyze-impact src/ --compare-ref master --format github-comment
+python3 mcp-nekocode-server/mcp_server_rust_first.py
 ```
 
-**検出する内容:**
-- ❌ **削除された関数** (既存の参照あり)
-- ⚠️ **シグネチャ変更** (呼び出しが壊れる可能性)
-- ✅ **新規関数** (安全な追加)
-- 🔄 **関数名変更** (更新が必要)
+`index` and `context` are the only public tools in this gateway. It uses
+argument-vector execution, keeps logs out of stdout, and redacts absolute
+paths in responses. See
+[`mcp-nekocode-server/README_RUST_FIRST.md`](mcp-nekocode-server/README_RUST_FIRST.md)
+for the protocol details.
 
-### GitHub Actions設定例
-```yaml
-# .github/workflows/pr-analysis.yml
-name: PR Impact Analysis
-on: [pull_request]
-jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: NekoCode解析実行
-      run: |
-        ./nekocode analyze-impact src/ --compare-ref origin/${{ github.base_ref }} --format github-comment
-```
+A future Skill or Plugin may describe when to call the CLI/MCP tools and how
+to present their evidence. It is a workflow layer, not a replacement semantic
+backend. Cargo/rustc/rust-analyzer remain the sources of Rust meaning.
 
-**自動生成されるPRコメント:**
-```markdown
-🔍 **影響分析結果**
+### Development and tests
 
-⚠️ **破壊的変更を検出**
-- `getUser()` 関数が削除されました (3箇所で参照)
-- `src/api.js:25` - getUser()を呼び出し ❌
-- `src/order.js:18` - getUser()を呼び出し ❌
-
-**リスクレベル:** 🔴 高 - マージ前に手動修正が必要
-```
-
-## 🔧 高度機能
-
-### セッション管理・インクリメンタル解析 ⚡
 ```bash
-# 永続的な解析セッション作成
-./nekocode session-create src/
-./nekocode session-command <id> stats
-./nekocode session-command <id> ast-query "MyClass::myMethod"
-
-# 🚀 新機能: インクリメンタル解析 (超高速更新)
-./nekocode session-update <session_id>                 # 変更ファイルのみ更新
-./nekocode session-update <session_id> --verbose       # 詳細JSON出力
-./nekocode session-update <session_id> --dry-run       # 変更プレビューのみ
+cd nekocode-workspace
+cargo test --workspace
+cargo check --workspace --all-targets
+cd ..
+python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
 
-**🚀 インクリメンタル解析性能実証結果 (nyashプロジェクト - 85ファイル):**
-- **初回解析**: 267ms (ベースライン)
-- **インクリメンタル更新**: 23-49ms (**918-1956倍高速化！**)
-- **変更検出**: 1ms以下でファイル変更を検出
-- **実証済み**: 実際のコードベースでテスト完了
+The workspace still contains recoverable legacy crates, so warning-free legacy
+builds are not part of the current contract. Rust-first fixtures and smoke
+tests are the promotion gate for future semantic backends.
 
-### ASTクエリ
+### Repository boundaries
+
+The canonical implementation and migration boundary are documented in
+[`docs/RUST_FIRST_MVP.md`](docs/RUST_FIRST_MVP.md) and
+[`docs/REPOSITORY_LAYOUT.md`](docs/REPOSITORY_LAYOUT.md). The root Cargo
+package, old five-binary commands, multi-language analyzers, refactoring,
+watch, impact, and legacy MCP paths are retained for recovery only. They are
+not advertised as current features.
+
+`archived/README_jp.md` is a historical document and is intentionally not the
+current Japanese specification.
+
+## 日本語
+
+### 現在の位置づけ
+
+NekoCodeは、RustのCargo workspaceを対象に、Cargo metadata・Git差分・
+必要に応じた`cargo check`診断を読み取り、AI/MCP向けの根拠付きJSONへ
+まとめる読み取り専用のコンテキスト層です。
+
+Rustの意味解析を独自に再実装するものではありません。正しさの一次情報は
+Cargo、`rustc`、`cargo check`、rust-analyzer、Gitです。NekoCode固有の役割は、
+それらの結果を再現可能なsnapshot、差分、診断delta、予算制限付きの形で返すことです。
+
+現行MVPの契約は次の通りです。
+
+- 対象はRust/Cargo workspaceを優先する。
+- 正規CLIは`index`と`context`の2コマンド。
+- JSON schemaはv3で、provenance・evidence・制限情報を含む。
+- ソース編集、隠しDB、自動commit/pushは行わない。
+- dead code・参照・型・breaking changeの独自精度や、未測定の精度パーセントは主張しない。
+- 他言語と旧5バイナリ、旧refactor/watch/impact/MCPはlegacyまたはexperimentalであり、現行契約外。
+
+### 最短手順
+
 ```bash
-# 構文木の詳細分析
-./nekocode session-command <id> ast-stats
-./nekocode session-command <id> scope-analysis 42
+cd nekocode-workspace
+
+# Cargo workspaceの構造を取得
+cargo run -q -p nekocode -- index .
+
+# Git差分とcompiler診断を含む、予算制限付きコンテキスト
+cargo run -q -p nekocode -- context . \
+  --compare-ref HEAD~1 --budget 8000 --diagnostics
+
+# 明示的なbaselineを保存し、後でdiagnostic deltaを比較
+cargo run -q -p nekocode -- index . \
+  --snapshot /tmp/nekocode-baseline.json --diagnostics --all-features
+cargo run -q -p nekocode -- context . \
+  --baseline /tmp/nekocode-baseline.json --diagnostics
 ```
 
-### Claude Code統合
+`compare_ref`はGitの変更範囲を指定するだけで、過去commitのcompiler結果を
+再現しません。diagnostic deltaは、保存したbaselineと現在のtoolchain・features・
+targetsが互換する場合だけ比較し、`added`・`resolved`・`persisting`を返します。
+予算超過時は省略数と`limitations`をJSONへ残します。source excerptはGit hunk周辺の
+表示補助であり、symbol/reference解決ではありません。
+
+### MCP・Skill・Pluginの境界
+
+Rust-first MCP gatewayは、CLIと同じ`index`/`context`だけをstdioで公開します。
+
 ```bash
-# Claude Code用MCPサーバー
-python mcp-nekocode-server/mcp_server_real.py
+python3 mcp-nekocode-server/mcp_server_rust_first.py
 ```
 
-## 📊 性能比較
+MCPは実行経路、SkillやPluginは呼び出し方・提示方法を定義するworkflow層です。
+どれもRustの意味解析の代替にはしません。絶対パスは応答からredactされ、shellを
+経由せずにCLIを呼び出します。詳細は
+[`mcp-nekocode-server/README_RUST_FIRST.md`](mcp-nekocode-server/README_RUST_FIRST.md)
+を参照してください。
 
-### 初回解析性能
-| パーサー | 時間 (TypeScript 68ファイル) | PEGTL比 |
-|---------|----------------------------|---------|
-| 🦀 **NekoCode (Tree-sitter)** | **1.2秒** | **16.38倍高速** |
-| C++ PEGTL | 19.5秒 | 1.00倍 |
-| Rust PEST | 60.7秒 | 0.32倍 |
+### 開発・テスト
 
-### ⚡ インクリメンタル解析性能 (実プロダクション結果)
-| 操作 | Rustプロジェクト (85ファイル) | 全解析比 |
-|------|------------------------------|----------|
-| **初回解析** | 267ms | 1.00倍ベースライン |
-| **🚀 インクリメンタル更新** | **23-49ms** | **918-1956倍高速！** |
-| **変更検出** | < 1ms | **45000倍高速！** |
-| **ドライラン** | < 1ms | 瞬時フィードバック |
+```bash
+cd nekocode-workspace
+cargo test --workspace
+cargo check --workspace --all-targets
+cd ..
+python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
+```
 
-*nyashプログラミング言語プロジェクトでのテスト結果*
+legacy crate由来のwarningが残るため、workspace全体のwarning-freeは現行契約では
+ありません。Rust fixture、schema、CLI/MCP smoke testを、今後のsemantic backendを
+昇格させるゲートにします。
 
-## 👤 作者・サポート
+### 詳細
 
-**作者: CharmPic** 🐱
-
-- 🐙 **GitHub**: [@moe-charm](https://github.com/moe-charm)
-- 🐦 **Twitter**: [@CharmNexusCore](https://x.com/CharmNexusCore)  
-- ☕ **サポート**: [Buy me a coffee](https://buymeacoffee.com/moecharmde6)
-
-*NekoCodeがあなたの開発を助けているなら、プロジェクトのサポートをご検討ください！*
-
-</details>
-
----
-
-**Made with 🦀 Rust and ❤️ for developers worldwide**
+- [Rust-first MVP契約](docs/RUST_FIRST_MVP.md)
+- [Repository layoutとlegacy境界](docs/REPOSITORY_LAYOUT.md)
+- [Rust-first MCP gateway](mcp-nekocode-server/README_RUST_FIRST.md)
+- [Canonical workspace README](nekocode-workspace/README.md)
