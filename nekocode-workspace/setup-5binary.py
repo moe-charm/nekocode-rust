@@ -141,13 +141,36 @@ class NekoCode5BinaryMCP:
         """nekocodeを呼び出し"""
         cmd = [self.binaries['nekocode']]
         
-        if tool == 'analyze':
-            cmd.extend(['analyze', args.get('path', '.')])
-            if args.get('stats_only'):
-                cmd.append('--stats-only')
-        elif tool == 'session_create':
+        if tool == 'session_create':
             cmd.extend(['session-create', args.get('path', '.')])
-        # ... 他のツールも同様
+        elif tool == 'session_list':
+            cmd.extend(['session-list'])
+            if args.get('detailed'):
+                cmd.append('--detailed')
+        elif tool == 'session_info':
+            cmd.extend(['session-info', args['session_id']])
+        elif tool == 'ast_stats':
+            cmd.append('ast-stats')
+            if sid := args.get('session_id'):
+                cmd.extend(['--session-id', sid])
+        elif tool == 'ast_dump':
+            cmd.extend(['ast-dump', args['session_id']])
+            if 'format' in args:
+                cmd.extend(['--format', args['format']])
+        elif tool == 'ast_query':
+            cmd.extend(['ast-query', args['session_id'], args['path']])
+        elif tool == 'analyze':
+            # 非推奨: セッション作成→ast-statsへルーティング
+            create = subprocess.run([self.binaries['nekocode'], 'session-create', args.get('path', '.')], capture_output=True, text=True)
+            sid = None
+            for line in (create.stdout or '').split('\n'):
+                if 'Created session:' in line:
+                    sid = line.split(':', 1)[1].strip()
+                    break
+            if not sid:
+                return {'content': [{'type': 'text', 'text': create.stdout or create.stderr}]}
+            result = subprocess.run([self.binaries['nekocode'], 'ast-stats', sid], capture_output=True, text=True)
+            return {'content': [{'type': 'text', 'text': result.stdout}]}
         
         result = subprocess.run(cmd, capture_output=True, text=True)
         return {'content': [{'type': 'text', 'text': result.stdout}]}
@@ -171,8 +194,12 @@ class NekoCode5BinaryMCP:
         return {
             'tools': [
                 # nekocode tools
-                {'name': 'analyze', 'description': 'Analyze code'},
                 {'name': 'session_create', 'description': 'Create session'},
+                {'name': 'session_list', 'description': 'List sessions'},
+                {'name': 'session_info', 'description': 'Session info'},
+                {'name': 'ast_stats', 'description': 'AST statistics'},
+                {'name': 'ast_dump', 'description': 'AST dump'},
+                {'name': 'ast_query', 'description': 'AST query'},
                 # nekorefactor tools
                 {'name': 'replace_preview', 'description': 'Preview replacement'},
                 {'name': 'create_file', 'description': 'Create new file'},
