@@ -5,7 +5,7 @@
 [English](#english) · [日本語](#日本語)
 
 NekoCode is a read-only context layer for Rust workspaces. It collects
-Cargo metadata, Git changes, and optional `cargo check` diagnostics, then
+Cargo metadata, Git changes, and optional `cargo check`/Clippy diagnostics, then
 returns bounded, provenance-aware JSON for AI/MCP clients or a deterministic
 human-readable summary of the same evidence.
 
@@ -105,6 +105,22 @@ not inflate the delta. External baseline paths are redacted in public output.
 `--all-features` is accepted by `context` only together with `--diagnostics`;
 otherwise the CLI returns a configuration error instead of ignoring it.
 
+Clippy is an explicit alternative producer rather than a cargo-check alias:
+
+```bash
+# Optional Clippy snapshot (trusted workspace; default lints are observed as-is)
+cargo run -q -p nekocode -- snapshot . --analysis clippy
+
+# Optional Clippy diagnostics in a bounded context
+cargo run -q -p nekocode -- context . \
+  --diagnostics --diagnostic-producer clippy --budget 8000
+```
+
+Diagnostic JSON records `producer`, `profile`, and `producer_version`. Exact
+deltas are computed only within the same producer/profile and compatible
+toolchain/feature/target conditions; a cargo-check baseline is never silently
+compared with Clippy.
+
 ### What the JSON contains
 
 `snapshot` records Cargo workspace/package/target information, input file
@@ -177,7 +193,7 @@ archive branch named in the retirement decision.
 ### 現在の位置づけ
 
 NekoCodeは、RustのCargo workspaceを対象に、Cargo metadata・Git差分・
-必要に応じた`cargo check`診断を読み取り、AI/MCP向けの根拠付きJSONまたは
+必要に応じた`cargo check`/Clippy診断を読み取り、AI/MCP向けの根拠付きJSONまたは
 同じ根拠の人向けサマリーへまとめる読み取り専用のコンテキスト層です。
 
 Rustの意味解析を独自に再実装するものではありません。正しさの一次情報は
@@ -255,6 +271,21 @@ workspaceでのみ明示的に実行し、応答の`execution_policy`にoffline�
 出力上限到達時は`evidence: incomplete`とし、`tool-confirmed`にはしません。説明用の
 `limitations`が存在するだけではevidenceを格下げしません。未追跡fileをmarkerだけで
 返す既定modeも、Git観測が省略なく完了すれば`tool-confirmed`です。
+
+Clippyはcargo-checkとは別の明示producerです。必要なときだけ次のように指定します。
+
+```bash
+# default lintをそのまま観測するClippy snapshot
+cargo run -q -p nekocode -- snapshot . --analysis clippy
+
+# Clippy診断を含むcontext
+cargo run -q -p nekocode -- context . \
+  --diagnostics --diagnostic-producer clippy --budget 8000
+```
+
+診断JSONには`producer`・`profile`・`producer_version`を記録します。
+deltaは同じproducer/profileかつtoolchain・feature・target条件が互換の場合だけ
+exact multisetとして計算し、cargo-check baselineとClippyを黙って比較しません。
 
 ### MCP・Skill・Pluginの境界
 

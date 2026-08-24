@@ -9,10 +9,11 @@ pub mod rust_context;
 pub use error::{NekocodeError, Result};
 pub use rust_context::{
     build_context, build_rust_context, build_rust_context_with_config,
-    build_rust_context_with_options, build_rust_snapshot, build_rust_snapshot_with_mode,
-    build_snapshot, format_context_summary, index_rust_workspace, read_rust_snapshot,
-    sanitize_context_for_output, sanitize_snapshot_for_output, write_rust_snapshot, AnalysisMode,
-    ArtifactStatus, BudgetReport, ChangedRustFile, ComparisonStatus, ContextRequest, ContextV1,
+    build_rust_context_with_options, build_rust_snapshot, build_rust_snapshot_with_analysis,
+    build_rust_snapshot_with_mode, build_snapshot, format_context_summary, index_rust_workspace,
+    read_rust_snapshot, sanitize_context_for_output, sanitize_snapshot_for_output,
+    write_rust_snapshot, AnalysisMode, ArtifactStatus, BudgetReport, ChangedRustFile,
+    ComparisonStatus, ContextRequest, ContextV1, DiagnosticProducer, DiagnosticProfile,
     EvidenceLevel, ExecutionPolicy, GitChangeScope, LineCountStatus, Omission,
     RustChangeScopeSummary, RustContextOptions, RustContextPack, RustContextSnapshot,
     RustDiagnostic, RustDiagnosticDelta, RustDiagnosticRun, RustDiagnosticSpan, RustDiffHunk,

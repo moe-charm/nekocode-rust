@@ -311,6 +311,72 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertIn("--baseline", argv)
         self.assertIn("<path>", argv)
 
+    def test_clippy_producer_is_explicitly_forwarded(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, sys\n"
+                "print(json.dumps({'argv': sys.argv[1:]}))\n",
+                encoding="utf-8",
+            )
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(workspace_dir=temp / "missing", binary_path=fake_cli)
+            result = server.handle_tool_call(
+                {
+                    "name": "nekocode_snapshot",
+                    "arguments": {"path": ".", "analysis": "clippy"},
+                }
+            )
+            context_result = server.handle_tool_call(
+                {
+                    "name": "nekocode_context",
+                    "arguments": {
+                        "path": ".",
+                        "diagnostics": True,
+                        "diagnostic_producer": "clippy",
+                    },
+                }
+            )
+
+        self.assertFalse(result["isError"])
+        self.assertEqual(
+            result["structuredContent"]["argv"][:4],
+            ["snapshot", ".", "--analysis", "clippy"],
+        )
+        self.assertFalse(context_result["isError"])
+        context_argv = context_result["structuredContent"]["argv"]
+        self.assertIn("--diagnostics", context_argv)
+        self.assertIn("--diagnostic-producer", context_argv)
+        self.assertIn("clippy", context_argv)
+
+    def test_clippy_producer_requires_diagnostics(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            fake_cli = temp / "nekocode"
+            fake_cli.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            fake_cli.chmod(0o755)
+            server = RustFirstMCPServer(
+                workspace_dir=temp / "missing", binary_path=fake_cli
+            )
+            result = server.handle_tool_call(
+                {
+                    "name": "nekocode_context",
+                    "arguments": {
+                        "path": ".",
+                        "diagnostic_producer": "clippy",
+                    },
+                }
+            )
+
+        self.assertTrue(result["isError"])
+        self.assertIn("requires", result["content"][0]["text"])
+
     def test_untracked_content_requires_working_tree(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
 

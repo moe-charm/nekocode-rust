@@ -66,6 +66,10 @@ workflow and stop conditions.
   boundaries, and explicit output-limited evidence;
 - CLI/MCP bounded-budget parity coverage added and passing for the same
   serialized outcome, omission ledger, and `diff.change_scopes` aggregates;
+- explicit Clippy producer/profile/version markers with separate execution
+  policy and same-producer comparability;
+- Clippy clean/warning/compiler-error/tool-failure/profile-mismatch fixtures,
+  tiny-budget marker retention, CLI coverage, and MCP forwarding validation;
 - read-only Nyash Change Scope probe: even with the patch and all 41 file
   details omitted, the summary retained 16 unstaged files (`+288/-1663`) and
   25 marker-only untracked files; the target Git status hash remained
@@ -82,9 +86,8 @@ Recovery points:
 
 ## Next implementation focus
 
-1. Implement and verify the documented Clippy producer/profile boundary,
-   including clean/warning/compiler-error/tool-failure/profile fixtures and
-   CLI/MCP forwarding; keep `cargo check` as the default diagnostic mode.
+1. Run a read-only live Clippy probe on the permitted Nyash workspace and
+   perform the final schema/parity review before release tagging.
 2. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.

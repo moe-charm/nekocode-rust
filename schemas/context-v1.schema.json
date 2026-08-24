@@ -49,7 +49,7 @@
         "target_directory"
       ],
       "properties": {
-        "mode": { "enum": ["metadata_only", "cargo_check"] },
+        "mode": { "enum": ["metadata_only", "cargo_check", "clippy"] },
         "workspace_trust": { "enum": ["not_required", "required"] },
         "cargo_registry_network": { "enum": ["not_used", "offline"] },
         "process_network_isolation": {
@@ -88,7 +88,23 @@
       "additionalProperties": false
     },
     "source_excerpts": { "type": "array", "items": { "type": "object" } },
-    "diagnostics": { "type": ["object", "null"] },
+    "diagnostics": {
+      "type": ["object", "null"],
+      "properties": {
+        "producer": { "enum": ["cargo_check", "clippy"] },
+        "profile": { "enum": ["cargo_check_v1", "clippy_default_v1"] },
+        "producer_version": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "diagnostic_producer": {
+      "type": ["string", "null"],
+      "enum": ["cargo_check", "clippy", null]
+    },
+    "diagnostic_profile": {
+      "type": ["string", "null"],
+      "enum": ["cargo_check_v1", "clippy_default_v1", null]
+    },
     "diagnostic_delta": { "type": ["object", "null"] },
     "budget": { "type": "object" },
     "omissions": { "type": "array", "items": { "type": "object" } },

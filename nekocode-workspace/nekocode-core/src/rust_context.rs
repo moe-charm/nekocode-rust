@@ -65,11 +65,73 @@ pub enum EvidenceLevel {
 pub enum AnalysisMode {
     MetadataOnly,
     CargoCheck,
+    Clippy,
 }
 
 impl Default for AnalysisMode {
     fn default() -> Self {
         Self::MetadataOnly
+    }
+}
+
+/// The official diagnostic producer used for one explicit observation.
+///
+/// Cargo check remains the default. Clippy is opt-in and is never folded into
+/// a cargo-check observation or compared with one as if they were equivalent.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticProducer {
+    CargoCheck,
+    Clippy,
+}
+
+impl Default for DiagnosticProducer {
+    fn default() -> Self {
+        Self::CargoCheck
+    }
+}
+
+/// Command profile marker required for exact diagnostic comparability.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticProfile {
+    CargoCheckV1,
+    ClippyDefaultV1,
+}
+
+impl Default for DiagnosticProfile {
+    fn default() -> Self {
+        Self::CargoCheckV1
+    }
+}
+
+impl DiagnosticProducer {
+    fn profile(self) -> DiagnosticProfile {
+        match self {
+            Self::CargoCheck => DiagnosticProfile::CargoCheckV1,
+            Self::Clippy => DiagnosticProfile::ClippyDefaultV1,
+        }
+    }
+
+    fn analysis_mode(self) -> AnalysisMode {
+        match self {
+            Self::CargoCheck => AnalysisMode::CargoCheck,
+            Self::Clippy => AnalysisMode::Clippy,
+        }
+    }
+
+    fn command_name(self) -> &'static str {
+        match self {
+            Self::CargoCheck => "cargo check",
+            Self::Clippy => "cargo clippy",
+        }
+    }
+
+    fn display_name(self) -> &'static str {
+        match self {
+            Self::CargoCheck => "cargo_check",
+            Self::Clippy => "clippy",
+        }
     }
 }
 
@@ -101,9 +163,9 @@ fn metadata_execution_policy() -> ExecutionPolicy {
     }
 }
 
-fn cargo_execution_policy() -> ExecutionPolicy {
+fn diagnostic_execution_policy(producer: DiagnosticProducer) -> ExecutionPolicy {
     ExecutionPolicy {
-        mode: AnalysisMode::CargoCheck,
+        mode: producer.analysis_mode(),
         workspace_trust: "required".to_string(),
         cargo_registry_network: "offline".to_string(),
         process_network_isolation: "not_enforced".to_string(),
@@ -378,9 +440,15 @@ pub struct RustDiagnosticSpan {
     pub label: Option<String>,
 }
 
-/// Result of one `cargo check` invocation, including failed checks.
+/// Result of one Cargo diagnostic invocation, including failed checks.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RustDiagnosticRun {
+    #[serde(default)]
+    pub producer: DiagnosticProducer,
+    #[serde(default)]
+    pub profile: DiagnosticProfile,
+    #[serde(default)]
+    pub producer_version: Option<String>,
     pub command: String,
     pub status: String,
     pub messages: Vec<RustDiagnostic>,
@@ -436,6 +504,12 @@ pub struct RustContextPack {
     pub diff: Option<RustDiffSummary>,
     pub source_excerpts: Vec<RustSourceExcerpt>,
     pub diagnostics: Option<RustDiagnosticRun>,
+    /// Requested producer/profile remain visible if a budget removes the
+    /// diagnostic body itself.
+    #[serde(default)]
+    pub diagnostic_producer: Option<DiagnosticProducer>,
+    #[serde(default)]
+    pub diagnostic_profile: Option<DiagnosticProfile>,
     pub baseline: Option<PathBuf>,
     pub diagnostic_delta: Option<RustDiagnosticDelta>,
     #[serde(default)]
@@ -657,9 +731,11 @@ fn format_diagnostics(output: &mut String, pack: &ContextV1) {
             .count();
         writeln!(
             output,
-            "Diagnostics: {}; producer_status={}; {} ({} errors, {} warnings; {} raw messages)",
+            "Diagnostics: {}; producer_status={}; producer={}; profile={}; {} ({} errors, {} warnings; {} raw messages)",
             artifact_status_name(diagnostic_status(run)),
             run.status,
+            run.producer.display_name(),
+            diagnostic_profile_name(run.profile),
             item_count(
                 unique.len(),
                 "unique primary diagnostic",
@@ -858,6 +934,14 @@ fn analysis_mode_name(mode: AnalysisMode) -> &'static str {
     match mode {
         AnalysisMode::MetadataOnly => "metadata_only",
         AnalysisMode::CargoCheck => "cargo_check",
+        AnalysisMode::Clippy => "clippy",
+    }
+}
+
+fn diagnostic_profile_name(profile: DiagnosticProfile) -> &'static str {
+    match profile {
+        DiagnosticProfile::CargoCheckV1 => "cargo_check_v1",
+        DiagnosticProfile::ClippyDefaultV1 => "clippy_default_v1",
     }
 }
 
@@ -876,6 +960,7 @@ pub struct RustContextOptions {
     pub compare_ref: Option<String>,
     pub budget_tokens: usize,
     pub include_diagnostics: bool,
+    pub diagnostic_producer: DiagnosticProducer,
     pub include_working_tree: bool,
     pub include_untracked_content: bool,
     pub all_features: bool,
@@ -891,6 +976,7 @@ impl RustContextOptions {
             compare_ref,
             budget_tokens,
             include_diagnostics: false,
+            diagnostic_producer: DiagnosticProducer::CargoCheck,
             include_working_tree: false,
             include_untracked_content: false,
             all_features: false,
@@ -925,6 +1011,8 @@ pub struct ContextRequest {
     pub compare_ref: Option<String>,
     pub budget: usize,
     pub diagnostics: bool,
+    #[serde(default)]
+    pub diagnostic_producer: DiagnosticProducer,
     pub working_tree: bool,
     pub include_untracked_content: bool,
     pub all_features: bool,
@@ -939,6 +1027,7 @@ impl ContextRequest {
             compare_ref: None,
             budget,
             diagnostics: false,
+            diagnostic_producer: DiagnosticProducer::CargoCheck,
             working_tree: false,
             include_untracked_content: false,
             all_features: false,
@@ -954,17 +1043,14 @@ pub type ContextV1 = RustContextPack;
 
 /// Build the shared snapshot response for a request.
 pub fn build_snapshot(request: &SnapshotRequest) -> Result<SnapshotV1> {
-    build_rust_snapshot_with_mode(
-        &request.path,
-        matches!(request.analysis, AnalysisMode::CargoCheck),
-        request.all_features,
-    )
+    build_rust_snapshot_with_analysis(&request.path, request.analysis, request.all_features)
 }
 
 /// Build the shared context response for a request.
 pub fn build_context(request: &ContextRequest) -> Result<ContextV1> {
     let mut options = RustContextOptions::new(request.compare_ref.clone(), request.budget);
     options.include_diagnostics = request.diagnostics;
+    options.diagnostic_producer = request.diagnostic_producer;
     options.include_working_tree = request.working_tree;
     options.include_untracked_content = request.include_untracked_content;
     options.all_features = request.all_features;
@@ -988,31 +1074,47 @@ pub fn build_rust_snapshot_with_mode(
     include_diagnostics: bool,
     all_features: bool,
 ) -> Result<RustContextSnapshot> {
-    let workspace = index_rust_workspace(path)?;
-    let diagnostics = if include_diagnostics {
-        Some(run_cargo_check_with_options(&workspace.root, all_features)?)
-    } else {
-        None
-    };
-    let status = diagnostics
-        .as_ref()
-        .map_or(ArtifactStatus::CompletedClean, diagnostic_status);
-    let analysis_mode = if include_diagnostics {
+    let analysis = if include_diagnostics {
         AnalysisMode::CargoCheck
     } else {
         AnalysisMode::MetadataOnly
     };
-    let mut limitations = if include_diagnostics {
-        vec![
-            "cargo-check may execute trusted workspace build scripts and procedural macros."
-                .to_string(),
-        ]
+    build_rust_snapshot_with_analysis(path, analysis, all_features)
+}
+
+/// Build a snapshot using metadata, cargo check, or the explicit Clippy
+/// producer. The latter two modes execute trusted workspace code.
+pub fn build_rust_snapshot_with_analysis(
+    path: impl AsRef<Path>,
+    analysis: AnalysisMode,
+    all_features: bool,
+) -> Result<RustContextSnapshot> {
+    let workspace = index_rust_workspace(path)?;
+    let producer = match analysis {
+        AnalysisMode::MetadataOnly => None,
+        AnalysisMode::CargoCheck => Some(DiagnosticProducer::CargoCheck),
+        AnalysisMode::Clippy => Some(DiagnosticProducer::Clippy),
+    };
+    let diagnostics = producer
+        .map(|producer| run_diagnostic_with_options(&workspace.root, producer, all_features))
+        .transpose()?;
+    let status = diagnostics
+        .as_ref()
+        .map_or(ArtifactStatus::CompletedClean, diagnostic_status);
+    let mut limitations = if let Some(producer) = producer {
+        vec![format!(
+            "{} may execute trusted workspace build scripts and procedural macros.",
+            producer.command_name()
+        )]
     } else {
         vec!["Compiler diagnostics were not requested.".to_string()]
     };
-    if include_diagnostics && !artifact_status_is_complete(status) {
+    if producer.is_some() && !artifact_status_is_complete(status) {
         limitations.push(format!(
-            "cargo check did not produce a complete diagnostic observation (status: {}).",
+            "{} did not produce a complete diagnostic observation (status: {}).",
+            producer
+                .map(DiagnosticProducer::command_name)
+                .unwrap_or("compiler diagnostics"),
             artifact_status_name(status)
         ));
     }
@@ -1020,14 +1122,11 @@ pub fn build_rust_snapshot_with_mode(
         contract_version: SNAPSHOT_CONTRACT_VERSION.to_string(),
         artifact_kind: "snapshot".to_string(),
         status,
-        analysis_mode,
+        analysis_mode: analysis,
         schema_version: SCHEMA_VERSION,
         evidence: evidence_for_artifact_status(status),
-        execution_policy: if include_diagnostics {
-            cargo_execution_policy()
-        } else {
-            metadata_execution_policy()
-        },
+        execution_policy: producer
+            .map_or_else(metadata_execution_policy, diagnostic_execution_policy),
         generated_at: chrono::Utc::now().to_rfc3339(),
         workspace,
         diagnostics,
@@ -1318,6 +1417,12 @@ pub fn build_rust_context_with_config(
             "--all-features requires --diagnostics".to_string(),
         ));
     }
+    if options.diagnostic_producer != DiagnosticProducer::CargoCheck && !options.include_diagnostics
+    {
+        return Err(NekocodeError::Config(
+            "--diagnostic-producer requires --diagnostics".to_string(),
+        ));
+    }
 
     let workspace = index_rust_workspace(path)?;
     let wants_git =
@@ -1341,8 +1446,9 @@ pub fn build_rust_context_with_config(
     let source_excerpts =
         build_source_excerpts(&workspace.root, &changed_files, options.excerpt_lines);
     let diagnostics = if options.include_diagnostics {
-        Some(run_cargo_check_with_options(
+        Some(run_diagnostic_with_options(
             &workspace.root,
+            options.diagnostic_producer,
             options.all_features,
         )?)
     } else {
@@ -1388,7 +1494,7 @@ pub fn build_rust_context_with_config(
                     let baseline_run = baseline.diagnostics.as_ref();
                     if baseline_run.is_none() {
                         extra_limitations.push(
-                            "Diagnostic baseline does not contain a saved cargo check run; comparison status is baseline_missing."
+                            "Diagnostic baseline does not contain a saved diagnostic run; comparison status is baseline_missing."
                                 .to_string(),
                         );
                     }
@@ -1418,8 +1524,9 @@ pub fn build_rust_context_with_config(
         .filter(|run| !diagnostic_run_is_complete(run))
     {
         extra_limitations.push(format!(
-            "cargo check did not produce a complete diagnostic observation (status: {}); diagnostic delta is incomplete.",
-            run.status
+            "{} did not produce a complete diagnostic observation (status: {}); diagnostic delta is incomplete.",
+            run.producer.command_name(),
+            run.status,
         ));
     }
 
@@ -1435,7 +1542,7 @@ pub fn build_rust_context_with_config(
         schema_version: SCHEMA_VERSION,
         evidence: EvidenceLevel::ToolConfirmed,
         execution_policy: if options.include_diagnostics {
-            cargo_execution_policy()
+            diagnostic_execution_policy(options.diagnostic_producer)
         } else {
             metadata_execution_policy()
         },
@@ -1446,6 +1553,12 @@ pub fn build_rust_context_with_config(
         diff,
         source_excerpts,
         diagnostics,
+        diagnostic_producer: options
+            .include_diagnostics
+            .then_some(options.diagnostic_producer),
+        diagnostic_profile: options
+            .include_diagnostics
+            .then_some(options.diagnostic_producer.profile()),
         baseline: options.baseline.clone(),
         diagnostic_delta,
         budget: BudgetReport {
@@ -1753,6 +1866,18 @@ fn build_source_excerpts(
 }
 
 fn diagnostic_fingerprint(diagnostic: &RustDiagnostic) -> String {
+    diagnostic_fingerprint_with_context(
+        diagnostic,
+        DiagnosticProducer::CargoCheck,
+        DiagnosticProfile::CargoCheckV1,
+    )
+}
+
+fn diagnostic_fingerprint_with_context(
+    diagnostic: &RustDiagnostic,
+    producer: DiagnosticProducer,
+    profile: DiagnosticProfile,
+) -> String {
     let file = diagnostic
         .file
         .as_ref()
@@ -1764,7 +1889,9 @@ fn diagnostic_fingerprint(diagnostic: &RustDiagnostic) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     let identity = format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
+        producer.display_name(),
+        diagnostic_profile_name(profile),
         diagnostic.code.as_deref().unwrap_or(&diagnostic.level),
         file,
         diagnostic.line.unwrap_or_default(),
@@ -1786,13 +1913,30 @@ fn is_delta_diagnostic(diagnostic: &RustDiagnostic) -> bool {
     matches!(diagnostic.level.as_str(), "error" | "warning")
 }
 
+#[cfg(test)]
 fn diagnostic_multimap(diagnostics: &[RustDiagnostic]) -> BTreeMap<String, Vec<RustDiagnostic>> {
+    diagnostic_multimap_with_context(
+        diagnostics,
+        DiagnosticProducer::CargoCheck,
+        DiagnosticProfile::CargoCheckV1,
+    )
+}
+
+fn diagnostic_multimap_with_context(
+    diagnostics: &[RustDiagnostic],
+    producer: DiagnosticProducer,
+    profile: DiagnosticProfile,
+) -> BTreeMap<String, Vec<RustDiagnostic>> {
     let mut grouped = BTreeMap::<String, Vec<RustDiagnostic>>::new();
     for diagnostic in diagnostics
         .iter()
         .filter(|diagnostic| is_delta_diagnostic(diagnostic))
         .cloned()
-        .map(diagnostic_with_fingerprint)
+        .map(|mut diagnostic| {
+            diagnostic.fingerprint =
+                diagnostic_fingerprint_with_context(&diagnostic, producer, profile);
+            diagnostic
+        })
     {
         grouped
             .entry(diagnostic.fingerprint.clone())
@@ -1809,6 +1953,7 @@ struct DiagnosticChanges {
     persisting: Vec<RustDiagnostic>,
 }
 
+#[cfg(test)]
 fn compare_diagnostic_multisets(
     baseline: &[RustDiagnostic],
     current: &[RustDiagnostic],
@@ -1817,6 +1962,29 @@ fn compare_diagnostic_multisets(
     let mut baseline = diagnostic_multimap(baseline);
     let current = diagnostic_multimap(current);
 
+    compare_diagnostic_groups(&mut changes, &mut baseline, current);
+    changes
+}
+
+fn compare_diagnostic_multisets_for_runs(
+    baseline: &RustDiagnosticRun,
+    current: &RustDiagnosticRun,
+) -> DiagnosticChanges {
+    let mut changes = DiagnosticChanges::default();
+    let mut baseline =
+        diagnostic_multimap_with_context(&baseline.messages, baseline.producer, baseline.profile);
+    let current =
+        diagnostic_multimap_with_context(&current.messages, current.producer, current.profile);
+
+    compare_diagnostic_groups(&mut changes, &mut baseline, current);
+    changes
+}
+
+fn compare_diagnostic_groups(
+    changes: &mut DiagnosticChanges,
+    baseline: &mut BTreeMap<String, Vec<RustDiagnostic>>,
+    current: BTreeMap<String, Vec<RustDiagnostic>>,
+) {
     for (fingerprint, current_group) in current {
         let baseline_group = baseline.remove(&fingerprint).unwrap_or_default();
         let persisting_count = baseline_group.len().min(current_group.len());
@@ -1830,11 +1998,9 @@ fn compare_diagnostic_multisets(
             .resolved
             .extend(baseline_group.into_iter().skip(persisting_count));
     }
-    for baseline_group in baseline.into_values() {
+    for baseline_group in std::mem::take(baseline).into_values() {
         changes.resolved.extend(baseline_group);
     }
-
-    changes
 }
 
 fn build_diagnostic_delta(
@@ -1881,6 +2047,30 @@ fn build_diagnostic_delta(
             .limitations
             .push("baseline and current feature coverage differ".to_string());
     }
+    if baseline_run.producer != current_run.producer {
+        delta.compatible = false;
+        delta.limitations.push(
+            "baseline and current diagnostic producers differ; cross-producer deltas are not supported"
+                .to_string(),
+        );
+    }
+    if baseline_run.profile != current_run.profile {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline and current diagnostic command profiles differ".to_string());
+    }
+    if baseline_run.producer_version.is_none() || current_run.producer_version.is_none() {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("diagnostic producer version is unavailable".to_string());
+    } else if baseline_run.producer_version != current_run.producer_version {
+        delta.compatible = false;
+        delta
+            .limitations
+            .push("baseline and current diagnostic producer versions differ".to_string());
+    }
     if baseline_run.provenance.tool != current_run.provenance.tool
         || baseline_run.provenance.version != current_run.provenance.version
     {
@@ -1907,7 +2097,7 @@ fn build_diagnostic_delta(
         return delta;
     }
 
-    let changes = compare_diagnostic_multisets(&baseline_run.messages, &current_run.messages);
+    let changes = compare_diagnostic_multisets_for_runs(baseline_run, current_run);
     delta.added = changes.added;
     delta.resolved = changes.resolved;
     delta.persisting = changes.persisting;
@@ -2123,7 +2313,11 @@ fn detect_toolchain() -> RustToolchainInfo {
 }
 
 fn command_version(command: &str) -> Option<String> {
-    let output = Command::new(command).arg("--version").output().ok()?;
+    command_version_with_args(command, &["--version"])
+}
+
+fn command_version_with_args(command: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(command).args(args).output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -2131,6 +2325,13 @@ fn command_version(command: &str) -> Option<String> {
         .lines()
         .next()
         .map(str::to_string)
+}
+
+fn diagnostic_producer_version(producer: DiagnosticProducer) -> Option<String> {
+    match producer {
+        DiagnosticProducer::CargoCheck => command_version("cargo"),
+        DiagnosticProducer::Clippy => command_version_with_args("cargo", &["clippy", "--version"]),
+    }
 }
 
 #[cfg(test)]
@@ -2999,9 +3200,17 @@ fn configure_cargo_environment(command: &mut Command, target_dir: &Path) {
         .env("CARGO_TARGET_DIR", target_dir);
 }
 
-fn run_cargo_check_with_options(root: &Path, all_features: bool) -> Result<RustDiagnosticRun> {
+fn run_diagnostic_with_options(
+    root: &Path,
+    producer: DiagnosticProducer,
+    all_features: bool,
+) -> Result<RustDiagnosticRun> {
+    let subcommand = match producer {
+        DiagnosticProducer::CargoCheck => "check",
+        DiagnosticProducer::Clippy => "clippy",
+    };
     let mut args = vec![
-        "check".to_string(),
+        subcommand.to_string(),
         "--workspace".to_string(),
         "--all-targets".to_string(),
         "--offline".to_string(),
@@ -3044,6 +3253,9 @@ fn run_cargo_check_with_options(root: &Path, all_features: bool) -> Result<RustD
     }
 
     Ok(RustDiagnosticRun {
+        producer,
+        profile: producer.profile(),
+        producer_version: diagnostic_producer_version(producer),
         command: command.clone(),
         status: status.to_string(),
         messages: parse_cargo_diagnostics_with_root(
@@ -3054,7 +3266,7 @@ fn run_cargo_check_with_options(root: &Path, all_features: bool) -> Result<RustD
         all_targets: true,
         all_features,
         provenance: ToolProvenance {
-            tool: "cargo check".to_string(),
+            tool: producer.command_name().to_string(),
             command,
             cwd: root.to_path_buf(),
             version: command_version("cargo"),
@@ -3470,7 +3682,7 @@ mod tests {
 
     #[test]
     fn cargo_policy_reports_unenforced_network_isolation() {
-        let policy = cargo_execution_policy();
+        let policy = diagnostic_execution_policy(DiagnosticProducer::CargoCheck);
         assert_eq!(policy.mode, AnalysisMode::CargoCheck);
         assert_eq!(policy.workspace_trust, "required");
         assert_eq!(policy.cargo_registry_network, "offline");

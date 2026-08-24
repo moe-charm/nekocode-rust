@@ -3,7 +3,7 @@
 `mcp_server_rust_first.py` is a small, read-only stdio adapter around the
 canonical `nekocode` CLI. It exposes exactly two tools:
 
-- `nekocode_snapshot` → `nekocode snapshot <path> [--analysis cargo-check]`
+- `nekocode_snapshot` → `nekocode snapshot <path> [--analysis cargo-check|clippy]`
 - `nekocode_context` → `nekocode context <path> [--compare-ref REF] ...`
 
 The gateway does not define a second JSON contract or semantic analyzer. It
@@ -43,7 +43,9 @@ Optional inputs:
 
 `metadata-only` is the default. `cargo-check` is opt-in because Cargo may run
 build scripts, procedural macros, and compiler wrappers in a trusted
-workspace. An explicit output path is the only persisted artifact.
+workspace. `clippy` is an explicit alternative producer with the same trust
+boundary; it observes Clippy's default lint behavior without adding a custom
+lint set. An explicit output path is the only persisted artifact.
 
 ### `nekocode_context`
 
@@ -53,6 +55,7 @@ workspace. An explicit output path is the only persisted artifact.
   "compare_ref":"HEAD",
   "baseline":"/tmp/nekocode-baseline.json",
   "diagnostics":true,
+  "diagnostic_producer":"cargo-check",
   "working_tree":true,
   "include_untracked_content":false,
   "all_features":false,
@@ -60,6 +63,11 @@ workspace. An explicit output path is the only persisted artifact.
   "excerpt_lines":8
 }
 ```
+
+Set `diagnostic_producer` to `clippy` only together with `diagnostics: true`.
+The returned diagnostic run records `producer`, `profile`, and
+`producer_version`; exact deltas are never computed across cargo-check and
+Clippy profiles.
 
 The result contains Cargo metadata, normalized Git refs and change markers,
 diff hunks, bounded excerpts, optional structured diagnostics, and an exact
@@ -82,7 +90,7 @@ child process group on timeout, and redacts absolute paths in content and
 structured results. The CLI subprocess receives a small environment allowlist;
 compiler wrapper variables are not forwarded by the adapter. It does not claim
 OS-level sandboxing for Cargo execution; callers must trust the workspace when
-requesting `cargo-check`.
+requesting `cargo-check` or `clippy`.
 
 MCP exposes no prompts, resources, UI, refactor operations, symbol search,
 dead-code tool, arbitrary command, or server-side snapshot database.

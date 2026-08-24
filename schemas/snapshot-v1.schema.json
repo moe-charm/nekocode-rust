@@ -29,7 +29,7 @@
         "partial"
       ]
     },
-    "analysis_mode": { "enum": ["metadata_only", "cargo_check"] },
+    "analysis_mode": { "enum": ["metadata_only", "cargo_check", "clippy"] },
     "schema_version": { "type": "integer", "minimum": 1 },
     "evidence": {
       "enum": ["tool-confirmed", "semantic-resolved", "syntax-only", "incomplete"]
@@ -46,7 +46,7 @@
         "target_directory"
       ],
       "properties": {
-        "mode": { "enum": ["metadata_only", "cargo_check"] },
+        "mode": { "enum": ["metadata_only", "cargo_check", "clippy"] },
         "workspace_trust": { "enum": ["not_required", "required"] },
         "cargo_registry_network": { "enum": ["not_used", "offline"] },
         "process_network_isolation": {
@@ -60,7 +60,15 @@
     },
     "generated_at": { "type": "string", "format": "date-time" },
     "workspace": { "type": "object" },
-    "diagnostics": { "type": ["object", "null"] },
+    "diagnostics": {
+      "type": ["object", "null"],
+      "properties": {
+        "producer": { "enum": ["cargo_check", "clippy"] },
+        "profile": { "enum": ["cargo_check_v1", "clippy_default_v1"] },
+        "producer_version": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
     "canonical_hash": { "type": ["string", "null"] },
     "limitations": { "type": "array", "items": { "type": "string" } },
     "provenance": { "type": "array", "items": { "type": "object" } },

@@ -57,6 +57,61 @@ fn all_features_requires_context_diagnostics() {
 }
 
 #[test]
+fn clippy_is_an_explicit_diagnostic_producer() {
+    let directory = tempdir().expect("temporary workspace");
+    let root = directory.path();
+    fs::create_dir(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"cli-clippy-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(
+        root.join("src/lib.rs"),
+        "#![warn(clippy::needless_return)]\npub fn value() -> u32 { return 1; }\n",
+    )
+    .expect("source");
+
+    let snapshot = Command::new(env!("CARGO_BIN_EXE_nekocode"))
+        .args(["snapshot"])
+        .arg(root)
+        .args(["--analysis", "clippy"])
+        .output()
+        .expect("nekocode Clippy snapshot should run");
+    assert!(
+        snapshot.status.success(),
+        "snapshot failed:\n{}",
+        String::from_utf8_lossy(&snapshot.stderr)
+    );
+    let snapshot_json: Value = serde_json::from_slice(&snapshot.stdout).expect("snapshot JSON");
+    assert_eq!(snapshot_json["analysis_mode"], "clippy");
+    assert_eq!(snapshot_json["diagnostics"]["producer"], "clippy");
+    assert_eq!(snapshot_json["diagnostics"]["profile"], "clippy_default_v1");
+
+    let context = Command::new(env!("CARGO_BIN_EXE_nekocode"))
+        .args(["context"])
+        .arg(root)
+        .args([
+            "--diagnostics",
+            "--diagnostic-producer",
+            "clippy",
+            "--budget",
+            "20000",
+        ])
+        .output()
+        .expect("nekocode Clippy context should run");
+    assert!(
+        context.status.success(),
+        "context failed:\n{}",
+        String::from_utf8_lossy(&context.stderr)
+    );
+    let context_json: Value = serde_json::from_slice(&context.stdout).expect("context JSON");
+    assert_eq!(context_json["diagnostic_producer"], "clippy");
+    assert_eq!(context_json["diagnostic_profile"], "clippy_default_v1");
+    assert_eq!(context_json["diagnostics"]["producer"], "clippy");
+}
+
+#[test]
 fn summary_is_readable_and_json_remains_the_default_contract() {
     let directory = tempdir().expect("temporary workspace");
     let root = directory.path();

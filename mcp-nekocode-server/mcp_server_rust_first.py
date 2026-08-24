@@ -179,7 +179,7 @@ class RustFirstMCPServer:
                         },
                         "analysis": {
                             "type": "string",
-                            "enum": ["metadata-only", "cargo-check"],
+                            "enum": ["metadata-only", "cargo-check", "clippy"],
                             "default": "metadata-only",
                         },
                         "output": {
@@ -220,6 +220,12 @@ class RustFirstMCPServer:
                             "type": "boolean",
                             "default": False,
                         },
+                        "diagnostic_producer": {
+                            "type": "string",
+                            "enum": ["cargo-check", "clippy"],
+                            "default": "cargo-check",
+                            "description": "Explicit diagnostic producer; clippy requires diagnostics.",
+                        },
                         "working_tree": {
                             "type": "boolean",
                             "description": "Include staged, unstaged, and untracked changes.",
@@ -232,7 +238,7 @@ class RustFirstMCPServer:
                         },
                         "all_features": {
                             "type": "boolean",
-                            "description": "Run cargo check with all workspace features; requires diagnostics.",
+                            "description": "Run the selected compiler diagnostic producer with all workspace features; requires diagnostics.",
                             "default": False,
                         },
                         "excerpt_lines": {
@@ -282,6 +288,18 @@ class RustFirstMCPServer:
             raise ToolInputError("'diagnostics' must be a boolean")
         if diagnostics:
             command.append("--diagnostics")
+        diagnostic_producer = args.get("diagnostic_producer", "cargo-check")
+        if not isinstance(diagnostic_producer, str) or diagnostic_producer not in {
+            "cargo-check",
+            "clippy",
+        }:
+            raise ToolInputError(
+                "'diagnostic_producer' must be cargo-check or clippy"
+            )
+        if diagnostic_producer == "clippy" and not diagnostics:
+            raise ToolInputError("'diagnostic_producer' clippy requires 'diagnostics'")
+        if diagnostic_producer != "cargo-check":
+            command.extend(["--diagnostic-producer", diagnostic_producer])
         working_tree = args.get("working_tree", False)
         if not isinstance(working_tree, bool):
             raise ToolInputError("'working_tree' must be a boolean")
@@ -318,8 +336,12 @@ class RustFirstMCPServer:
     def _snapshot_arguments(args: Dict[str, Any]) -> list[str]:
         command: list[str] = []
         analysis = args.get("analysis", "metadata-only")
-        if analysis not in {"metadata-only", "cargo-check"}:
-            raise ToolInputError("'analysis' must be metadata-only or cargo-check")
+        if not isinstance(analysis, str) or analysis not in {
+            "metadata-only",
+            "cargo-check",
+            "clippy",
+        }:
+            raise ToolInputError("'analysis' must be metadata-only, cargo-check, or clippy")
         if analysis != "metadata-only":
             command.extend(["--analysis", analysis])
         output = args.get("output")
@@ -445,6 +467,7 @@ class RustFirstMCPServer:
             "compare_ref",
             "budget",
             "diagnostics",
+            "diagnostic_producer",
             "working_tree",
             "include_untracked_content",
             "all_features",
@@ -466,6 +489,7 @@ class RustFirstMCPServer:
             "compare_ref",
             "budget",
             "diagnostics",
+            "diagnostic_producer",
             "working_tree",
             "include_untracked_content",
             "all_features",

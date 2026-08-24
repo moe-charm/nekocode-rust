@@ -18,6 +18,14 @@ pub struct Cli {
 pub enum AnalysisArg {
     MetadataOnly,
     CargoCheck,
+    Clippy,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum DiagnosticProducerArg {
+    CargoCheck,
+    Clippy,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -51,6 +59,8 @@ pub enum Commands {
         budget: usize,
         #[arg(long)]
         diagnostics: bool,
+        #[arg(long, value_enum, default_value_t = DiagnosticProducerArg::CargoCheck)]
+        diagnostic_producer: DiagnosticProducerArg,
         #[arg(long)]
         working_tree: bool,
         #[arg(long)]

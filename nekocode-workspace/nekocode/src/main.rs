@@ -3,8 +3,10 @@
 mod cli;
 
 use clap::Parser;
-use cli::{AnalysisArg, Cli, Commands, OutputFormatArg};
-use nekocode_core::{AnalysisMode, ContextRequest, NekocodeError, Result, SnapshotRequest};
+use cli::{AnalysisArg, Cli, Commands, DiagnosticProducerArg, OutputFormatArg};
+use nekocode_core::{
+    AnalysisMode, ContextRequest, DiagnosticProducer, NekocodeError, Result, SnapshotRequest,
+};
 use std::fs;
 
 fn main() -> Result<()> {
@@ -17,10 +19,10 @@ fn main() -> Result<()> {
         } => snapshot(
             SnapshotRequest {
                 path,
-                analysis: if matches!(analysis, AnalysisArg::CargoCheck) {
-                    AnalysisMode::CargoCheck
-                } else {
-                    AnalysisMode::MetadataOnly
+                analysis: match analysis {
+                    AnalysisArg::MetadataOnly => AnalysisMode::MetadataOnly,
+                    AnalysisArg::CargoCheck => AnalysisMode::CargoCheck,
+                    AnalysisArg::Clippy => AnalysisMode::Clippy,
                 },
                 all_features,
             },
@@ -31,6 +33,7 @@ fn main() -> Result<()> {
             compare_ref,
             budget,
             diagnostics,
+            diagnostic_producer,
             working_tree,
             include_untracked_content,
             all_features,
@@ -44,6 +47,10 @@ fn main() -> Result<()> {
                 compare_ref,
                 budget,
                 diagnostics,
+                diagnostic_producer: match diagnostic_producer {
+                    DiagnosticProducerArg::CargoCheck => DiagnosticProducer::CargoCheck,
+                    DiagnosticProducerArg::Clippy => DiagnosticProducer::Clippy,
+                },
                 working_tree,
                 include_untracked_content,
                 all_features,
@@ -59,7 +66,7 @@ fn main() -> Result<()> {
 fn snapshot(request: SnapshotRequest, output: Option<std::path::PathBuf>) -> Result<()> {
     if request.all_features && request.analysis == AnalysisMode::MetadataOnly {
         return Err(NekocodeError::Config(
-            "--all-features requires --analysis cargo-check".into(),
+            "--all-features requires compiler diagnostics".into(),
         ));
     }
     let artifact =
@@ -91,6 +98,11 @@ fn context(
     if request.all_features && !request.diagnostics {
         return Err(NekocodeError::Config(
             "--all-features requires --diagnostics".into(),
+        ));
+    }
+    if request.diagnostic_producer != DiagnosticProducer::CargoCheck && !request.diagnostics {
+        return Err(NekocodeError::Config(
+            "--diagnostic-producer requires --diagnostics".into(),
         ));
     }
     let artifact =
