@@ -22,6 +22,7 @@ Use:
 ```bash
 make verify
 # or
+python3 -m pip install -r requirements-dev.txt
 cd nekocode-workspace
 cargo test --locked
 cargo check --locked --all-targets

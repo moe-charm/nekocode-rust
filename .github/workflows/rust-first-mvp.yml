@@ -11,6 +11,7 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'requirements-dev.txt'
       - 'skills/**'
       - 'schemas/**'
       - 'docs/**'
@@ -29,6 +30,7 @@ on:
       - 'mcp-nekocode-server/mcp_server_rust_first.py'
       - 'mcp-nekocode-server/README_RUST_FIRST.md'
       - 'mcp-nekocode-server/tests/**'
+      - 'requirements-dev.txt'
       - 'skills/**'
       - 'schemas/**'
       - 'docs/**'
@@ -128,7 +130,9 @@ jobs:
 
       - name: Smoke-test Rust-first MCP gateway
         working-directory: .
-        run: python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input -r requirements-dev.txt
+          python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 
       - name: Check Rust-first Codex skill
         working-directory: .

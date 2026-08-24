@@ -102,6 +102,10 @@ Recovery points:
   check/test, CLI integration tests, MCP/Python tests, and schema parsing;
 - the release baseline is now documented and wired as Rust 1.85.0 (MSRV 1.85)
   across package metadata, CI, and Docker;
+- the binary release procedure now emits a checksum and provenance record,
+  and the MCP adapter's independent 0.2.0 version policy is documented;
+- snapshot metadata and context change-scope goldens pass the standard
+  Draft 2020-12 validator, including a negative contract-version case;
 - the latest GitHub Actions run is **not green**: its `stable` toolchain
   resolved to Rust/Clippy 1.98, where `-D warnings` rejects five manual
   `Default` implementations as derivable;
@@ -134,8 +138,9 @@ Recovery points:
       verification, clean-tree check, locked build, SHA-256 checksums,
       provenance, and release notes. Crates.io publication remains a separate
       future gate because `nekocode-core` is not published.
-- [ ] Harden contract validation with a generated snapshot golden artifact,
-      negative compatibility cases, and a standard JSON Schema validator.
+- [x] Harden contract validation with a snapshot metadata golden artifact,
+      negative compatibility cases, and a standard JSON Schema validator
+      installed from pinned `requirements-dev.txt` in CI.
 
 ### Frozen for this release
 

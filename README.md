@@ -171,6 +171,7 @@ does not add another analyzer or execution path.
 ### Development and tests
 
 ```bash
+python3 -m pip install -r requirements-dev.txt
 cd nekocode-workspace
 cargo test --locked
 cargo check --locked --all-targets
@@ -313,6 +314,7 @@ MCPは実行経路、SkillやPluginは呼び出し方・提示方法を定義す
 ### 開発・テスト
 
 ```bash
+python3 -m pip install -r requirements-dev.txt
 cd nekocode-workspace
 cargo test --locked
 cargo check --locked --all-targets

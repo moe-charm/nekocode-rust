@@ -1,0 +1,2 @@
+# Pinned contract validator used by the schema CI gate.
+jsonschema==4.23.0

@@ -1,0 +1,34 @@
+{
+  "contract_version": "snapshot-v1",
+  "artifact_kind": "snapshot",
+  "status": "completed_clean",
+  "analysis_mode": "metadata_only",
+  "schema_version": 3,
+  "evidence": "tool-confirmed",
+  "execution_policy": {
+    "mode": "metadata_only",
+    "workspace_trust": "not_required",
+    "cargo_registry_network": "not_used",
+    "process_network_isolation": "not_applicable",
+    "environment": "not_applicable",
+    "compiler_wrappers": "not_run",
+    "target_directory": "not_used"
+  },
+  "generated_at": "2026-08-24T00:00:00Z",
+  "workspace": {
+    "root": "$WORKSPACE",
+    "workspace_root": "$WORKSPACE",
+    "toolchain": {
+      "rustc_version": "rustc 1.85.0",
+      "cargo_version": "cargo 1.85.0",
+      "host": "x86_64-unknown-linux-gnu"
+    },
+    "packages": [],
+    "workspace_members": [],
+    "inputs": []
+  },
+  "diagnostics": null,
+  "canonical_hash": null,
+  "limitations": ["Compiler diagnostics were not requested."],
+  "omissions": []
+}

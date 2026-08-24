@@ -29,6 +29,7 @@ the same evidence and does not add semantic inference.
 Useful development checks:
 
 ```bash
+python3 -m pip install -r ../requirements-dev.txt
 cargo test --locked
 cargo check --locked --all-targets
 ```

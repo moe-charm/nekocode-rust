@@ -18,6 +18,7 @@ clippy:
 
 test:
 	cargo test --manifest-path $(MANIFEST) --locked
+	python3 -c 'import jsonschema' || (echo "install requirements-dev.txt first" >&2; exit 1)
 	python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 
 verify: fmt clippy check test

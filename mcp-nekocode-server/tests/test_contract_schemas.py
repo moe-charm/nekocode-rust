@@ -7,6 +7,11 @@ import subprocess
 import unittest
 from pathlib import Path
 
+try:
+    import jsonschema
+except ModuleNotFoundError:  # pragma: no cover - enforced in CI requirements
+    jsonschema = None
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -87,6 +92,24 @@ def assert_schema_subset(value: object, schema: dict, root: dict, path: str = "$
                 assert_schema_subset(item, schema["items"], root, f"{path}[{index}]")
 
 
+def assert_standard_json_schema(value: object, schema: dict) -> None:
+    if jsonschema is None:
+        raise AssertionError(
+            "jsonschema is required for the standard contract validator; "
+            "install requirements-dev.txt"
+        )
+    validator = jsonschema.Draft202012Validator(
+        schema, format_checker=jsonschema.FormatChecker()
+    )
+    errors = sorted(validator.iter_errors(value), key=lambda error: list(error.path))
+    if errors:
+        details = "; ".join(
+            f"{'.'.join(map(str, error.path)) or '$'}: {error.message}"
+            for error in errors[:5]
+        )
+        raise AssertionError(details)
+
+
 class ContractSchemaTest(unittest.TestCase):
     def test_snapshot_and_context_versions_are_explicit(self) -> None:
         expected = {
@@ -147,6 +170,36 @@ class ContractSchemaTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "oneOf match"):
             assert_schema_subset(fixture, schema, schema)
 
+    @unittest.skipUnless(jsonschema is not None, "install requirements-dev.txt")
+    def test_standard_validator_accepts_snapshot_and_context_goldens(self) -> None:
+        snapshot_schema = json.loads(
+            (REPO_ROOT / "schemas/snapshot-v1.schema.json").read_text()
+        )
+        snapshot = json.loads(
+            (REPO_ROOT / "schemas/fixtures/snapshot-v1-metadata.json").read_text()
+        )
+        context_schema = json.loads(
+            (REPO_ROOT / "schemas/context-v1.schema.json").read_text()
+        )
+        context = json.loads(
+            (REPO_ROOT / "schemas/fixtures/context-v1-change-scopes.json").read_text()
+        )
+
+        jsonschema.Draft202012Validator.check_schema(snapshot_schema)
+        jsonschema.Draft202012Validator.check_schema(context_schema)
+        assert_standard_json_schema(snapshot, snapshot_schema)
+        assert_standard_json_schema(context, context_schema)
+
+    @unittest.skipUnless(jsonschema is not None, "install requirements-dev.txt")
+    def test_standard_validator_rejects_contract_version_change(self) -> None:
+        schema = json.loads((REPO_ROOT / "schemas/snapshot-v1.schema.json").read_text())
+        fixture = json.loads(
+            (REPO_ROOT / "schemas/fixtures/snapshot-v1-metadata.json").read_text()
+        )
+        fixture["contract_version"] = "snapshot-v2"
+        with self.assertRaises(AssertionError):
+            assert_standard_json_schema(fixture, schema)
+
     def test_current_cli_context_emits_schema_valid_change_scopes(self) -> None:
         schema = json.loads((REPO_ROOT / "schemas/context-v1.schema.json").read_text())
         completed = subprocess.run(
@@ -174,6 +227,8 @@ class ContractSchemaTest(unittest.TestCase):
         payload = json.loads(completed.stdout)
 
         assert_schema_subset(payload, schema, schema)
+        if jsonschema is not None:
+            assert_standard_json_schema(payload, schema)
         self.assertEqual(
             [scope["scope"] for scope in payload["diff"]["change_scopes"]],
             ["revision", "staged", "unstaged", "untracked"],
@@ -204,6 +259,8 @@ class ContractSchemaTest(unittest.TestCase):
         )
         snapshot = json.loads(snapshot_completed.stdout)
         assert_schema_subset(snapshot, snapshot_schema, snapshot_schema)
+        if jsonschema is not None:
+            assert_standard_json_schema(snapshot, snapshot_schema)
         self.assertEqual(snapshot["analysis_mode"], "clippy")
         self.assertEqual(snapshot["diagnostics"]["producer"], "clippy")
         self.assertEqual(snapshot["diagnostics"]["profile"], "clippy_default_v1")
@@ -235,6 +292,8 @@ class ContractSchemaTest(unittest.TestCase):
         )
         context = json.loads(context_completed.stdout)
         assert_schema_subset(context, context_schema, context_schema)
+        if jsonschema is not None:
+            assert_standard_json_schema(context, context_schema)
         self.assertEqual(context["diagnostic_producer"], "clippy")
         self.assertEqual(context["diagnostic_profile"], "clippy_default_v1")
 
