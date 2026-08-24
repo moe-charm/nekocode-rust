@@ -106,7 +106,8 @@ Recovery points:
   resolved to Rust/Clippy 1.98, where `-D warnings` rejects five manual
   `Default` implementations as derivable;
 - the five derivable defaults are fixed locally, but a public release/tag is
-  still blocked until the updated workflow passes remotely.
+  now cleared by the updated remote workflow run `32717722425` for
+  `cad890f` (all jobs green).
 
 ## Next implementation focus
 
@@ -122,18 +123,19 @@ Recovery points:
 - [x] Select and document one Rust toolchain policy (MSRV/CI/Docker 1.85).
 - [x] Correct stale trust/test-gate wording and limit compiler observations to
       explicitly trusted workspaces.
-- [ ] Commit/push the verified changes and require the exact remote workflow
+- [x] Commit/push the verified changes and require the exact remote workflow
       to pass before creating a release tag.
 
 ### P1 — release hygiene after P0
 
-1. Decide and document the CLI/core 1.2.0 versus MCP 0.2.0 version policy.
-2. Add the repository license and complete publish-facing Cargo metadata.
-3. Define the v1.2.0 release artifact procedure: tag/commit verification,
-   clean-tree check, locked build, SHA-256 checksums, provenance, and release
-   notes. Do not imply a target matrix that has not been tested.
-4. Harden contract validation with a generated snapshot golden artifact,
-   negative compatibility cases, and a standard JSON Schema validator.
+- [x] Decide and document the CLI/core 1.2.0 versus MCP 0.2.0 version policy.
+- [x] Add the repository license and complete publish-facing Cargo metadata.
+- [x] Define the v1.2.0 binary release artifact procedure: tag/commit
+      verification, clean-tree check, locked build, SHA-256 checksums,
+      provenance, and release notes. Crates.io publication remains a separate
+      future gate because `nekocode-core` is not published.
+- [ ] Harden contract validation with a generated snapshot golden artifact,
+      negative compatibility cases, and a standard JSON Schema validator.
 
 ### Frozen for this release
 

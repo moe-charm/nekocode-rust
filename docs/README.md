@@ -16,6 +16,7 @@ contract is deliberately small: `snapshot` and `context`.
 ## Current implementation guides
 
 - [Rust-first MCP gateway](../mcp-nekocode-server/README_RUST_FIRST.md);
+- [Release procedure](release.md) — version policy, tag checks, checksums, and provenance;
 - [Root README](../README.md);
 - [Canonical workspace README](../nekocode-workspace/README.md).
 

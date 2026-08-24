@@ -9,6 +9,11 @@ Cargo metadata, Git changes, and optional `cargo check`/Clippy diagnostics, then
 returns bounded, provenance-aware JSON for AI/MCP clients or a deterministic
 human-readable summary of the same evidence.
 
+The Rust-first binary release procedure is documented in
+[docs/release.md](docs/release.md). The CLI/core product version and the MCP
+adapter version are independent; the versioned `snapshot-v1` and `context-v1`
+artifacts are the compatibility boundary.
+
 NekoCode does not replace `rustc`, Cargo, or rust-analyzer. Its value is the
 reproducible snapshot, diff context, diagnostic delta, and explicit budget
 handling around those tools.

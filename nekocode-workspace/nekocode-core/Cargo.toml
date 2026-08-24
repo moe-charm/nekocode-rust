@@ -6,6 +6,8 @@ rust-version = "1.85"
 description = "Rust-first evidence-backed snapshot and code context core"
 authors = ["NekoCode Team"]
 license = "MIT"
+repository = "https://github.com/moe-charm/nekocode-rust"
+readme = "README.md"
 
 [dependencies]
 serde = { workspace = true }

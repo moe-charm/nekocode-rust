@@ -10,6 +10,10 @@ The gateway does not define a second JSON contract or semantic analyzer. It
 validates inputs, invokes the same CLI use cases, and returns the same core
 payload apart from MCP transport fields and redacted machine paths.
 
+The gateway adapter version (`0.2.0`) is independent from the Rust CLI/core
+product version (`1.2.0`). `snapshot-v1` and `context-v1` are the shared
+compatibility boundary when both are distributed together.
+
 ## Run
 
 ```bash
