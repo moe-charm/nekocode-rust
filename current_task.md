@@ -70,6 +70,11 @@ workflow and stop conditions.
   policy and same-producer comparability;
 - Clippy clean/warning/compiler-error/tool-failure/profile-mismatch fixtures,
   tiny-budget marker retention, CLI coverage, and MCP forwarding validation;
+- current CLI Clippy snapshot/context schema-subset validation and explicit
+  CLI/MCP Clippy payload parity regression (volatile Cargo timing normalized);
+- read-only live Clippy probe on `test-workspace/nyash/src`: producer/profile/
+  version markers were present and offline failure was `tool_failed` with
+  `incomplete` evidence; the already-dirty target repository was not edited;
 - read-only Nyash Change Scope probe: even with the patch and all 41 file
   details omitted, the summary retained 16 unstaged files (`+288/-1663`) and
   25 marker-only untracked files; the target Git status hash remained
@@ -86,8 +91,8 @@ Recovery points:
 
 ## Next implementation focus
 
-1. Run a read-only live Clippy probe on the permitted Nyash workspace and
-   perform the final schema/parity review before release tagging.
+1. Perform release/tag review only; no further producer, language, or MCP
+   surface expansion is planned for this cycle.
 2. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.
