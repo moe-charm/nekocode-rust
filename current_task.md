@@ -82,9 +82,9 @@ Recovery points:
 
 ## Next implementation focus
 
-1. Implement Clippy only after the documented producer/profile comparability
-   and execution fixtures are in place; keep `cargo check` as the default
-   diagnostic mode.
+1. Implement and verify the documented Clippy producer/profile boundary,
+   including clean/warning/compiler-error/tool-failure/profile fixtures and
+   CLI/MCP forwarding; keep `cargo check` as the default diagnostic mode.
 2. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.

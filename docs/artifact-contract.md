@@ -167,9 +167,22 @@ smaller budgets to preserve per-file detail or patch text.
 
 ### Optional Clippy producer
 
-Clippy is a deferred, explicit diagnostic producer. It must not be silently
-added to the default `cargo-check` profile or compared with a rustc-only
-baseline. Before implementation, the contract requires:
+Clippy is an explicit diagnostic producer. It must not be silently added to
+the default `cargo-check` profile or compared with a rustc-only baseline. The
+public opt-in spelling is:
+
+```text
+nekocode snapshot PATH --analysis clippy
+nekocode context PATH --diagnostics --diagnostic-producer clippy
+```
+
+The default remains `cargo_check`; `--diagnostic-producer clippy` without
+`--diagnostics` is invalid. The JSON `diagnostics` object records
+`producer`, `profile`, and `producer_version`. A context envelope also keeps
+the requested producer/profile marker when the diagnostic body is removed by
+the byte budget.
+
+The implementation gate requires:
 
 - a producer/profile marker distinguishing `clippy` from `cargo_check`;
 - comparability fingerprints covering Clippy, Cargo, rustc, package/target,
@@ -181,10 +194,12 @@ baseline. Before implementation, the contract requires:
 - explicit trusted-workspace permission and the existing execution-policy
   disclosure, because Clippy also runs build scripts and procedural macros;
 - fixtures for clean, warning, compiler-error, tool-failure, and changed
-  profile cases before exposing a CLI or MCP option.
+  profile cases before exposing a CLI or MCP option;
+- CLI/MCP forwarding and schema validation for the same explicit option.
 
 No Clippy-specific lint set, accuracy percentage, or cross-producer delta is
-part of `context-v1` until those gates are implemented and reviewed.
+part of `context-v1`. Clippy's default lint behavior is observed as-is; the
+tool does not add a NekoCode accuracy claim or a custom lint policy.
 
 ## Versioning and parity
 

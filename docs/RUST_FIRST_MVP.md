@@ -115,6 +115,19 @@ displaying a misleading `+0/-0` line count.
 `context` unless `--diagnostics` is also present, matching the snapshot rule
 that requires `--analysis cargo-check`.
 
+Clippy is an explicit alternative producer, not a cargo-check alias:
+
+```bash
+cargo run -q -p nekocode -- snapshot . --analysis clippy
+cargo run -q -p nekocode -- context . \
+  --diagnostics --diagnostic-producer clippy --budget 8000
+```
+
+The default diagnostic producer is `cargo_check`. Clippy requests require
+the same trusted-workspace execution disclosure and record producer/profile/
+version markers in the artifact. A context budget keeps those markers even if
+the diagnostic body is omitted.
+
 ## Diagnostic comparability
 
 The response must distinguish:
@@ -182,14 +195,13 @@ and no evidence was omitted. Failed/partial tools, unavailable or incompatible
 diagnostic comparisons, and actual budget omissions still produce
 `incomplete`.
 
-Clippy is not yet a public diagnostic mode. When it is designed, it will be an
-independent producer/profile from `cargo_check`: its producer identity,
-Clippy/Cargo/rustc versions, selected package/target/features,
-compiler-affecting configuration, and command profile must participate in
+Clippy is an independent producer/profile from `cargo_check`: its producer
+identity, Clippy/Cargo/rustc versions, selected package/target/features,
+compiler-affecting configuration, and command profile participate in
 comparability. Exact multiset deltas are allowed only within the same
-producer/profile. Clippy will remain opt-in and subject to the same
-trusted-workspace execution disclosure; no default lint set or cross-producer
-delta is implied.
+producer/profile. Clippy remains opt-in and subject to the same trusted-
+workspace execution disclosure; no custom lint set or cross-producer delta is
+implied.
 
 ## Execution trust
 
