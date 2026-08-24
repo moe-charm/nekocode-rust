@@ -106,6 +106,8 @@ Recovery points:
   and the MCP adapter's independent 0.2.0 version policy is documented;
 - snapshot metadata and context change-scope goldens pass the standard
   Draft 2020-12 validator, including a negative contract-version case;
+- the standard-schema CI gate is green for `6540b05` in remote run
+  `32718683043`;
 - the latest GitHub Actions run is **not green**: its `stable` toolchain
   resolved to Rust/Clippy 1.98, where `-D warnings` rejects five manual
   `Default` implementations as derivable;
