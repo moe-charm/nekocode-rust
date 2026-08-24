@@ -155,6 +155,59 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
             with self.subTest(context_key=key):
                 self.assertEqual(cli_context[key], mcp_context[key])
 
+        bounded_command = [
+            "cargo",
+            "run",
+            "-q",
+            "-p",
+            "nekocode",
+            "--",
+            "context",
+            ".",
+            "--compare-ref",
+            "HEAD",
+            "--budget",
+            "1200",
+            "--working-tree",
+            "--excerpt-lines",
+            "8",
+        ]
+        bounded_completed = subprocess.run(
+            bounded_command,
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        bounded_cli = json.loads(bounded_completed.stdout)
+        bounded_mcp = server._run_cli(
+            "nekocode_context",
+            {
+                "path": ".",
+                "compare_ref": "HEAD",
+                "budget": 1200,
+                "working_tree": True,
+                "excerpt_lines": 8,
+            },
+        )
+        for key in (
+            "status",
+            "evidence",
+            "budget",
+            "budget_tokens",
+            "serialized_bytes",
+            "budget_exceeded",
+            "omitted_changed_files",
+            "omitted_diff_bytes",
+            "changed_files",
+            "diff",
+            "omissions",
+        ):
+            with self.subTest(bounded_context_key=key):
+                self.assertEqual(bounded_cli[key], bounded_mcp[key])
+        self.assertIn("change_scopes", bounded_cli["diff"])
+
     def test_prebuilt_cli_mode_does_not_require_cargo_workspace(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
 

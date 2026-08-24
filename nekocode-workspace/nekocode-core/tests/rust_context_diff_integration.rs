@@ -1,7 +1,8 @@
 use nekocode_core::{
     build_rust_context_with_config, build_rust_snapshot, format_context_summary,
-    sanitize_context_for_output, sanitize_snapshot_for_output, AnalysisMode, ComparisonStatus,
-    EvidenceLevel, GitChangeScope, LineCountStatus, RustContextOptions,
+    sanitize_context_for_output, sanitize_snapshot_for_output, AnalysisMode, ArtifactStatus,
+    ComparisonStatus, EvidenceLevel, GitChangeScope, LineCountStatus, RustContextOptions,
+    RustContextPack,
 };
 use std::fs;
 use std::path::Path;
@@ -20,6 +21,64 @@ fn git(root: &Path, args: &[&str]) {
         args,
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn assert_budget_scope_invariants(pack: &RustContextPack, expected_scopes: &[GitChangeScope]) {
+    let diff = pack
+        .diff
+        .as_ref()
+        .expect("budget fixture should include diff");
+    let actual_scopes = diff
+        .change_scopes
+        .iter()
+        .map(|summary| summary.scope)
+        .collect::<Vec<_>>();
+    assert_eq!(actual_scopes, expected_scopes);
+    assert!(diff.change_scopes.len() <= 4);
+
+    for summary in &diff.change_scopes {
+        assert!(summary.rust_file_count <= summary.file_count);
+        assert_eq!(
+            summary.file_count,
+            summary.counted_files + summary.binary_files + summary.not_read_files,
+            "scope counts must classify every observed path"
+        );
+    }
+    for file in &pack.changed_files {
+        for change in &file.scope_changes {
+            match change.line_count_status {
+                LineCountStatus::Counted => {
+                    assert!(change.additions.is_some());
+                    assert!(change.deletions.is_some());
+                }
+                LineCountStatus::Binary | LineCountStatus::NotRead => {
+                    assert_eq!(change.additions, None);
+                    assert_eq!(change.deletions, None);
+                }
+            }
+        }
+    }
+    for omission in &pack.omissions {
+        assert!(omission.omitted_count > 0);
+        assert!(!omission.reason.is_empty());
+        assert!(!omission.priority.is_empty());
+    }
+    if pack.omitted_changed_files > 0 {
+        assert!(pack
+            .omissions
+            .iter()
+            .any(|omission| omission.kind == "changed_files"));
+    }
+    if pack.budget.exceeded {
+        assert_eq!(pack.status, ArtifactStatus::OutputLimited);
+        assert_eq!(pack.evidence, EvidenceLevel::Incomplete);
+    } else {
+        assert!(pack.serialized_bytes <= pack.budget.max_bytes);
+    }
+    assert!(pack
+        .diff
+        .as_ref()
+        .is_some_and(|diff| diff.patch.is_char_boundary(diff.patch.len())));
 }
 
 #[test]
@@ -324,6 +383,26 @@ fn change_scopes_preserve_mixed_index_binary_rename_and_budget_evidence() {
     );
 
     let expected_scopes = diff.change_scopes.clone();
+    let expected_scope_order = [
+        GitChangeScope::Revision,
+        GitChangeScope::Staged,
+        GitChangeScope::Unstaged,
+        GitChangeScope::Untracked,
+    ];
+    assert_budget_scope_invariants(&pack, &expected_scope_order);
+    for budget in [1, 2, 8, 64, 256, 1_024, 4_096, 20_000] {
+        let mut budget_options = RustContextOptions::new(Some("HEAD~1".to_string()), budget);
+        budget_options.include_working_tree = true;
+        let bounded = build_rust_context_with_config(root, budget_options)
+            .expect("every positive budget should produce an explicit artifact");
+        assert_eq!(
+            bounded.diff.as_ref().expect("bounded diff").change_scopes,
+            expected_scopes,
+            "scope aggregates must not depend on budget {budget}"
+        );
+        assert_budget_scope_invariants(&bounded, &expected_scope_order);
+    }
+
     let mut tiny_options = RustContextOptions::new(Some("HEAD~1".to_string()), 1);
     tiny_options.include_working_tree = true;
     let tiny = build_rust_context_with_config(root, tiny_options).expect("bounded context");

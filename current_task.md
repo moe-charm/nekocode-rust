@@ -61,6 +61,11 @@ workflow and stop conditions.
 - independent read-only Skill forward evaluation against the Nyash artifact:
   all six acceptance checks passed, with no instruction ambiguity or behavior
   mismatch;
+- documented budget invariant gate implemented as multi-budget Rust fixture
+  checks for scope stability, omission ledgers, line-count states, UTF-8
+  boundaries, and explicit output-limited evidence;
+- CLI/MCP bounded-budget parity coverage added and passing for the same
+  serialized outcome, omission ledger, and `diff.change_scopes` aggregates;
 - read-only Nyash Change Scope probe: even with the patch and all 41 file
   details omitted, the summary retained 16 unstaged files (`+288/-1663`) and
   25 marker-only untracked files; the target Git status hash remained
@@ -77,10 +82,9 @@ Recovery points:
 
 ## Next implementation focus
 
-1. Add broader property tests for byte/item/line budget invariants.
-2. Implement Clippy only after the documented producer/profile comparability
+1. Implement Clippy only after the documented producer/profile comparability
    and execution fixtures are in place; keep `cargo check` as the default
    diagnostic mode.
-3. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
+2. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.

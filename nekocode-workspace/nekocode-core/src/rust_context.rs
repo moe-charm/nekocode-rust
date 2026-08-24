@@ -3351,11 +3351,14 @@ mod tests {
 
     #[test]
     fn truncates_utf8_without_splitting_a_character() {
-        let mut text = "変更されたRustコード".to_string();
-        let omitted = truncate_utf8(&mut text, 5);
-        assert!(text.is_char_boundary(text.len()));
-        assert!(omitted > 0);
-        assert!(text.len() <= 5);
+        let original = "変更されたRustコード".to_string();
+        for max_bytes in 0..=original.len() + 2 {
+            let mut text = original.clone();
+            let omitted = truncate_utf8(&mut text, max_bytes);
+            assert!(text.is_char_boundary(text.len()));
+            assert!(text.len() <= max_bytes);
+            assert_eq!(omitted, original.len() - text.len());
+        }
     }
 
     #[test]
