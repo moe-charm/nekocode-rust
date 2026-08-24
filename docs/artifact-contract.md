@@ -145,6 +145,47 @@ observation of that requested mode. Evidence is downgraded only for an actual
 failed/partial observation, unavailable or incompatible diagnostic comparison,
 or recorded omission/truncation.
 
+### Budget invariant gate
+
+The core budget is a serialized-byte limit; token estimates are advisory. The
+property-test gate for any truncation change must assert that:
+
+- `diff.change_scopes` is present, ordered, and unchanged across budget values;
+- each `counted` file has numeric additions/deletions, while `binary` and
+  `not_read` files retain null line counts;
+- every omitted group has a nonzero reasoned ledger entry and retained
+  `changed_files` never claims to be complete after omission;
+- UTF-8 patch and excerpt truncation stops only at character boundaries;
+- when the envelope can fit, `serialized_bytes <= max_bytes`; when it cannot,
+  the artifact explicitly reports `output_limited`, `budget.exceeded`, and
+  `evidence=incomplete` rather than pretending the result is complete;
+- CLI and MCP preserve the same budget outcome and scope aggregates.
+
+The tests compare several budgets against the same fixture and treat the
+pre-budget scope aggregate as the invariant evidence. They do not require
+smaller budgets to preserve per-file detail or patch text.
+
+### Optional Clippy producer
+
+Clippy is a deferred, explicit diagnostic producer. It must not be silently
+added to the default `cargo-check` profile or compared with a rustc-only
+baseline. Before implementation, the contract requires:
+
+- a producer/profile marker distinguishing `clippy` from `cargo_check`;
+- comparability fingerprints covering Clippy, Cargo, rustc, package/target,
+  feature/default-feature, compiler-affecting configuration, and command
+  profile;
+- exact multiset diagnostic matching within the same producer/profile only;
+- the same `not_run`, `completed_*`, `tool_failed`, `timed_out`,
+  `output_limited`, and `partial` states as Cargo diagnostics;
+- explicit trusted-workspace permission and the existing execution-policy
+  disclosure, because Clippy also runs build scripts and procedural macros;
+- fixtures for clean, warning, compiler-error, tool-failure, and changed
+  profile cases before exposing a CLI or MCP option.
+
+No Clippy-specific lint set, accuracy percentage, or cross-producer delta is
+part of `context-v1` until those gates are implemented and reviewed.
+
 ## Versioning and parity
 
 The checked-in schemas under `schemas/` are the external contract. Core Rust

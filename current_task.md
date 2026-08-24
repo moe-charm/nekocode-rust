@@ -78,8 +78,9 @@ Recovery points:
 ## Next implementation focus
 
 1. Add broader property tests for byte/item/line budget invariants.
-2. Specify Clippy as an optional, independently comparable diagnostic producer
-   before implementing it; keep `cargo check` as the default diagnostic mode.
+2. Implement Clippy only after the documented producer/profile comparability
+   and execution fixtures are in place; keep `cargo check` as the default
+   diagnostic mode.
 3. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.

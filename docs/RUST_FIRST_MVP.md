@@ -159,6 +159,14 @@ The envelope always keeps status, provenance, and omission information. Every
 omitted group records a reason, count, and priority; silent truncation is not
 allowed.
 
+The next test gate compares several budget values against one fixture. It must
+prove that pre-budget `diff.change_scopes` aggregates and their order survive
+patch/file omission, that `counted`/`binary`/`not_read` line-count states keep
+their null-vs-numeric meaning, that UTF-8 truncation is boundary-safe, and that
+an envelope that cannot fit reports `output_limited` plus incomplete evidence.
+CLI and MCP must preserve the same result. Smaller budgets are allowed to lose
+per-file details; they are not allowed to fabricate a clean result.
+
 Evidence levels are:
 
 - `tool-confirmed`: directly reported by Cargo, rustc, or Git;
@@ -173,6 +181,15 @@ is the default requested mode and remains `tool-confirmed` when Git completed
 and no evidence was omitted. Failed/partial tools, unavailable or incompatible
 diagnostic comparisons, and actual budget omissions still produce
 `incomplete`.
+
+Clippy is not yet a public diagnostic mode. When it is designed, it will be an
+independent producer/profile from `cargo_check`: its producer identity,
+Clippy/Cargo/rustc versions, selected package/target/features,
+compiler-affecting configuration, and command profile must participate in
+comparability. Exact multiset deltas are allowed only within the same
+producer/profile. Clippy will remain opt-in and subject to the same
+trusted-workspace execution disclosure; no default lint set or cross-producer
+delta is implied.
 
 ## Execution trust
 
