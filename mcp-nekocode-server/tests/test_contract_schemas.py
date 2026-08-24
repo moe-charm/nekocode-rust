@@ -179,6 +179,65 @@ class ContractSchemaTest(unittest.TestCase):
             ["revision", "staged", "unstaged", "untracked"],
         )
 
+    def test_current_cli_clippy_artifacts_emit_schema_valid_markers(self) -> None:
+        snapshot_schema = json.loads(
+            (REPO_ROOT / "schemas" / "snapshot-v1.schema.json").read_text()
+        )
+        snapshot_completed = subprocess.run(
+            [
+                "cargo",
+                "run",
+                "-q",
+                "-p",
+                "nekocode",
+                "--",
+                "snapshot",
+                ".",
+                "--analysis",
+                "clippy",
+            ],
+            cwd=REPO_ROOT / "nekocode-workspace",
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        snapshot = json.loads(snapshot_completed.stdout)
+        assert_schema_subset(snapshot, snapshot_schema, snapshot_schema)
+        self.assertEqual(snapshot["analysis_mode"], "clippy")
+        self.assertEqual(snapshot["diagnostics"]["producer"], "clippy")
+        self.assertEqual(snapshot["diagnostics"]["profile"], "clippy_default_v1")
+
+        context_schema = json.loads(
+            (REPO_ROOT / "schemas" / "context-v1.schema.json").read_text()
+        )
+        context_completed = subprocess.run(
+            [
+                "cargo",
+                "run",
+                "-q",
+                "-p",
+                "nekocode",
+                "--",
+                "context",
+                ".",
+                "--diagnostics",
+                "--diagnostic-producer",
+                "clippy",
+                "--budget",
+                "8000",
+            ],
+            cwd=REPO_ROOT / "nekocode-workspace",
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        context = json.loads(context_completed.stdout)
+        assert_schema_subset(context, context_schema, context_schema)
+        self.assertEqual(context["diagnostic_producer"], "clippy")
+        self.assertEqual(context["diagnostic_profile"], "clippy_default_v1")
+
 
 if __name__ == "__main__":
     unittest.main()

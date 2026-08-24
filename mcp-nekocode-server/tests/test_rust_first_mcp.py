@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,18 @@ sys.path.insert(0, str(SERVER.parent))
 
 
 class RustFirstMCPProtocolTest(unittest.TestCase):
+    @staticmethod
+    def _normalize_volatile_diagnostics(payload: dict) -> dict:
+        normalized = dict(payload)
+        diagnostics = normalized.get("diagnostics")
+        if isinstance(diagnostics, dict):
+            diagnostics = dict(diagnostics)
+            stderr = diagnostics.get("stderr")
+            if isinstance(stderr, str):
+                diagnostics["stderr"] = re.sub(r"in \d+(?:\.\d+)?s", "in <duration>", stderr)
+            normalized["diagnostics"] = diagnostics
+        return normalized
+
     @staticmethod
     def _stop(process: subprocess.Popen[str]) -> None:
         if process.poll() is None:
@@ -207,6 +220,108 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
             with self.subTest(bounded_context_key=key):
                 self.assertEqual(bounded_cli[key], bounded_mcp[key])
         self.assertIn("change_scopes", bounded_cli["diff"])
+
+    def test_cli_and_mcp_clippy_payloads_are_in_parity(self) -> None:
+        from mcp_server_rust_first import RustFirstMCPServer
+
+        workspace = REPO_ROOT / "nekocode-workspace"
+        server = RustFirstMCPServer(workspace_dir=workspace)
+        cli_snapshot = subprocess.run(
+            [
+                "cargo",
+                "run",
+                "-q",
+                "-p",
+                "nekocode",
+                "--",
+                "snapshot",
+                ".",
+                "--analysis",
+                "clippy",
+            ],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        mcp_snapshot = server._run_cli(
+            "nekocode_snapshot", {"path": ".", "analysis": "clippy"}
+        )
+        cli_snapshot_payload = self._normalize_volatile_diagnostics(
+            json.loads(cli_snapshot.stdout)
+        )
+        mcp_snapshot = self._normalize_volatile_diagnostics(mcp_snapshot)
+        for key in (
+            "contract_version",
+            "artifact_kind",
+            "status",
+            "analysis_mode",
+            "evidence",
+            "execution_policy",
+            "workspace",
+            "diagnostics",
+            "canonical_hash",
+            "limitations",
+        ):
+            with self.subTest(snapshot_key=key):
+                self.assertEqual(cli_snapshot_payload[key], mcp_snapshot[key])
+
+        cli_context = subprocess.run(
+            [
+                "cargo",
+                "run",
+                "-q",
+                "-p",
+                "nekocode",
+                "--",
+                "context",
+                ".",
+                "--diagnostics",
+                "--diagnostic-producer",
+                "clippy",
+                "--budget",
+                "8000",
+            ],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        mcp_context = server._run_cli(
+            "nekocode_context",
+            {
+                "path": ".",
+                "diagnostics": True,
+                "diagnostic_producer": "clippy",
+                "budget": 8000,
+            },
+        )
+        cli_context_payload = self._normalize_volatile_diagnostics(
+            json.loads(cli_context.stdout)
+        )
+        mcp_context = self._normalize_volatile_diagnostics(mcp_context)
+        for key in (
+            "contract_version",
+            "artifact_kind",
+            "status",
+            "comparison_status",
+            "evidence",
+            "execution_policy",
+            "diagnostic_producer",
+            "diagnostic_profile",
+            "diagnostics",
+            "diagnostic_delta",
+            "budget",
+            "budget_tokens",
+            "serialized_bytes",
+            "budget_exceeded",
+            "limitations",
+            "omissions",
+        ):
+            with self.subTest(context_key=key):
+                self.assertEqual(cli_context_payload[key], mcp_context[key])
 
     def test_prebuilt_cli_mode_does_not_require_cargo_workspace(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
