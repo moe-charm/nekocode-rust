@@ -56,6 +56,11 @@ workflow and stop conditions.
 - independent read-only implementation review followed by fixes for deleted
   hunk association and pre-first-commit staged comparison, both covered by
   integration tests;
+- Codex Skill updated with Change Scope v1 interpretation rules, explicit
+  unknown/omission handling, and a maintainer evaluation reference;
+- independent read-only Skill forward evaluation against the Nyash artifact:
+  all six acceptance checks passed, with no instruction ambiguity or behavior
+  mismatch;
 - read-only Nyash Change Scope probe: even with the patch and all 41 file
   details omitted, the summary retained 16 unstaged files (`+288/-1663`) and
   25 marker-only untracked files; the target Git status hash remained
@@ -73,10 +78,8 @@ Recovery points:
 ## Next implementation focus
 
 1. Add broader property tests for byte/item/line budget invariants.
-2. Evaluate the local Codex Skill against Change Scope v1, especially omitted
-   file details and explicit unknown line counts.
-3. Specify Clippy as an optional, independently comparable diagnostic producer
+2. Specify Clippy as an optional, independently comparable diagnostic producer
    before implementing it; keep `cargo check` as the default diagnostic mode.
-4. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
+3. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
 
 The authoritative decisions are under `docs/`.
