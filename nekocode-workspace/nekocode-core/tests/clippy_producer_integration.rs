@@ -62,6 +62,19 @@ fn clippy_clean_and_warning_observations_have_explicit_markers() {
 }
 
 #[test]
+fn repeated_clippy_snapshots_have_stable_canonical_hashes() {
+    let directory = tempdir().expect("stable-hash fixture directory");
+    write_package(directory.path(), "pub fn value() -> u32 { 1 }\n", None);
+
+    let first = build_rust_snapshot_with_analysis(directory.path(), AnalysisMode::Clippy, false)
+        .expect("first Clippy snapshot should run");
+    let second = build_rust_snapshot_with_analysis(directory.path(), AnalysisMode::Clippy, false)
+        .expect("second Clippy snapshot should run");
+
+    assert_eq!(first.canonical_hash, second.canonical_hash);
+}
+
+#[test]
 fn clippy_compiler_errors_remain_evidence() {
     let directory = tempdir().expect("compiler-error fixture directory");
     write_package(

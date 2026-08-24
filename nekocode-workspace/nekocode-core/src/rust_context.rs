@@ -60,49 +60,34 @@ pub enum EvidenceLevel {
 }
 
 /// Whether a snapshot performs metadata observation or invokes Cargo.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AnalysisMode {
+    #[default]
     MetadataOnly,
     CargoCheck,
     Clippy,
-}
-
-impl Default for AnalysisMode {
-    fn default() -> Self {
-        Self::MetadataOnly
-    }
 }
 
 /// The official diagnostic producer used for one explicit observation.
 ///
 /// Cargo check remains the default. Clippy is opt-in and is never folded into
 /// a cargo-check observation or compared with one as if they were equivalent.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticProducer {
+    #[default]
     CargoCheck,
     Clippy,
 }
 
-impl Default for DiagnosticProducer {
-    fn default() -> Self {
-        Self::CargoCheck
-    }
-}
-
 /// Command profile marker required for exact diagnostic comparability.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticProfile {
+    #[default]
     CargoCheckV1,
     ClippyDefaultV1,
-}
-
-impl Default for DiagnosticProfile {
-    fn default() -> Self {
-        Self::CargoCheckV1
-    }
 }
 
 impl DiagnosticProducer {
@@ -176,10 +161,11 @@ fn diagnostic_execution_policy(producer: DiagnosticProducer) -> ExecutionPolicy 
 }
 
 /// Lifecycle state of a snapshot/context operation.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ArtifactStatus {
     NotRun,
+    #[default]
     CompletedClean,
     CompletedWithDiagnostics,
     ToolFailed,
@@ -188,26 +174,15 @@ pub enum ArtifactStatus {
     Partial,
 }
 
-impl Default for ArtifactStatus {
-    fn default() -> Self {
-        Self::CompletedClean
-    }
-}
-
 /// Status of a requested baseline comparison.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ComparisonStatus {
     Comparable,
+    #[default]
     BaselineMissing,
     NotComparable,
     Partial,
-}
-
-impl Default for ComparisonStatus {
-    fn default() -> Self {
-        Self::BaselineMissing
-    }
 }
 
 /// A machine-readable record of content omitted by a hard budget.
@@ -1089,15 +1064,27 @@ pub fn build_rust_snapshot_with_analysis(
     analysis: AnalysisMode,
     all_features: bool,
 ) -> Result<RustContextSnapshot> {
-    let workspace = index_rust_workspace(path)?;
+    let path = path.as_ref();
+    let initial_workspace = index_rust_workspace(path)?;
     let producer = match analysis {
         AnalysisMode::MetadataOnly => None,
         AnalysisMode::CargoCheck => Some(DiagnosticProducer::CargoCheck),
         AnalysisMode::Clippy => Some(DiagnosticProducer::Clippy),
     };
     let diagnostics = producer
-        .map(|producer| run_diagnostic_with_options(&workspace.root, producer, all_features))
+        .map(|producer| {
+            run_diagnostic_with_options(&initial_workspace.root, producer, all_features)
+        })
         .transpose()?;
+    // A compiler observation can create Cargo.lock in a workspace that did
+    // not have one before the run. Re-read metadata after the observation so
+    // the snapshot describes the post-run inputs and repeated snapshots do
+    // not differ only because NekoCode created that lockfile.
+    let workspace = if producer.is_some() {
+        index_rust_workspace(&initial_workspace.root)?
+    } else {
+        initial_workspace
+    };
     let status = diagnostics
         .as_ref()
         .map_or(ArtifactStatus::CompletedClean, diagnostic_status);
@@ -1262,6 +1249,12 @@ fn normalize_hash_value(value: &mut serde_json::Value, key: Option<&str>, worksp
         serde_json::Value::Object(map) => {
             map.remove("generated_at");
             map.remove("canonical_hash");
+            // Cargo writes elapsed-time text such as `Finished ... in 0.14s`
+            // to stderr. Keep that observation in the artifact, but exclude
+            // raw process stderr from the identity hash so repeated runs are
+            // comparable. Structured diagnostics, status, exit code, and
+            // provenance remain hashed separately.
+            map.remove("stderr");
             for (child_key, child) in map.iter_mut() {
                 normalize_hash_value(child, Some(child_key), workspace_root);
             }

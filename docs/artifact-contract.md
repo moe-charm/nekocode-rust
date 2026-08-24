@@ -27,7 +27,9 @@ The artifact records, as applicable:
 - an execution policy describing trust, offline mode, environment filtering,
   compiler-wrapper handling, and sandbox gaps;
 - optional compiler diagnostic observation;
-- a canonical payload hash that excludes volatile timestamps and storage paths.
+- a canonical payload hash that excludes volatile timestamps, storage paths,
+  and raw Cargo process stderr (which may contain elapsed-time text), while
+  retaining structured diagnostics, status, exit code, and provenance.
 
 Cargo metadata parsing must pin a machine-readable format version, tolerate
 unknown fields, and avoid assuming a fixed future enum set.

@@ -4,6 +4,7 @@ WORKDIR /src
 COPY nekocode-workspace/ /src/nekocode-workspace/
 RUN cargo build \
       --manifest-path /src/nekocode-workspace/Cargo.toml \
+      --locked \
       --package nekocode \
       --release
 

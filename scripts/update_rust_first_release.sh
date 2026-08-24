@@ -48,7 +48,7 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
   if [ "$CLEAN" -eq 1 ]; then
     cargo clean --manifest-path "$MANIFEST"
   fi
-  cargo build --manifest-path "$MANIFEST" --package nekocode --release
+  cargo build --manifest-path "$MANIFEST" --locked --package nekocode --release
 fi
 
 if [ ! -x "$TARGET" ]; then

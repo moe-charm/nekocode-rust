@@ -58,27 +58,33 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.85.0
+          components: rustfmt, clippy
 
       - name: Test context library
-        run: cargo test -p nekocode-core
+        run: cargo test --locked -p nekocode-core
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
       - name: Reject canonical Rust warnings
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Verify trusted-workspace execution boundary
-        run: cargo test -p nekocode-core --test execution_trust_integration
+        run: cargo test --locked -p nekocode-core --test execution_trust_integration
 
       - name: Verify procedural-macro execution evidence
-        run: cargo test -p nekocode-core --test proc_macro_execution_integration
+        run: cargo test --locked -p nekocode-core --test proc_macro_execution_integration
 
       - name: Verify Git helper isolation
-        run: cargo test -p nekocode-core --test git_helper_safety_integration
+        run: cargo test --locked -p nekocode-core --test git_helper_safety_integration
 
       - name: Check canonical CLI package
-        run: cargo check -p nekocode --all-targets
+        run: cargo check --locked -p nekocode --all-targets
+
+      - name: Test canonical CLI package
+        run: cargo test --locked -p nekocode
 
       - name: Verify the physical repository boundary
         run: |
@@ -87,7 +93,7 @@ jobs:
           import subprocess
 
           metadata = json.loads(subprocess.check_output([
-              "cargo", "metadata", "--no-deps", "--format-version", "1"
+              "cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"
           ]))
           packages = {package["name"] for package in metadata["packages"]}
           assert packages == {"nekocode", "nekocode-core"}, packages
@@ -102,20 +108,20 @@ jobs:
 
       - name: Verify the canonical CLI exposes only two use cases
         run: |
-          cargo run -q -p nekocode -- --help > /tmp/nekocode-help.txt
+          cargo run --locked -q -p nekocode -- --help > /tmp/nekocode-help.txt
           grep -Eq '^  snapshot  ' /tmp/nekocode-help.txt
           grep -Eq '^  context   ' /tmp/nekocode-help.txt
           ! grep -Eq '^  (session-|deadcode|refactor|impact|watch)' /tmp/nekocode-help.txt
 
       - name: Smoke-test Rust snapshot output
-        run: cargo run -q -p nekocode -- snapshot . --output /tmp/nekocode-rust-snapshot.json && test -s /tmp/nekocode-rust-snapshot.json
+        run: cargo run --locked -q -p nekocode -- snapshot . --output /tmp/nekocode-rust-snapshot.json && test -s /tmp/nekocode-rust-snapshot.json
 
       - name: Smoke-test bounded Git context output
-        run: cargo run -q -p nekocode -- context . --compare-ref HEAD^ --budget 2000 --diagnostics > /tmp/nekocode-rust-context.json && test -s /tmp/nekocode-rust-context.json
+        run: cargo run --locked -q -p nekocode -- context . --compare-ref HEAD^ --budget 2000 --diagnostics > /tmp/nekocode-rust-context.json && test -s /tmp/nekocode-rust-context.json
 
       - name: Smoke-test human-readable change summary
         run: |
-          cargo run -q -p nekocode -- context . --compare-ref HEAD^ --format summary > /tmp/nekocode-rust-summary.txt
+          cargo run --locked -q -p nekocode -- context . --compare-ref HEAD^ --format summary > /tmp/nekocode-rust-summary.txt
           grep -Fq 'NekoCode change summary' /tmp/nekocode-rust-summary.txt
           grep -Fq 'Changes:' /tmp/nekocode-rust-summary.txt
           grep -Fq 'Omissions:' /tmp/nekocode-rust-summary.txt

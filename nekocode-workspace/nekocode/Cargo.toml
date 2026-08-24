@@ -2,6 +2,7 @@
 name = "nekocode"
 version = "1.2.0"
 edition = "2021"
+rust-version = "1.85"
 description = "Canonical Rust-first snapshot and context CLI"
 autolib = false
 

@@ -11,10 +11,12 @@ NekoCode has two different operations and must not describe both as harmless
 | --- | --- | --- | --- |
 | `metadata-only` | Yes | No | Cargo workspace/toolchain observation |
 | `cargo-check` | No, explicit opt-in | Potentially | Structured compiler diagnostics and a baseline |
+| `clippy` | No, explicit opt-in | Potentially | Structured Clippy diagnostics and a baseline |
 
 Cargo can execute `build.rs`, procedural macros, compiler wrappers, and related
-build configuration. `cargo check` therefore requires a trusted workspace and
-is an execution operation, even when it does not produce a final binary.
+build configuration. `cargo check` and `clippy` therefore require a trusted
+workspace and are execution operations, even when they do not produce a final
+binary.
 
 NekoCode must never claim that `--offline` is an OS network sandbox. Until an
 OS-level sandbox exists, provenance reports the limitation explicitly:
@@ -27,15 +29,16 @@ process_network_isolation: not-enforced
 
 ## Current controls and gaps
 
-The current implementation exposes `cargo-check` only as an explicit opt-in
-and records tool provenance, compiler status, structured diagnostics, execution
-policy, and budget omissions. The core uses an offline Cargo profile with a
-dedicated temporary target directory, an environment allowlist, disabled
-compiler wrappers, bounded Cargo stdout/stderr, and process-group termination
-on timeout. Source excerpts use a canonical-root/symlink check. The MCP
-subprocess adapter also applies input/output limits, redacts absolute paths,
-uses a small environment allowlist, and has a wall-clock timeout. Git diff
-calls disable external diff/textconv helpers; this is not an OS sandbox.
+The current implementation exposes compiler observations (`cargo-check` and
+`clippy`) only as explicit opt-ins and records producer/tool provenance,
+compiler status, structured diagnostics, execution policy, and budget
+omissions. The core uses an offline Cargo profile with a dedicated temporary
+target directory, an environment allowlist, disabled compiler wrappers,
+bounded Cargo stdout/stderr, and process-group termination on timeout. Source
+excerpts use a canonical-root/symlink check. The MCP subprocess adapter also
+applies input/output limits, redacts absolute paths, uses a small environment
+allowlist, and has a wall-clock timeout. Git diff calls disable external
+diff/textconv helpers; this is not an OS sandbox.
 
 The following controls are **not yet enforced** and remain release blockers
 for untrusted workspaces:
@@ -44,12 +47,12 @@ for untrusted workspaces:
 - a sandboxed build-script/procedural-macro execution boundary.
 
 Until those controls are implemented and tested, callers must trust the
-workspace and the product must not describe `cargo-check` as sandboxed. An
-unimplemented control is reported as a limitation rather than implied by a
-generic “read-only” label. The current process-group, output-limit, and
-symlink tests cover the local safety boundary. The fixture suite now includes
-both a build-script execution sentinel and a procedural-macro diagnostic
-sentinel; these prove that code can run, not that it is sandboxed.
+workspace and the product must not describe compiler observations as sandboxed.
+An unimplemented control is reported as a limitation rather than implied by a
+generic “read-only” label. The current process-group, output-limit, symlink,
+and Git-helper tests cover the local safety boundary. The fixture suite now
+includes both a build-script execution sentinel and a procedural-macro
+diagnostic sentinel; these prove that code can run, not that it is sandboxed.
 
 ## Compiler result states
 
@@ -70,8 +73,7 @@ non-zero exit with a valid diagnostic stream is `completed_with_diagnostics`.
 
 ## Acceptance fixtures
 
-The trust gate includes a build script sentinel, a procedural-macro sentinel,
-a timeout fixture, output-limit coverage, and an out-of-root symlink. A Git
-external-diff sentinel is still a promotion item. Until OS-level isolation is
-available, the product must require a trusted workspace and disclose the
-missing sandbox guarantee.
+The trust gate includes a build-script sentinel, a procedural-macro sentinel,
+a timeout fixture, output-limit coverage, an out-of-root symlink, and a Git
+external-diff sentinel. Until OS-level isolation is available, the product
+must require a trusted workspace and disclose the missing sandbox guarantee.

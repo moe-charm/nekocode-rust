@@ -167,8 +167,8 @@ does not add another analyzer or execution path.
 
 ```bash
 cd nekocode-workspace
-cargo test
-cargo check --all-targets
+cargo test --locked
+cargo check --locked --all-targets
 cd ..
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```
@@ -309,8 +309,8 @@ MCPは実行経路、SkillやPluginは呼び出し方・提示方法を定義す
 
 ```bash
 cd nekocode-workspace
-cargo test
-cargo check --all-targets
+cargo test --locked
+cargo check --locked --all-targets
 cd ..
 python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 ```

@@ -23,8 +23,8 @@ Use:
 make verify
 # or
 cd nekocode-workspace
-cargo test
-cargo check --all-targets
+cargo test --locked
+cargo check --locked --all-targets
 ```
 
 The retired implementation is absent from `main`. Its recovery points are

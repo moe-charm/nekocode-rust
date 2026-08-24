@@ -89,10 +89,57 @@ Recovery points:
 - tag: `legacy-multilang-final`;
 - branch: `archive/legacy-multilang-final`.
 
+## Verified repository state
+
+- canonical branch: `master` at `9acbdf1`, matching `origin/master`;
+- working tree: intentionally modified with the documentation and P0 fixes
+  listed below; no unrelated files are changed;
+- legacy recovery tag and remote archive branch: present;
+- canonical hashing now excludes raw diagnostic stderr and re-reads metadata
+  after compiler observations that may create `Cargo.lock`;
+- the repeated Clippy snapshot hash regression is green;
+- `make verify` is green locally: fmt, Clippy `-D warnings`, locked Cargo
+  check/test, CLI integration tests, MCP/Python tests, and schema parsing;
+- the release baseline is now documented and wired as Rust 1.85.0 (MSRV 1.85)
+  across package metadata, CI, and Docker;
+- the latest GitHub Actions run is **not green**: its `stable` toolchain
+  resolved to Rust/Clippy 1.98, where `-D warnings` rejects five manual
+  `Default` implementations as derivable;
+- the five derivable defaults are fixed locally, but a public release/tag is
+  still blocked until the updated workflow passes remotely.
+
 ## Next implementation focus
 
-1. Perform release/tag review only; no further producer, language, or MCP
-   surface expansion is planned for this cycle.
-2. Do not add fuzzy diagnostic matching, another language, or another MCP tool.
+### P0 — restore a reproducible green release gate
+
+- [x] Make snapshot hashing deterministic and add a repeated-execution
+      regression test.
+- [x] Replace the five derivable manual `Default` implementations rejected by
+      Clippy 1.98.
+- [x] Make the documented `make verify` gate and CI agree: formatting,
+      `-D warnings`, CLI integration tests, locked Cargo commands, and the
+      complete Python contract/MCP suite.
+- [x] Select and document one Rust toolchain policy (MSRV/CI/Docker 1.85).
+- [x] Correct stale trust/test-gate wording and limit compiler observations to
+      explicitly trusted workspaces.
+- [ ] Commit/push the verified changes and require the exact remote workflow
+      to pass before creating a release tag.
+
+### P1 — release hygiene after P0
+
+1. Decide and document the CLI/core 1.2.0 versus MCP 0.2.0 version policy.
+2. Add the repository license and complete publish-facing Cargo metadata.
+3. Define the v1.2.0 release artifact procedure: tag/commit verification,
+   clean-tree check, locked build, SHA-256 checksums, provenance, and release
+   notes. Do not imply a target matrix that has not been tested.
+4. Harden contract validation with a generated snapshot golden artifact,
+   negative compatibility cases, and a standard JSON Schema validator.
+
+### Frozen for this release
+
+- fuzzy diagnostic matching;
+- a second language or a generic analyzer abstraction;
+- rust-analyzer integration;
+- additional MCP tools, prompts, resources, Plugin UI, or remote service.
 
 The authoritative decisions are under `docs/`.

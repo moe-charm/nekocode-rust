@@ -3,13 +3,18 @@
 Status: canonical design, 2026-08-23.
 
 NekoCode is a Rust-first code context layer. It does not reimplement Rust
-semantic analysis. Cargo metadata, `rustc`/`cargo check`, Git, and later
+semantic analysis. Cargo metadata, `rustc`/`cargo check`/Clippy, Git, and later
 explicitly enabled official backends remain the sources of meaning.
 
 The product definition is:
 
 > NekoCode converts Rust official-tool results and Git changes into
 > comparable, budgeted, evidence-backed code context.
+
+The supported release toolchain policy is Rust 1.85.0: package manifests set
+MSRV 1.85, CI runs the pinned 1.85.0 toolchain, and the release Docker builder
+uses the matching Rust image. Newer toolchains may work, but they are not the
+reproducibility baseline for a release.
 
 Read the companion decisions first:
 
@@ -73,8 +78,11 @@ profile, relevant input digests, Git state, execution policy, and provenance.
 `--analysis cargo-check` adds a structured diagnostic observation. The default
 is `metadata-only` and must not run `build.rs` or procedural macros.
 
-The canonical payload hash excludes timestamps and storage paths. Path values
-in the artifact are normalized to the workspace boundary where possible.
+The canonical payload hash excludes timestamps, storage paths, and raw Cargo
+process stderr. Cargo may include elapsed-time text in that stream; structured
+diagnostics, status, exit code, and provenance remain part of the artifact.
+Path values in the artifact are normalized to the workspace boundary where
+possible.
 The input path may be the workspace/package root, a nested directory, or an
 existing file. NekoCode searches ancestors for the nearest manifest and then
 uses Cargo metadata's canonical workspace root for subsequent observations.
@@ -172,13 +180,13 @@ The envelope always keeps status, provenance, and omission information. Every
 omitted group records a reason, count, and priority; silent truncation is not
 allowed.
 
-The next test gate compares several budget values against one fixture. It must
-prove that pre-budget `diff.change_scopes` aggregates and their order survive
+The budget invariant gate is implemented as a multi-budget fixture suite. It
+proves that pre-budget `diff.change_scopes` aggregates and their order survive
 patch/file omission, that `counted`/`binary`/`not_read` line-count states keep
 their null-vs-numeric meaning, that UTF-8 truncation is boundary-safe, and that
 an envelope that cannot fit reports `output_limited` plus incomplete evidence.
-CLI and MCP must preserve the same result. Smaller budgets are allowed to lose
-per-file details; they are not allowed to fabricate a clean result.
+CLI and MCP preserve the same bounded result. Smaller budgets are allowed to
+lose per-file details; they are not allowed to fabricate a clean result.
 
 Evidence levels are:
 
@@ -205,18 +213,21 @@ implied.
 
 ## Execution trust
 
-`metadata-only` is the default. `cargo-check` is opt-in and requires a trusted
-workspace because Cargo may execute build scripts, procedural macros, and
-compiler wrappers. Until OS-level isolation exists, NekoCode must report that
-process network isolation is not enforced and must not call the operation
-"sandboxed".
+`metadata-only` is the default. `cargo-check` and `clippy` are opt-in and
+require a trusted workspace because Cargo may execute build scripts,
+procedural macros, compiler wrappers, and related configuration. Until OS-level
+isolation exists, NekoCode must report that process network isolation is not
+enforced and must not call either operation "sandboxed". The first release is
+therefore scoped to explicitly trusted workspaces for compiler observations;
+it is not an untrusted-workspace safety boundary.
 
 The implementation now bounds process time/output, filters the Cargo
 environment, uses offline mode and a dedicated target, keeps source reads
 inside the workspace, rejects symlink escapes, and disables Git external
-diff/textconv. OS-level process/network isolation is still not enforced.
-See [execution-trust.md](execution-trust.md) for the remaining release
-blockers and fixtures.
+diff/textconv. OS-level process/network isolation is still not enforced. The
+Git helper safety fixture is part of the current gate. See
+[execution-trust.md](execution-trust.md) for the remaining untrusted-workspace
+limitation and fixture details.
 
 ## Current implementation and promotion gates
 
