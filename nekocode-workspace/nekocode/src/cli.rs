@@ -60,6 +60,9 @@ pub enum Commands {
     group(ArgGroup::new("symbol_query").args(["at", "symbol"]))
 )]
 pub struct ContextArgs {
+    /// Keep a foreground backend for sequential JSON-line investigation requests.
+    #[arg(long, conflicts_with_all = ["symbol_mode", "compare_ref", "diagnostics", "working_tree", "include_untracked_content", "baseline", "all_features", "allow_build_scripts", "output", "format", "budget", "excerpt_lines", "diagnostic_producer"])]
+    pub session: bool,
     /// Workspace, nested directory or source file; defaults to the current directory.
     pub path: Option<PathBuf>,
     /// Compare committed changes from REF...HEAD; add --working-tree for local edits.
@@ -118,6 +121,9 @@ pub struct ContextArgs {
     /// Enable build scripts and proc-macro preparation in a trusted workspace.
     #[arg(long, requires = "symbol_query")]
     pub allow_build_scripts: bool,
+    /// Show rg matches absent from semantic references as unconfirmed candidates.
+    #[arg(long, requires = "symbol_query", conflicts_with = "packet")]
+    pub text_candidates: bool,
     #[arg(long, value_enum, default_value_t = OutputFormatArg::Json)]
     pub format: OutputFormatArg,
     #[arg(short, long)]

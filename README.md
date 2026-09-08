@@ -1,5 +1,22 @@
 # 🦀 NekoCode
 
+Coverage and freshness: JSON now includes `coverage` explanations and
+`freshness.verification` input-hash comparisons; `--format summary` displays them
+for humans. [Interpretation and limits](docs/coverage-freshness-v1.md).
+指定条件・未確認範囲と、入力ハッシュの一致／変更／未観測を分けて表示します。
+
+Optional text comparison: add `--text-candidates` to a live investigation to
+see `rg` matches absent from semantic references as **unconfirmed candidates**.
+Comments, strings and other symbols may match; these are not verified callers.
+[Scope and limits](docs/text-candidates-v1.md).
+`rg`との差分を未確認候補として表示できます。参照件数とは別扱いです。
+
+Explicit repeated investigations: `nekocode context PATH --session` keeps a
+foreground backend between JSON-line requests while tracked inputs and settings
+remain unchanged. See [session usage and limits](docs/symbol-session-v1.md).
+CLIセッションで連続調査時のbackendを再利用できます。編集後は再起動します。
+既存MCP呼出しの自動再利用は、まだ対応していません。
+
 ## Rust code investigation for AI / AIのためのRustコード調査
 
 [English](#english) · [日本語](#日本語)

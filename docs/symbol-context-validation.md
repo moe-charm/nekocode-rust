@@ -97,3 +97,79 @@ observations with `rg`, inspect macro-wrapped calls and indirect/FFI boundaries,
 and run the relevant project checks. Neither a zero reference count nor an
 empty text search alone establishes safe deletion. Test candidates are not
 executed tests.
+
+## Foreground session acceptance — 2026-09-08
+
+Local prepared test Nyash, debug CLI and independent RA 1.89.0: the first
+`src/runner.rs:41` query completed in 6.652 seconds with backend_reused=false;
+the subsequent `src/runner.rs:36` query completed in 1.660 seconds with
+backend_reused=true. The requests selected different functions, so this is one
+observed sequence, not a controlled benchmark or a Hakorune speed prediction.
+Build scripts/proc macros remained disabled and synchronization unverified.
+
+Protocol-fixture integration checks count backend process starts independently
+of the reuse flag, verify restart after source/feature changes and incomplete
+input scans, renew the observation deadline, reject malformed requests and
+workspace overrides, validate response schemas, and confirm EOF process cleanup.
+
+## Review-fix regression checks — 2026-09-08
+
+The agy, Claude and claude-glm reviews identified avoidable cache loss on invalid
+requests, stale health after a cached process exits, extra restarts across
+additional include/generated source files, and inaccurate didOpen/didChange
+failure labels. Independent fixture reproductions confirmed invalid-request
+cache loss and stale health before the fix.
+
+Regression coverage now verifies reuse after invalid budget/timeout/line requests
+and failed packet saving; reuse when moving from a non-.rs target to a normal
+source; restart after that additional file changes or disappears; replacement of
+an exited backend before the next observation; and health invalidation when
+transport fails during an observation. Existing EOF cleanup, configuration
+invalidation and incomplete-scan tests remain in place.
+
+## Text-candidate acceptance — 2026-09-08
+
+A live RA 1.89.0 run on a dependency-free temporary Rust crate completed in
+3.359 seconds (debug CLI). Source contained a normal `target()` call and an
+`assert!(target())` call on the same line, plus a comment mentioning `target`.
+The backend returned one semantic reference. The opt-in rg scan returned two
+unconfirmed candidates: the macro-wrapped call and the comment. Backend health
+was ok; synchronization remained unverified. This is a fixture observation, not
+a general reference-completeness or performance claim.
+
+The deterministic integration fixture tests independent reference counts,
+same-line candidate separation, non-ASCII preceding text, excluded target/
+files, saved candidate expansion without backend/rg, semantic-only delta input
+counts, explicit rg failure with null count, preservation of a warm backend after
+rg-only failure, and bounded candidate capture with explicit omissions.
+
+## Coverage/freshness acceptance — 2026-09-08
+
+Added optional structured scope explanations and input-verification counts with
+bounded issue examples. Tests cover equal hashes, modified and missing inputs,
+unobserved inputs without false change claims, incomplete baselines, mismatching
+captured content, and issue-example limits. Schema tests include the nested
+capture-time verification inside saved reference deltas.
+
+Old-packet compatibility is tested by omitting the additive fields and verifying
+the original serialization/integrity behavior. A genuine packet from the earlier
+text-candidates trial also replayed successfully: three matching input hashes,
+zero changes, current comparison match, backend synchronization still unverified.
+No backend or rg was needed for replay. Full make verify passed: 71 Rust tests
+and 43 Python/MCP tests, formatting, Clippy, Cargo check and schema parsing.
+
+## Coverage/freshness review repairs
+
+Full `make verify`: 71 Rust tests and 43 Python/MCP tests pass. Existing integration
+tests now cover text-only failed/timed_out/output_limited delta eligibility,
+rejection of semantic failures/omissions, actual rg candidate-limit packets,
+capture-change path retention with current-match replay, directory replacement,
+budget-prioritized code output, and per-request reuse flags on save/parse errors.
+Session schema validation includes error responses with an observed reuse.
+
+The original review repro packets also pass the intended checks: semantic delta
+becomes observed_comparable, synthetic capture history retains src/lib.rs,
+directory replacement becomes stale, and budget=1000 returns one code item in
+3651 bytes (previously zero items with an exceeded budget). These are local
+regressions, not a new Hakorune field evaluation. No reuse guarantee was broadened
+for late-discovered include files or unreadable inputs.

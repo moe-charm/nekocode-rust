@@ -1,6 +1,7 @@
 //! Canonical NekoCode CLI: two Rust-first use cases over `nekocode-core`.
 
 mod cli;
+mod session;
 
 use clap::Parser;
 use cli::{AnalysisArg, Cli, Commands, ContextArgs, DiagnosticProducerArg, OutputFormatArg};
@@ -34,7 +35,11 @@ fn main() -> Result<()> {
 }
 
 fn run_context(args: ContextArgs) -> Result<()> {
+    if args.session {
+        return session::run(args.path);
+    }
     let ContextArgs {
+        session: _,
         path,
         compare_ref,
         budget,
@@ -55,6 +60,7 @@ fn run_context(args: ContextArgs) -> Result<()> {
         max_items,
         timeout_seconds,
         allow_build_scripts,
+        text_candidates,
         format,
         output,
     } = args;
@@ -93,6 +99,7 @@ fn run_context(args: ContextArgs) -> Result<()> {
                 timeout_seconds,
                 all_features,
                 allow_build_scripts,
+                text_candidates,
             },
             format,
             output,

@@ -1,3 +1,57 @@
+# Review corrections — coverage, freshness and reference comparison
+
+Addressed the three external reviews: text-only errors no longer veto complete
+semantic deltas; replay preserves capture change paths; non-file replacements
+are changed; derived explanations yield to code under budget pressure; session
+save errors report actual reuse without leaking a preceding request's state.
+Docs clarify late-input reuse limits and lockfile creation. Full make verify
+passed (71 Rust / 43 Python-MCP tests), including extended regression scenarios.
+
+---
+
+# Implemented — coverage explanation and input verification
+
+JSON/summary expose requested vs observed vs unverified scope, and bounded hash
+comparison counts/issues with explicit capture/replay basis. Old packets remain
+integrity-compatible. Missing observations are not automatically source changes;
+backend generation remains unverified. See docs/coverage-freshness-v1.md.
+
+---
+
+# Implemented — unconfirmed text candidates
+
+Live CLI/session/MCP investigations accept text_candidates. Bounded rg matches
+absent from captured definitions/references become unconfirmed_text_candidate
+items, independent of semantic reference counts. Packet paging/replay remains
+backend-free. See docs/text-candidates-v1.md for limits and failure handling.
+Coverage explanation and freshness UX remain the next priorities.
+
+---
+
+# Review repairs — explicit CLI sessions
+
+Preserve healthy backends on request/save errors; probe liveness before reuse;
+invalidate backend health after observation failures; rehash additional captured
+inputs across requests; report didOpen/didChange accurately. Regression tests
+cover the reported failure paths. New requested priority: unconfirmed rg matches,
+coverage explanation, freshness UX, then stronger reuse/batch workflows.
+See docs/hakorune-follow-up.md for exact implementation status.
+
+---
+
+# Implemented follow-up — explicit CLI analysis reuse
+
+`context PATH --session` keeps an explicitly owned foreground backend for
+sequential JSON-line requests. Unchanged observed inputs/settings allow reuse;
+source/config changes and incomplete scans force restart. Existing MCP calls
+remain one-shot; coverage explanation and freshness UX remain next priorities.
+
+Local Nyash observations: first query 6.652 seconds, second different function
+1.660 seconds with confirmed backend reuse. See docs/symbol-session-v1.md and
+docs/symbol-context-validation.md for protocol, limits and test evidence.
+
+---
+
 # Next priorities — Hakorune investigation workflow
 
 Requested order: reuse a backend for new investigations, explain coverage gaps,

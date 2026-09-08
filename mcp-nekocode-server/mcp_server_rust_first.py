@@ -284,6 +284,10 @@ class RustFirstMCPServer:
                             "type": "integer", "minimum": 1,
                             "maximum": MAX_BACKEND_TIMEOUT_SECONDS, "default": 60,
                         },
+                        "text_candidates": {
+                            "type": "boolean", "default": False,
+                            "description": "Add unconfirmed rg matches absent from semantic references; not verified callers.",
+                        },
                         "allow_build_scripts": {
                             "type": "boolean", "default": False,
                             "description": "Opt in to build-script/proc-macro preparation for a trusted live symbol investigation.",
@@ -313,7 +317,7 @@ class RustFirstMCPServer:
             raise ToolInputError("'at', 'symbol', and 'packet' are mutually exclusive")
         if selectors:
             return RustFirstMCPServer._symbol_arguments(args)
-        if set(args) & {"save_packet", "compare_packet", "item", "cursor", "max_items", "timeout_seconds", "allow_build_scripts"}:
+        if set(args) & {"save_packet", "compare_packet", "item", "cursor", "max_items", "timeout_seconds", "allow_build_scripts", "text_candidates"}:
             raise ToolInputError("symbol options require 'at', 'symbol', or 'packet'")
         compare_ref = args.get("compare_ref")
         if compare_ref is not None:
@@ -391,7 +395,7 @@ class RustFirstMCPServer:
         replay = "packet" in args
         if "compare_packet" in args and (not replay or "item" in args):
             raise ToolInputError("compare_packet requires packet and cannot be combined with item")
-        if replay and set(args) & {"save_packet", "all_features", "allow_build_scripts", "timeout_seconds"}:
+        if replay and set(args) & {"save_packet", "all_features", "allow_build_scripts", "text_candidates", "timeout_seconds"}:
             raise ToolInputError("saved packet reads cannot change the analysis configuration")
         if not replay and set(args) & {"cursor", "item"}:
             raise ToolInputError("'cursor' and 'item' require 'packet'")
@@ -413,7 +417,7 @@ class RustFirstMCPServer:
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
                 raise ToolInputError(f"'{key}' must be an integer between 1 and {maximum}")
             command.extend(["--" + key.replace("_", "-"), str(value)])
-        for key in ("all_features", "allow_build_scripts"):
+        for key in ("all_features", "allow_build_scripts", "text_candidates"):
             value = args.get(key, False)
             if not isinstance(value, bool):
                 raise ToolInputError(f"'{key}' must be a boolean")
@@ -592,7 +596,7 @@ class RustFirstMCPServer:
             "excerpt_lines",
             "baseline",
             "at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor",
-            "max_items", "timeout_seconds", "allow_build_scripts",
+            "max_items", "timeout_seconds", "allow_build_scripts", "text_candidates",
         }:
             return _tool_result({"error": "unsupported tool argument"}, True)
         if name == SNAPSHOT_TOOL and set(args) - {
@@ -614,7 +618,7 @@ class RustFirstMCPServer:
             "excerpt_lines",
             "baseline",
             "at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor",
-            "max_items", "timeout_seconds", "allow_build_scripts", "output",
+            "max_items", "timeout_seconds", "allow_build_scripts", "text_candidates", "output",
         }:
             return _tool_result({"error": "unsupported context argument"}, True)
         try:

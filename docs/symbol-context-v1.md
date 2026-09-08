@@ -139,3 +139,21 @@ seconds for its CLI process; client-side timeouts may be shorter.
 The original eff8d17 distribution accepted only 1 through 120 seconds. Use the
 updated timeout600 runtime for longer observations; that original binary cannot
 accept 300 seconds.
+
+## Optional unconfirmed text evidence
+
+`--text-candidates` adds bounded ripgrep observations after semantic collection.
+See [text-candidates-v1](text-candidates-v1.md). Relation
+`unconfirmed_text_candidate` is navigation evidence only, excluded from semantic
+reference counts and reference-delta matching. A separate `rg/text_candidates`
+query reports scan status and scope. Existing output/packet schemas already allow
+new relation and producer strings; older saved packets remain readable.
+
+## Coverage and current input verification
+
+Additive optional `coverage` and `freshness.verification` fields explain observed
+scope and input hash comparisons. See [coverage/freshness](coverage-freshness-v1.md).
+Saved packets lacking these fields still pass integrity checks and receive
+derived explanations on replay. Update public schema consumers for these fields.
+New captures record cfg_test as requested_true_unverified to distinguish the
+requested cfg.setTest=true setting from verified effective test coverage.

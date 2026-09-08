@@ -86,6 +86,12 @@
       "items": {
         "type": "string"
       }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coverageExplanation"
+      }
     }
   },
   "additionalProperties": false,
@@ -401,6 +407,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "verification": {
+          "$ref": "#/$defs/inputVerification"
         }
       },
       "additionalProperties": false
@@ -569,6 +578,130 @@
         }
       },
       "additionalProperties": false
+    },
+    "coverageExplanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "area",
+        "requested",
+        "observed",
+        "verification",
+        "limitation"
+      ],
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "requested": {
+          "type": "string"
+        },
+        "observed": {
+          "type": "string"
+        },
+        "verification": {
+          "type": "string"
+        },
+        "limitation": {
+          "type": "string"
+        }
+      }
+    },
+    "inputVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matched",
+        "modified",
+        "missing",
+        "unreadable",
+        "unobserved",
+        "newly_observed",
+        "captured_mismatches",
+        "issues_omitted",
+        "basis",
+        "verdict",
+        "baseline_scan_complete",
+        "current_scan_complete",
+        "issues"
+      ],
+      "properties": {
+        "matched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "modified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unreadable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unobserved": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newly_observed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "captured_mismatches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues_omitted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "basis": {
+          "type": "string"
+        },
+        "verdict": {
+          "enum": [
+            "match",
+            "changed",
+            "unknown"
+          ]
+        },
+        "baseline_scan_complete": {
+          "type": "boolean"
+        },
+        "current_scan_complete": {
+          "type": "boolean"
+        },
+        "issues": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "status"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "modified",
+                  "missing",
+                  "unreadable",
+                  "unobserved",
+                  "newly_observed",
+                  "captured_mismatch"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

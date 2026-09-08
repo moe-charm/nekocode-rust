@@ -78,6 +78,7 @@ pub(crate) struct RaClient {
     deadline: Instant,
     next_id: u64,
     state: RaState,
+    observation_failure: Option<String>,
     root_uri: String,
     configuration: Value,
     opened_documents: std::collections::BTreeMap<String, i32>,
@@ -204,6 +205,7 @@ impl RaClient {
             deadline,
             next_id: 1,
             state: RaState::default(),
+            observation_failure: None,
             root_uri,
             configuration,
             opened_documents: std::collections::BTreeMap::new(),
@@ -258,8 +260,42 @@ impl RaClient {
         Ok(client)
     }
 
+    pub(crate) fn renew_deadline(&mut self, timeout: Duration) {
+        self.deadline = Instant::now() + timeout;
+    }
+
+    pub(crate) fn is_alive(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None)) && !self.stderr_limited.load(Ordering::Relaxed)
+    }
+
     pub(crate) fn state(&self) -> RaState {
-        self.state.clone()
+        let mut state = self.state.clone();
+        if let Some(message) = &self.observation_failure {
+            state.health = None;
+            state.readiness_observed = false;
+            state.quiescent = false;
+            state.message = Some(message.clone());
+        }
+        state
+    }
+
+    fn record_failure(&mut self, result: &Result<(), RaError>) {
+        if let Err(error) = result {
+            if !matches!(error, RaError::Unsupported(_)) {
+                self.observation_failure = Some(bounded_detail(&error.to_string()));
+            }
+        }
+    }
+
+    pub(crate) fn document_notification_method(&self, path: &Path) -> &'static str {
+        if path_to_uri(path)
+            .ok()
+            .is_some_and(|uri| self.opened_documents.contains_key(&uri))
+        {
+            "textDocument/didChange"
+        } else {
+            "textDocument/didOpen"
+        }
     }
 
     pub(crate) fn open_document(&mut self, path: &Path, text: &str) -> Result<(), RaError> {
@@ -289,6 +325,12 @@ impl RaClient {
     }
 
     pub(crate) fn request(&mut self, method: &str, params: Value) -> Result<Value, RaError> {
+        let result = self.request_inner(method, params);
+        self.record_failure(&result.as_ref().map(|_| ()).map_err(Clone::clone));
+        result
+    }
+
+    fn request_inner(&mut self, method: &str, params: Value) -> Result<Value, RaError> {
         let id = self.next_id;
         self.next_id += 1;
         self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))?;
@@ -322,7 +364,9 @@ impl RaClient {
     }
 
     fn notify(&mut self, method: &str, params: Value) -> Result<(), RaError> {
-        self.send(json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+        let result = self.send(json!({ "jsonrpc": "2.0", "method": method, "params": params }));
+        self.record_failure(&result);
+        result
     }
 
     fn remaining(&self, operation: &str) -> Result<Duration, RaError> {
@@ -786,6 +830,37 @@ mod tests {
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("src/symbol_context/fixtures/fake-ra.py");
         (directory, script)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dead_transport_clears_health_and_tracks_document_notification_kind() {
+        let (directory, binary) = fake_server();
+        let options = RaOptions {
+            timeout: Duration::from_secs(5),
+            all_features: false,
+            allow_build_scripts: false,
+        };
+        let mut client = RaClient::start_with_binary(directory.path(), &options, &binary).unwrap();
+        let path = directory.path().join("target.rs");
+        assert_eq!(
+            client.document_notification_method(&path),
+            "textDocument/didOpen"
+        );
+        client.open_document(&path, "fn target() {}\n").unwrap();
+        assert_eq!(
+            client.document_notification_method(&path),
+            "textDocument/didChange"
+        );
+        client.child.kill().unwrap();
+        client.child.wait().unwrap();
+        assert!(!client.is_alive());
+        assert!(client.open_document(&path, "fn target() {}\n").is_err());
+        assert!(client.state().health.is_none());
+        assert!(!client.state().readiness_observed);
+        assert!(!client.state().quiescent);
+        assert!(client.request("fixture/state", Value::Null).is_err());
+        assert!(client.state().health.is_none());
     }
 
     #[cfg(unix)]

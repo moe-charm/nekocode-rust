@@ -93,3 +93,7 @@ Final `make verify` passed: Rust formatting, workspace Clippy with warnings
 denied, Cargo check, 65 Rust tests, 40 Python/MCP tests and schema parsing.
 The workflow Skill validation passed. LSP unit tests use the immutable executable
 fixture to avoid Linux ETXTBSY races from freshly written test executables.
+
+Optional `rg/text_candidates` failures and `unconfirmed_text_candidates` capture
+omissions do not by themselves make semantic reference comparisons incomplete.
+All semantic completeness, backend readiness and source-stability gates remain.

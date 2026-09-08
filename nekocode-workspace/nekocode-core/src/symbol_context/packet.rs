@@ -140,18 +140,30 @@ fn safe_relative(path: &Path) -> bool {
 fn replay_freshness(packet: &SymbolPacket, response: &mut SymbolContextV1) {
     let mut now = inventory(&packet.root);
     refresh_captured_inputs(&packet.root, &packet.sources, &mut now);
-    let changes = changed_inputs(&packet.inputs, &now);
+    let (verification, changes) = super::explanation::verify_inputs(
+        &packet.root,
+        &packet.inputs,
+        &now,
+        &packet.sources,
+        "packet_inputs_vs_current",
+    );
+    let verdict = verification.verdict.clone();
+    response.freshness.verification = Some(verification);
     response.freshness.checked_inputs = now.files.len();
     response.freshness.input_scan_complete = packet.inputs.complete && now.complete;
-    if !changes.is_empty() {
+    // Preserve evidence of capture-time changes even when current inputs match.
+    let mut known_changes: std::collections::BTreeSet<_> =
+        response.freshness.changed_inputs.iter().cloned().collect();
+    known_changes.extend(changes);
+    response.freshness.changed_inputs = known_changes.into_iter().take(4096).collect();
+    if verdict == "changed" {
         response.status = "stale".to_string();
         response.freshness.state = "stale".to_string();
         response.freshness.source_state = "changed".to_string();
-        response.freshness.changed_inputs = changes;
         response.freshness.limitations.push(
             "Items are retained captured evidence; live inputs changed after capture.".to_string(),
         );
-    } else if !response.freshness.input_scan_complete {
+    } else if verdict == "unknown" {
         response.freshness.state = "unknown".to_string();
         response.freshness.source_state = "unknown".to_string();
     }
@@ -167,6 +179,7 @@ pub(super) fn page(
     if replay {
         replay_freshness(packet, &mut response);
     }
+    response.coverage = Some(super::explanation::coverage(&response));
     let mut offset = 0usize;
     if let Some(cursor) = &request.cursor {
         let (id, start) = cursor
@@ -289,6 +302,22 @@ fn fit_budget(
     loop {
         if settle_size(response)? <= response.budget.max_bytes {
             break;
+        }
+        // Derived prose and example paths yield before the actual code evidence.
+        if let Some(coverage) = response.coverage.take() {
+            response.omissions.push(SymbolOmission {
+                kind: "coverage".into(),
+                reason: "byte_budget".into(),
+                count: coverage.len(),
+            });
+            continue;
+        }
+        if let Some(verification) = &mut response.freshness.verification {
+            if !verification.issues.is_empty() {
+                verification.issues_omitted += verification.issues.len();
+                verification.issues.clear();
+                continue;
+            }
         }
         if response.items.len() > 1 {
             response.items.pop();

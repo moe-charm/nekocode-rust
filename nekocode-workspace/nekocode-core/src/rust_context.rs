@@ -33,7 +33,7 @@ const CARGO_TARGET_DIR_NAME: &str = "nekocode-rust-first-target";
 mod budget;
 mod context;
 mod diagnostics;
-mod execution;
+pub(crate) mod execution;
 mod git;
 mod snapshot;
 mod summary;

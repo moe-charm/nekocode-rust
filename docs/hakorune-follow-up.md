@@ -1,10 +1,30 @@
 # Hakorune follow-up priorities
 
-User-relayed feedback, 2026-09-08. These items are planned, not implemented by
-the timeout fix. NekoCode currently gathers related-code evidence; deletion of
+## Latest requested order
+
+1. Show textual `rg` matches absent from semantic results as **unconfirmed
+   candidates**, never as verified references. Implemented as opt-in
+   `--text-candidates`; see [scope and limits](text-candidates-v1.md).
+2. Explain requested/observed/unverified features, cfg(test), and macro scope.
+   Implemented explanatory `coverage` rows; effective coverage remains unverified.
+3. Improve change detection and freshness interpretation. Input hashes exist;
+   `freshness.verification` now separates hash matches/changes and missing/unreadable/
+   unobserved inputs; common backend generation remains unverified.
+4. Strengthen backend reuse and batch investigation. Sequential CLI sessions
+   exist; MCP reuse and a dedicated batch interface are not implemented.
+
+The current repair completes the reviewed CLI reuse work first. Subsequent
+feature work follows the order above. Historical rationale follows below.
+
+
+User-relayed feedback, 2026-09-08. The timeout fix did not implement these items. The first follow-up now adds
+explicit CLI sessions for item 1; MCP reuse and items 2/3 remain future work. NekoCode currently gathers related-code evidence; deletion of
 legacy paths still requires ordinary search and project tests.
 
 ## 1. Reuse analysis for successive investigations
+
+Initial CLI delivery: [foreground sessions](symbol-session-v1.md), with conservative
+restart after observed input or configuration changes.
 
 Allow investigation of another function in the same workspace without repeating
 the full backend initialization. Existing saved packet replay only rereads

@@ -74,3 +74,11 @@ allowed within a version when old readers can safely ignore them.
 The 2026-09-08 follow-up adds explicit saved reference comparisons under
 [Symbol delta v1](symbol-delta-v1.md). This supersedes the earlier
 deferral of reference comparisons only; other later features remain deferred.
+
+## Explicit foreground sessions
+
+The follow-up [symbol-session-v1](symbol-session-v1.md) permits one explicitly
+owned foreground CLI backend across sequential investigations. It supersedes
+previous session deferral only for that interface. No detached daemon, network
+service, or implicit MCP session is introduced. Changes to observed source or
+configuration conservatively restart analysis.

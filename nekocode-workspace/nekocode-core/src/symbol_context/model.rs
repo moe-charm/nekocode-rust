@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// One investigation or a replay of a previously captured investigation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct SymbolContextRequest {
     pub path: Option<PathBuf>,
     pub at: Option<String>,
@@ -16,6 +17,7 @@ pub struct SymbolContextRequest {
     pub timeout_seconds: u64,
     pub all_features: bool,
     pub allow_build_scripts: bool,
+    pub text_candidates: bool,
 }
 
 impl Default for SymbolContextRequest {
@@ -33,6 +35,7 @@ impl Default for SymbolContextRequest {
             timeout_seconds: 60,
             all_features: false,
             allow_build_scripts: false,
+            text_candidates: false,
         }
     }
 }
@@ -101,6 +104,8 @@ pub struct SymbolQuery {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolFreshness {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<InputVerification>,
     pub state: String,
     pub source_state: String,
     pub backend_synchronization: String,
@@ -166,6 +171,8 @@ pub struct SymbolBudget {
 /// Public response. Exact source text is deliberately not sanitized as paths.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolContextV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<Vec<CoverageExplanation>>,
     pub contract_version: String,
     pub artifact_kind: String,
     pub packet_id: String,
@@ -181,4 +188,34 @@ pub struct SymbolContextV1 {
     pub continuation: SymbolContinuation,
     pub budget: SymbolBudget,
     pub limitations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoverageExplanation {
+    pub area: String,
+    pub requested: String,
+    pub observed: String,
+    pub verification: String,
+    pub limitation: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputIssue {
+    pub path: PathBuf,
+    pub status: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputVerification {
+    pub basis: String,
+    pub verdict: String,
+    pub matched: usize,
+    pub modified: usize,
+    pub missing: usize,
+    pub unreadable: usize,
+    pub unobserved: usize,
+    pub newly_observed: usize,
+    pub captured_mismatches: usize,
+    pub baseline_scan_complete: bool,
+    pub current_scan_complete: bool,
+    pub issues: Vec<InputIssue>,
+    pub issues_omitted: usize,
 }

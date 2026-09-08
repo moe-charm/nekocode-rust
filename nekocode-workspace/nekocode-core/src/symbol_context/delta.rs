@@ -38,7 +38,23 @@ fn observation(packet: &SymbolPacket, path: &Path) -> DeltaObservation {
 
 fn capture_reasons(packet: &SymbolPacket, side: &str, reasons: &mut Vec<String>) {
     let response = &packet.response;
-    if response.status != "completed" || !response.omissions.is_empty() {
+    // Optional text search must not veto fully captured semantic evidence.
+    // Keep rejecting unrelated partial states, unknown failures and omissions.
+    let text_only_failure = matches!(response.status.as_str(), "partial" | "timed_out")
+        && response.queries.iter().any(|q| {
+            q.method == "rg/text_candidates"
+                && !matches!(q.status.as_str(), "completed" | "unsupported")
+        })
+        && response.queries.iter().all(|q| {
+            q.method == "rg/text_candidates"
+                || matches!(q.status.as_str(), "completed" | "unsupported")
+        });
+    if (response.status != "completed" && !text_only_failure)
+        || response
+            .omissions
+            .iter()
+            .any(|o| o.kind != "unconfirmed_text_candidates")
+    {
         reasons.push(format!("{side}_capture_incomplete"));
     }
     if response.freshness.state != "source_stable" || !response.freshness.input_scan_complete {

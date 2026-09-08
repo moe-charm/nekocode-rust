@@ -30,3 +30,7 @@ into the canonical path.
 The 2026-09-08 follow-up adds explicit saved reference comparisons under
 [Symbol delta v1](docs/symbol-delta-v1.md). This supersedes the earlier
 deferral of reference comparisons only; other later features remain deferred.
+
+Explicit user-requested backend reuse is implemented as the foreground
+`context --session` interface described in docs/symbol-session-v1.md. This
+supersedes the no-session boundary only for explicit process-owned sessions.

@@ -199,3 +199,14 @@ remain independent of display budgets. See [the contract](../docs/symbol-delta-v
 The gateway process timeout is 660 seconds, allowing the maximum 600-second
 backend observation plus 60 seconds of CLI overhead. MCP clients may impose
 their own shorter deadlines.
+
+Live `nekocode_context` accepts optional `text_candidates: true`. It forwards
+`--text-candidates` and returns `unconfirmed_text_candidate` items separately
+from semantic references. Replay reads saved candidates without rg; it rejects
+new text_candidates settings. Scope/limits: [text candidates](../docs/text-candidates-v1.md).
+
+Responses now include optional `coverage` and `freshness.verification` explanations
+without a new tool argument. Saved replay compares current input hashes while
+coverage still describes recorded backend observations. See
+[coverage/freshness](../docs/coverage-freshness-v1.md). Backend synchronization
+and effective feature/macro coverage remain unverified.

@@ -102,20 +102,6 @@ pub(super) fn inventory(root: &Path) -> InputInventory {
     result
 }
 
-pub(super) fn changed_inputs(before: &InputInventory, after: &InputInventory) -> Vec<PathBuf> {
-    let mut changes = before
-        .files
-        .keys()
-        .chain(after.files.keys())
-        .filter(|path| before.files.get(*path) != after.files.get(*path))
-        .cloned()
-        .collect::<Vec<_>>();
-    changes.sort();
-    changes.dedup();
-    changes.truncate(MAX_INPUTS);
-    changes
-}
-
 pub(super) fn read_limited(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let file = fs::File::open(path).map_err(|error| error.to_string())?;
     if file.metadata().map_err(|error| error.to_string())?.len() > limit {

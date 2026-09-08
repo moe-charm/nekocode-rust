@@ -1,6 +1,10 @@
 //! Rust-analyzer-backed investigation and bounded, replayable evidence packets.
 //! Semantic relationships come only from the backend; source text stays exact.
 
+mod explanation;
+mod session;
+mod text_candidates;
+pub use session::SymbolSession;
 mod capture;
 mod delta;
 mod delta_model;
@@ -16,6 +20,13 @@ pub use model::*;
 use std::fmt::Write;
 
 pub fn build_symbol_context(request: &SymbolContextRequest) -> Result<SymbolContextV1> {
+    build_with_session(request, &mut SymbolSession::default())
+}
+
+fn build_with_session(
+    request: &SymbolContextRequest,
+    session: &mut SymbolSession,
+) -> Result<SymbolContextV1> {
     if request.budget == 0 || request.budget > 1_000_000 {
         return Err(NekocodeError::Config(
             "symbol context budget must be between 1 and 1000000".to_string(),
@@ -40,7 +51,11 @@ pub fn build_symbol_context(request: &SymbolContextRequest) -> Result<SymbolCont
         ));
     }
     if let Some(path) = request.packet.as_deref() {
-        if request.save_packet.is_some() || request.all_features || request.allow_build_scripts {
+        if request.save_packet.is_some()
+            || request.all_features
+            || request.allow_build_scripts
+            || request.text_candidates
+        {
             return Err(NekocodeError::Config(
                 "saved packet replay cannot change backend options or save another packet"
                     .to_string(),
@@ -74,7 +89,7 @@ pub fn build_symbol_context(request: &SymbolContextRequest) -> Result<SymbolCont
             "--symbol must be a nonempty name of at most 1024 bytes".to_string(),
         ));
     }
-    let mut captured = collect::collect(request)?;
+    let mut captured = collect::collect(request, session)?;
     if let Some(path) = request.save_packet.as_deref() {
         packet::save(path, &mut captured)?;
     }
@@ -107,6 +122,29 @@ pub fn format_symbol_context_summary(response: &SymbolContextV1) -> String {
         "Freshness: {}; backend synchronization: {}",
         response.freshness.state, response.freshness.backend_synchronization
     );
+    if let Some(v) = &response.freshness.verification {
+        let _ = writeln!(output, "Input verification ({}): {}; matched {}, modified {}, missing {}, unreadable {}, unobserved {}, newly observed {}, captured mismatches {}; scans complete: {}/{}",
+            v.basis, v.verdict, v.matched, v.modified, v.missing, v.unreadable, v.unobserved, v.newly_observed, v.captured_mismatches, v.baseline_scan_complete, v.current_scan_complete);
+        for issue in &v.issues {
+            let _ = writeln!(output, "  {}: {}", issue.status, issue.path.display());
+        }
+        if v.issues_omitted > 0 {
+            let _ = writeln!(
+                output,
+                "  {} additional input issues omitted",
+                v.issues_omitted
+            );
+        }
+    }
+    if let Some(coverage) = &response.coverage {
+        for entry in coverage {
+            let _ = writeln!(
+                output,
+                "Coverage {}: requested {}; observed {}; verification {}. {}",
+                entry.area, entry.requested, entry.observed, entry.verification, entry.limitation
+            );
+        }
+    }
     let _ = writeln!(
         output,
         "Backend: {}; startup {} ms; observation {} ms",

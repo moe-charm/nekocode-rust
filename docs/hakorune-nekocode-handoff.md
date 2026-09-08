@@ -153,3 +153,41 @@ Rust→C境界を確認してください。** 検索結果も単独で安全性
 
 次の要望（解析再利用・不足範囲・鮮度確認）は、優先順と確認条件を
 [次期開発項目](hakorune-follow-up.md)に記録しています。現時点では未実装です。
+
+## 連続調査の試用（CLIセッション初版）
+
+[明示セッション](symbol-session-v1.md)を起動すると、ソース・設定が同じ間は別の関数の
+調査でもbackendを再利用できます。応答の `backend_reused` で確認してください。
+既存MCP呼出しはまだ単発です。編集やfeature変更、不完全な入力スキャンがある場合は
+再起動します。終了時はstdinを閉じてください。
+
+初回と次の調査の時間、`backend_reused`、`context.freshness` を報告すると、
+Hakoruneでの再利用の成否を判別できます。入力スキャン上限を超えて鮮度がunknownの
+場合、この初版は再利用しません。実装を止めて試用する必要はありません。
+
+## rgとの差分候補（opt-in）
+
+更新版で通常の調査コマンドに `--text-candidates` を追加してください。
+MCPでは `text_candidates: true`、CLIセッションでも同じJSONキーを指定します。
+
+```sh
+"$NEKOCODE_BINARY_PATH" context /path/to/hakorune \
+  --at src/example.rs:123 --timeout-seconds 300 --text-candidates \
+  --save-packet /tmp/hakorune-text.packet.json
+```
+
+場所は前回と同じ実際の入口に置き換えます。`unconfirmed_text_candidate`は
+参照一覧にない文字列一致で、コメント・別シンボルも含みます。参照件数に加算せず、
+自分でコードを確認してください。`rg/text_candidates`の状態が失敗・上限到達なら
+候補ゼロと解釈しません。対象はworkspace内のRustファイルに限定されます。
+詳細：[検索範囲と上限](text-candidates-v1.md)。
+
+## 範囲と鮮度の確認表示
+
+更新版は追加フラグなしで `coverage` と `freshness.verification` を返します。
+人間向けには `--format summary` を使ってください。保存packetの再読出しでも
+現在の入力ハッシュと照合し、一致・変更・消失・読取不能・未観測を分けて示します。
+`completed`だけで判断せず、verificationの判定とスキャン完全性も確認します。
+featuresやマクロの設定が有効でも、意味的な参照の網羅性は保証しません。
+backend_synchronizationは引き続きunverifiedです。
+[詳しい読み方](coverage-freshness-v1.md)。

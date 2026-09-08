@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nekocode.dev/schemas/symbol-session-v1.schema.json",
+  "title": "Explicit symbol session response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "backend_reused",
+    "context",
+    "error"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "symbol-session-v1"
+    },
+    "backend_reused": {
+      "type": "boolean"
+    },
+    "context": {
+      "anyOf": [
+        {
+          "$ref": "symbol-context-v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "context": {
+          "type": "object"
+        },
+        "error": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "context": {
+          "type": "null"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

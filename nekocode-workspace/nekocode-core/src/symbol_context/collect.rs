@@ -169,9 +169,10 @@ impl ItemCollector<'_> {
         if !self.outlines.contains_key(&location.path) && self.outlines.len() < 24 {
             let absolute = self.sources.root.join(&location.path);
             if let Ok(uri) = path_to_uri(&absolute) {
+                let method = self.client.document_notification_method(&absolute);
                 if let Err(error) = self.client.open_document(&absolute, &text) {
                     self.response.queries.push(SymbolQuery {
-                        method: "textDocument/didOpen".to_string(),
+                        method: method.to_string(),
                         status: error_status(&error).to_string(),
                         result_count: None,
                         detail: Some(error.to_string()),
@@ -248,7 +249,10 @@ impl ItemCollector<'_> {
     }
 }
 
-pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
+pub(super) fn collect(
+    request: &SymbolContextRequest,
+    session: &mut super::SymbolSession,
+) -> Result<SymbolPacket> {
     let workspace = index_rust_workspace(request.path.as_deref().unwrap_or(Path::new(".")))?;
     let root = workspace.workspace_root;
     let mut before = inventory(&root);
@@ -263,6 +267,7 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
             .entry(relative)
             .or_insert_with(|| digest(text.as_bytes()));
     }
+    session.refresh_additional_inputs(&root, &mut before, &mut sources);
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -270,17 +275,18 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
     let id = digest(format!("{}:{nonce}:{}", root.display(), std::process::id()).as_bytes());
     let packet_id = format!("sp_{}", &id[7..31]);
     let mut response = SymbolContextV1 {
+        coverage: None,
         contract_version: "symbol-context-v1".to_string(), artifact_kind: "symbol_context".to_string(),
         packet_id, status: "completed".to_string(),
         target: SymbolTarget { requested_at: request.at.clone(), requested_symbol: request.symbol.clone(),
             resolution: "unresolved".to_string(), location: None, candidates: Vec::new() },
         scope: SymbolScope { workspace_root: root.clone(), features: if request.all_features { "all_features" } else { "default_features" }.to_string(),
-            cfg_test: "backend_default_unverified".to_string(), build_scripts: request.allow_build_scripts,
+            cfg_test: "requested_true_unverified".to_string(), build_scripts: request.allow_build_scripts,
             proc_macros: request.allow_build_scripts, tests_executed: false, hop_limit: 1,
             external_configuration: "unobserved".to_string() },
         backend: SymbolBackend { name: "rust-analyzer".to_string(), version: None, health: None, message: None, quiescent: false,
             readiness_observed: false, startup_ms: 0, observation_ms: 0 },
-        queries: Vec::new(), freshness: SymbolFreshness { state: "unknown".to_string(), source_state: "unknown".to_string(),
+        queries: Vec::new(), freshness: SymbolFreshness { verification: None, state: "unknown".to_string(), source_state: "unknown".to_string(),
             backend_synchronization: "unverified".to_string(), checked_inputs: before.files.len(), changed_inputs: Vec::new(),
             input_scan_complete: before.complete, limitations: vec![
                 "Stable files and backend quiescence do not prove a common semantic analysis generation.".to_string(),
@@ -300,7 +306,7 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
         all_features: request.all_features,
         allow_build_scripts: request.allow_build_scripts,
     };
-    let mut client = match RaClient::start(&root, &options) {
+    let mut client = match session.acquire(&root, &before, &options) {
         Ok(client) => client,
         Err(error) => {
             response.status = match error_status(&error) {
@@ -335,9 +341,10 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
             let absolute = root.join(&relative);
             let uri =
                 path_to_uri(&absolute).map_err(|error| NekocodeError::Config(error.to_string()))?;
+            let method = client.document_notification_method(&absolute);
             if let Err(error) = client.open_document(&absolute, &text) {
                 response.queries.push(SymbolQuery {
-                    method: "textDocument/didOpen".to_string(),
+                    method: method.to_string(),
                     status: error_status(&error).to_string(),
                     result_count: None,
                     detail: Some(error.to_string()),
@@ -469,9 +476,10 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
             .ok()
             .map(|(location, _)| location);
         response.target.resolution = "selected".to_string();
+        let method = client.document_notification_method(&absolute);
         if let Err(error) = client.open_document(&absolute, &text) {
             response.queries.push(SymbolQuery {
-                method: "textDocument/didOpen".to_string(),
+                method: method.to_string(),
                 status: error_status(&error).to_string(),
                 result_count: None,
                 detail: Some(error.to_string()),
@@ -555,6 +563,15 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
             }
         }
     }
+    let semantic_reusable = response.status == "completed"
+        && response.omissions.is_empty()
+        && response
+            .queries
+            .iter()
+            .all(|q| matches!(q.status.as_str(), "completed" | "unsupported"));
+    if request.text_candidates {
+        super::text_candidates::collect(&root, &mut sources, &mut response);
+    }
     let state = client.state();
     response.backend.version = state.version;
     response.backend.health = state.health;
@@ -594,7 +611,15 @@ pub(super) fn collect(request: &SymbolContextRequest) -> Result<SymbolPacket> {
         }
         response.limitations.push("The backend did not report healthy readiness; empty results are not a complete absence conclusion.".to_string());
     }
-    finish(response, root, before, sources)
+    let captured = finish(response, root.clone(), before.clone(), sources)?;
+    if semantic_reusable
+        && captured.response.backend.health.as_deref() == Some("ok")
+        && captured.response.freshness.input_scan_complete
+        && captured.response.freshness.source_state == "stable"
+    {
+        session.retain(root, before, options, client);
+    }
+    Ok(captured)
 }
 
 fn finish(
@@ -616,22 +641,25 @@ fn finish(
     if late_sources > 0 {
         response.freshness.limitations.push(format!("{late_sources} captured source files were first observed after backend startup; their earlier state is unknown."));
     }
-    let mut changes = changed_inputs(&before, &after);
-    for (path, source) in &sources.files {
-        if before.files.get(path) != Some(&source.sha256) && !changes.contains(path) {
-            changes.push(path.clone());
-        }
-    }
+    let (verification, changes) = super::explanation::verify_inputs(
+        &root,
+        &before,
+        &after,
+        &sources.files,
+        "capture_start_vs_end",
+    );
+    let verdict = verification.verdict.clone();
+    response.freshness.verification = Some(verification);
     response.freshness.checked_inputs = before.files.len();
     response.freshness.changed_inputs = changes;
     response.freshness.input_scan_complete = before.complete && after.complete;
-    if !response.freshness.changed_inputs.is_empty() {
+    if verdict == "changed" {
         response.freshness.state = "changed_during_observation".to_string();
         response.freshness.source_state = "changed".to_string();
         if response.status == "completed" {
             response.status = "partial".to_string();
         }
-    } else if response.freshness.input_scan_complete {
+    } else if verdict == "match" {
         response.freshness.state = "source_stable".to_string();
         response.freshness.source_state = "stable".to_string();
     }
