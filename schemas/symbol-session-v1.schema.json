@@ -32,6 +32,40 @@
         "string",
         "null"
       ]
+    },
+    "reuse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acquisition",
+        "reasons",
+        "retained",
+        "retention_reasons"
+      ],
+      "properties": {
+        "acquisition": {
+          "enum": [
+            "not_observed",
+            "fresh_backend",
+            "reused"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "retained": {
+          "type": "boolean"
+        },
+        "retention_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "oneOf": [

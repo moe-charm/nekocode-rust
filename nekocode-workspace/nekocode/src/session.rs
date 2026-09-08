@@ -23,6 +23,7 @@ pub fn run(path: Option<PathBuf>) -> Result<()> {
             ));
         }
         let mut backend_reused = false;
+        let mut reuse = serde_json::json!({"acquisition":"not_observed", "reasons":[], "retained":false, "retention_reasons":[]});
         let result = serde_json::from_slice::<SymbolContextRequest>(&line)
             .map_err(NekocodeError::from)
             .and_then(|mut request| {
@@ -34,14 +35,16 @@ pub fn run(path: Option<PathBuf>) -> Result<()> {
                 request.path = Some(root.clone());
                 let result = session.investigate(&request);
                 backend_reused = session.backend_reused();
+                reuse = serde_json::to_value(session.reuse_report())
+                    .expect("reuse report serialization");
                 result
             });
         let response = match result {
             Ok(context) => {
-                json!({"contract_version":"symbol-session-v1", "backend_reused":backend_reused, "context":context, "error":null})
+                json!({"contract_version":"symbol-session-v1", "backend_reused":backend_reused, "reuse":reuse, "context":context, "error":null})
             }
             Err(error) => {
-                json!({"contract_version":"symbol-session-v1", "backend_reused":backend_reused, "context":null, "error":error.to_string()})
+                json!({"contract_version":"symbol-session-v1", "backend_reused":backend_reused, "reuse":reuse, "context":null, "error":error.to_string()})
             }
         };
         serde_json::to_writer(&mut output, &response)?;

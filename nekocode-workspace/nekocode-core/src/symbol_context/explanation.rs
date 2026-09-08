@@ -158,6 +158,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("unobserved.rs"), "exists").unwrap();
         let before = InputInventory {
+            scan: None,
             complete: true,
             files: [
                 ("same.rs".into(), "a".into()),
@@ -168,6 +169,7 @@ mod tests {
             .into(),
         };
         let after = InputInventory {
+            scan: None,
             complete: false,
             files: [
                 ("same.rs".into(), "a".into()),
@@ -195,10 +197,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.rs"), "exists").unwrap();
         let before = InputInventory {
+            scan: None,
             complete: true,
             files: [("a.rs".into(), "hash".into())].into(),
         };
         let after = InputInventory {
+            scan: None,
             complete: false,
             files: BTreeMap::new(),
         };
@@ -207,6 +211,7 @@ mod tests {
         assert_eq!(v.unobserved, 1);
         assert!(changes.is_empty());
         let many = InputInventory {
+            scan: None,
             complete: true,
             files: (0..18)
                 .map(|i| (PathBuf::from(format!("missing{i}.rs")), "hash".into()))
@@ -222,6 +227,7 @@ mod tests {
     fn incomplete_scan_is_not_a_match_and_captured_content_is_checked_separately() {
         let dir = tempfile::tempdir().unwrap();
         let before = InputInventory {
+            scan: None,
             complete: false,
             files: [("a.rs".into(), "same".into())].into(),
         };

@@ -124,6 +124,9 @@ pub struct ContextArgs {
     /// Show rg matches absent from semantic references as unconfirmed candidates.
     #[arg(long, requires = "symbol_query", conflicts_with = "packet")]
     pub text_candidates: bool,
+    /// Bounded input scan profile; large supports bigger workspaces.
+    #[arg(long, requires = "symbol_query", conflicts_with = "packet", value_parser = ["default", "large"])]
+    pub scan_profile: Option<String>,
     #[arg(long, value_enum, default_value_t = OutputFormatArg::Json)]
     pub format: OutputFormatArg,
     #[arg(short, long)]

@@ -18,6 +18,7 @@ pub struct SymbolContextRequest {
     pub all_features: bool,
     pub allow_build_scripts: bool,
     pub text_candidates: bool,
+    pub scan_profile: Option<String>,
 }
 
 impl Default for SymbolContextRequest {
@@ -36,6 +37,7 @@ impl Default for SymbolContextRequest {
             all_features: false,
             allow_build_scripts: false,
             text_candidates: false,
+            scan_profile: None,
         }
     }
 }
@@ -104,6 +106,8 @@ pub struct SymbolQuery {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolFreshness {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scans: Option<ScanComparison>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification: Option<InputVerification>,
     pub state: String,
@@ -216,6 +220,26 @@ pub struct InputVerification {
     pub captured_mismatches: usize,
     pub baseline_scan_complete: bool,
     pub current_scan_complete: bool,
+    pub issues: Vec<InputIssue>,
+    pub issues_omitted: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanComparison {
+    pub baseline: Option<ScanReport>,
+    pub current: Option<ScanReport>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanReport {
+    pub profile: String,
+    pub max_files: usize,
+    pub max_entries: usize,
+    pub max_bytes: u64,
+    pub max_file_bytes: u64,
+    pub examined_entries: usize,
+    pub hashed_files: usize,
+    pub hashed_bytes: u64,
+    pub complete: bool,
     pub issues: Vec<InputIssue>,
     pub issues_omitted: usize,
 }

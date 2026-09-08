@@ -61,6 +61,7 @@ fn run_context(args: ContextArgs) -> Result<()> {
         timeout_seconds,
         allow_build_scripts,
         text_candidates,
+        scan_profile,
         format,
         output,
     } = args;
@@ -100,6 +101,7 @@ fn run_context(args: ContextArgs) -> Result<()> {
                 all_features,
                 allow_build_scripts,
                 text_candidates,
+                scan_profile,
             },
             format,
             output,

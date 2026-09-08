@@ -255,7 +255,7 @@ pub(super) fn collect(
 ) -> Result<SymbolPacket> {
     let workspace = index_rust_workspace(request.path.as_deref().unwrap_or(Path::new(".")))?;
     let root = workspace.workspace_root;
-    let mut before = inventory(&root);
+    let mut before = inventory(&root, request.scan_profile.as_deref().unwrap_or("default"));
     let mut sources = Sources::new(&root);
     if let Some(at) = &request.at {
         let (path, line, column) = parse_at(at)?;
@@ -286,7 +286,7 @@ pub(super) fn collect(
             external_configuration: "unobserved".to_string() },
         backend: SymbolBackend { name: "rust-analyzer".to_string(), version: None, health: None, message: None, quiescent: false,
             readiness_observed: false, startup_ms: 0, observation_ms: 0 },
-        queries: Vec::new(), freshness: SymbolFreshness { verification: None, state: "unknown".to_string(), source_state: "unknown".to_string(),
+        queries: Vec::new(), freshness: SymbolFreshness { scans: None, verification: None, state: "unknown".to_string(), source_state: "unknown".to_string(),
             backend_synchronization: "unverified".to_string(), checked_inputs: before.files.len(), changed_inputs: Vec::new(),
             input_scan_complete: before.complete, limitations: vec![
                 "Stable files and backend quiescence do not prove a common semantic analysis generation.".to_string(),
@@ -612,12 +612,26 @@ pub(super) fn collect(
         response.limitations.push("The backend did not report healthy readiness; empty results are not a complete absence conclusion.".to_string());
     }
     let captured = finish(response, root.clone(), before.clone(), sources)?;
-    if semantic_reusable
-        && captured.response.backend.health.as_deref() == Some("ok")
-        && captured.response.freshness.input_scan_complete
-        && captured.response.freshness.source_state == "stable"
-    {
+    let mut rejection = Vec::new();
+    if !semantic_reusable {
+        rejection.push("semantic_observation_incomplete".into());
+    }
+    if captured.response.backend.health.as_deref() != Some("ok") {
+        rejection.push("backend_not_healthy".into());
+    }
+    if !captured.response.backend.readiness_observed || !captured.response.backend.quiescent {
+        rejection.push("backend_not_ready".into());
+    }
+    if !captured.response.freshness.input_scan_complete {
+        rejection.push("input_scan_incomplete".into());
+    }
+    if captured.response.freshness.source_state != "stable" {
+        rejection.push("source_not_stable".into());
+    }
+    if rejection.is_empty() {
         session.retain(root, before, options, client);
+    } else {
+        session.reject_retention(rejection);
     }
     Ok(captured)
 }
@@ -628,13 +642,13 @@ fn finish(
     mut before: InputInventory,
     sources: Sources,
 ) -> Result<SymbolPacket> {
-    let mut after = inventory(&root);
+    let mut after = inventory(&root, before.profile());
     refresh_captured_inputs(&root, &sources.files, &mut after);
     let mut late_sources = 0usize;
     for (path, source) in &sources.files {
         if !before.files.contains_key(path) {
             before.files.insert(path.clone(), source.sha256.clone());
-            before.complete = false;
+            before.issue(path.clone(), "late_input");
             late_sources += 1;
         }
     }
@@ -649,6 +663,10 @@ fn finish(
         "capture_start_vs_end",
     );
     let verdict = verification.verdict.clone();
+    response.freshness.scans = Some(ScanComparison {
+        baseline: before.scan.clone(),
+        current: after.scan.clone(),
+    });
     response.freshness.verification = Some(verification);
     response.freshness.checked_inputs = before.files.len();
     response.freshness.changed_inputs = changes;

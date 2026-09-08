@@ -1,3 +1,12 @@
+# Implemented — large-workspace scan diagnostics
+
+See docs/large-workspace-scan-v1.md. Preserve strict freshness gates while
+adding explicit large scan limits and per-request reuse explanations.
+Hakorune cf458a28: complete 5136-input scans, first 226.401s, second 2.663s
+with backend_reused=true. Full gate: 73 Rust / 44 Python-MCP tests.
+
+---
+
 # Review corrections — coverage, freshness and reference comparison
 
 Addressed the three external reviews: text-only errors no longer veto complete

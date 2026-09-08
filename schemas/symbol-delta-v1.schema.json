@@ -330,6 +330,9 @@
         },
         "verification": {
           "$ref": "#/$defs/inputVerification"
+        },
+        "scans": {
+          "$ref": "#/$defs/scanComparison"
         }
       },
       "additionalProperties": false
@@ -646,6 +649,116 @@
               }
             }
           }
+        }
+      }
+    },
+    "scanReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "max_files",
+        "max_entries",
+        "max_bytes",
+        "max_file_bytes",
+        "examined_entries",
+        "hashed_files",
+        "hashed_bytes",
+        "complete",
+        "issues",
+        "issues_omitted"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "default",
+            "large"
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "issues": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "status"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "max_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_entries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_file_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "examined_entries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hashed_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hashed_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues_omitted": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "scanComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline",
+        "current"
+      ],
+      "properties": {
+        "baseline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/scanReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/scanReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     }

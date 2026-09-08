@@ -460,3 +460,8 @@ backendを昇格させるゲートにします。
 - [Repository layoutとlegacy境界](docs/REPOSITORY_LAYOUT.md)
 - [Rust-first MCP gateway](mcp-nekocode-server/README_RUST_FIRST.md)
 - [Canonical workspace README](nekocode-workspace/README.md)
+
+Large Rust workspaces can opt into `context PATH --at FILE:LINE --scan-profile large`
+(or JSON `scan_profile: "large"`). Input scan limits/reasons and session reuse
+reports are documented in [large-workspace scan diagnostics](docs/large-workspace-scan-v1.md).
+Incomplete freshness never enables forced backend reuse.

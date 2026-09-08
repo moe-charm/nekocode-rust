@@ -173,3 +173,12 @@ directory replacement becomes stale, and budget=1000 returns one code item in
 3651 bytes (previously zero items with an exceeded budget). These are local
 regressions, not a new Hakorune field evaluation. No reuse guarantee was broadened
 for late-discovered include files or unreadable inputs.
+
+## Hakorune large-workspace reuse
+
+The large scan profile completed all 5136 Rust/Cargo inputs on Hakorune cf458a28.
+With the locked dependency cache prepared, the same foreground backend served
+OBJ/EXE investigations in 226.401s / 2.663s; second backend_reused=true, both
+completed/source_stable and backend health ok. See
+[large-workspace-scan-v1.md](large-workspace-scan-v1.md) for exact scope and limits.
+Full gate now passes 73 Rust tests and 44 Python/MCP tests.

@@ -65,8 +65,9 @@ with subprocess.Popen(
 ```
 
 Use normal `context --packet ... --cursor ...` for saved continuation; it does
-not need the session to remain open. Source-stability scans are bounded to 4096
-files and 64 MiB of input content in the current implementation. A workspace
+not need the session to remain open. Default source-stability scans are bounded to 4096 files, 32768 entries and
+64 MiB of input content. Explicit `scan_profile: "large"` raises those limits
+to 16384 files, 262144 entries and 256 MiB; per-file input reads remain 8 MiB. A workspace
 exceeding those limits may report unknown source freshness and will not reuse a
 backend in this conservative delivery; do not equate its total line count with
 these scan limits. Ending a client forcibly is not a substitute for the documented
@@ -101,3 +102,15 @@ A save error after an observation can return `backend_reused: true` with an erro
 and null context. Parse, fixed-path and pre-observation validation errors return
 false for that request, even after a previous reused observation. The session
 schema allows both booleans on errors to represent actual observation use.
+
+## Reuse diagnostics and large workspaces
+
+Requests accept `scan_profile: "default" | "large"`. Changing profile starts a
+fresh backend, even if the observed file hashes are equal. Response `reuse`
+reports acquisition (`not_observed`, `fresh_backend`, `reused`), `reasons`,
+`retained` and `retention_reasons`. Retained describes whether this observation
+was kept for the next request, not whether a previously cached backend survived
+a rejected request. Parse errors report not_observed; save errors preserve the
+actual observation report. `no_cached_backend` can include the preceding
+observation's rejection reasons. Incomplete scans and backend warnings remain
+reasons to reject retention. See [scan diagnostics](large-workspace-scan-v1.md).

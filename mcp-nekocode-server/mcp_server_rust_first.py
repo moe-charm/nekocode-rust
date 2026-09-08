@@ -284,6 +284,7 @@ class RustFirstMCPServer:
                             "type": "integer", "minimum": 1,
                             "maximum": MAX_BACKEND_TIMEOUT_SECONDS, "default": 60,
                         },
+                        "scan_profile": {"type": "string", "enum": ["default", "large"], "description": "Bounded input scan profile; large permits 16384 files, 262144 entries and 256 MiB."},
                         "text_candidates": {
                             "type": "boolean", "default": False,
                             "description": "Add unconfirmed rg matches absent from semantic references; not verified callers.",
@@ -317,7 +318,7 @@ class RustFirstMCPServer:
             raise ToolInputError("'at', 'symbol', and 'packet' are mutually exclusive")
         if selectors:
             return RustFirstMCPServer._symbol_arguments(args)
-        if set(args) & {"save_packet", "compare_packet", "item", "cursor", "max_items", "timeout_seconds", "allow_build_scripts", "text_candidates"}:
+        if set(args) & {"save_packet", "compare_packet", "item", "cursor", "max_items", "timeout_seconds", "scan_profile", "allow_build_scripts", "text_candidates"}:
             raise ToolInputError("symbol options require 'at', 'symbol', or 'packet'")
         compare_ref = args.get("compare_ref")
         if compare_ref is not None:
@@ -395,7 +396,7 @@ class RustFirstMCPServer:
         replay = "packet" in args
         if "compare_packet" in args and (not replay or "item" in args):
             raise ToolInputError("compare_packet requires packet and cannot be combined with item")
-        if replay and set(args) & {"save_packet", "all_features", "allow_build_scripts", "text_candidates", "timeout_seconds"}:
+        if replay and set(args) & {"save_packet", "all_features", "scan_profile", "allow_build_scripts", "text_candidates", "timeout_seconds"}:
             raise ToolInputError("saved packet reads cannot change the analysis configuration")
         if not replay and set(args) & {"cursor", "item"}:
             raise ToolInputError("'cursor' and 'item' require 'packet'")
@@ -409,6 +410,10 @@ class RustFirstMCPServer:
                 if not isinstance(value, str) or not value.strip() or "\x00" in value:
                     raise ToolInputError(f"'{key}' must be a non-empty string")
                 command.extend(["--" + key.replace("_", "-"), value])
+        if "scan_profile" in args:
+            if args["scan_profile"] not in ("default", "large"):
+                raise ToolInputError("scan_profile must be default or large")
+            command.extend(["--scan-profile", args["scan_profile"]])
         integers = [("budget", 8000, MAX_BUDGET), ("max_items", 8, MAX_SYMBOL_ITEMS)]
         if not replay:
             integers.append(("timeout_seconds", 60, MAX_BACKEND_TIMEOUT_SECONDS))
@@ -596,7 +601,7 @@ class RustFirstMCPServer:
             "excerpt_lines",
             "baseline",
             "at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor",
-            "max_items", "timeout_seconds", "allow_build_scripts", "text_candidates",
+            "max_items", "timeout_seconds", "scan_profile", "allow_build_scripts", "text_candidates",
         }:
             return _tool_result({"error": "unsupported tool argument"}, True)
         if name == SNAPSHOT_TOOL and set(args) - {
@@ -618,7 +623,7 @@ class RustFirstMCPServer:
             "excerpt_lines",
             "baseline",
             "at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor",
-            "max_items", "timeout_seconds", "allow_build_scripts", "text_candidates", "output",
+            "max_items", "timeout_seconds", "scan_profile", "allow_build_scripts", "text_candidates", "output",
         }:
             return _tool_result({"error": "unsupported context argument"}, True)
         try:

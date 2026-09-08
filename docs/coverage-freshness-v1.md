@@ -59,3 +59,15 @@ A lockless workspace may get a new Cargo.lock during backend startup, making the
 first capture partial and preventing backend retention. This is a detected input
 change, not a backend failure. NekoCode does not exclude lockfiles from freshness
 checks or silently prepare them before capturing the baseline.
+
+## Inventory diagnostics
+
+Optional `freshness.scans.baseline/current` show inventory profile, numeric limits,
+examined entries, hashed files/bytes and bounded reason/path examples. These walk
+counters exclude separately captured sources; `checked_inputs` can include those
+additional sources. Late captures are explicitly listed as `late_input`; omissions
+are counted. Legacy packet baseline diagnostics are null, not invented; current
+replay diagnostics use default limits for such packets. New packets replay their
+recorded profile. Under byte pressure the scan reports may be omitted before code,
+with an `input_scans` omission; retry with a larger budget to read the diagnostics.
+Full details: [large-workspace-scan-v1.md](large-workspace-scan-v1.md).

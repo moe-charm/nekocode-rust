@@ -69,6 +69,10 @@ class SymbolContextMCPTest(unittest.TestCase):
             {"symbol": "value", "save_packet": None},
             {"packet": "saved.json", "text_candidates": True},
             {"symbol": "value", "text_candidates": "yes"},
+            {"symbol": "value", "scan_profile": "unlimited"},
+            {"symbol": "value", "scan_profile": True},
+            {"packet": "saved.json", "scan_profile": "large"},
+            {"scan_profile": "large"},
         ]
         with mock.patch.object(gateway.subprocess, "Popen") as launch:
             for arguments in cases:
@@ -96,7 +100,7 @@ class SymbolContextMCPTest(unittest.TestCase):
             cases = [
                 ({"path": "project", "compare_ref": "HEAD", "baseline": "base.json", "output": "response.json"},
                  {"--baseline": "base.json", "--output": "response.json"}),
-                ({"path": "project", "at": "src/lib.rs:2:4", "save_packet": "capture.json", "output": "response.json", "all_features": True, "allow_build_scripts": True, "text_candidates": True},
+                ({"path": "project", "at": "src/lib.rs:2:4", "save_packet": "capture.json", "output": "response.json", "all_features": True, "allow_build_scripts": True, "text_candidates": True, "scan_profile": "large"},
                  {"--save-packet": "capture.json", "--output": "response.json"}),
                 ({"packet": "capture.json", "cursor": "packet:8", "max_items": 3},
                  {"--packet": "capture.json"}),
@@ -123,6 +127,8 @@ class SymbolContextMCPTest(unittest.TestCase):
                             argv = payload["argv"]
                             for flag, relative in paths.items():
                                 self.assertEqual(argv[argv.index(flag) + 1], str(caller / relative))
+                            if "scan_profile" in arguments:
+                                self.assertEqual(argv[argv.index("--scan-profile") + 1], arguments["scan_profile"])
                             if arguments.get("text_candidates"):
                                 self.assertIn("--text-candidates", argv)
                             if "timeout_seconds" in arguments:
@@ -284,6 +290,44 @@ class SavedSymbolContextMCPTest(unittest.TestCase):
             self.assertIn("src/lib.rs", replaced["freshness"]["changed_inputs"])
 
 
+
+    def test_large_scan_reuses_only_complete_inventory_and_replay_keeps_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "project"
+            root.mkdir()
+            (root / "Cargo.toml").write_text('[package]\nname="large-scan"\nversion="0.1.0"\nedition="2021"\n')
+            (root / "src").mkdir()
+            (root / "src/lib.rs").write_text('pub fn target() {}\npub fn caller() { target(); }\n')
+            (root / "archive").mkdir()
+            for n in range(4100):
+                (root / "archive" / f"unused{n}.rs").write_text('// retained source\n')
+            fixture = REPO_ROOT / "nekocode-workspace/nekocode-core/src/symbol_context/fixtures/fake-ra.py"
+            env = dict(os.environ, NEKOCODE_RUST_ANALYZER_PATH=str(fixture))
+            packet = base / "large.json"
+            requests = [
+                {"at": "src/lib.rs:1", "budget": 100000},
+                {"at": "src/lib.rs:1", "scan_profile": "large", "save_packet": str(packet), "budget": 100000},
+                {"at": "src/lib.rs:2", "scan_profile": "large", "budget": 100000},
+                {"at": "src/lib.rs:1", "scan_profile": "default", "budget": 100000},
+            ]
+            result = subprocess.run([str(self.binary), "context", str(root), "--session"], input=''.join(json.dumps(r) + "\n" for r in requests), env=env, capture_output=True, text=True, timeout=40, check=True)
+            first, second, third, fourth = [json.loads(line) for line in result.stdout.splitlines()]
+            self.assertFalse(first["reuse"]["retained"], first)
+            self.assertIn("input_scan_incomplete", first["reuse"]["retention_reasons"])
+            self.assertTrue(any(i["status"] == "file_limit" for i in first["context"]["freshness"]["scans"]["baseline"]["issues"]))
+            self.assertTrue(second["reuse"]["retained"], second)
+            self.assertFalse(second["backend_reused"])
+            self.assertTrue(third["backend_reused"], third)
+            self.assertEqual(third["reuse"]["acquisition"], "reused")
+            self.assertEqual(third["context"]["freshness"]["verification"]["verdict"], "match")
+            self.assertFalse(fourth["backend_reused"])
+            self.assertIn("scan_profile_changed", fourth["reuse"]["reasons"])
+            replay = subprocess.run([str(self.binary), "context", "--packet", str(packet), "--budget", "100000"], capture_output=True, text=True, timeout=15, check=True)
+            response = json.loads(replay.stdout)
+            self.assertEqual(response["freshness"]["scans"]["current"]["profile"], "large")
+            self.assertEqual(response["freshness"]["verification"]["verdict"], "match")
+            self.assertGreater(response["freshness"]["scans"]["current"]["hashed_files"], 4096)
 
     def test_session_rejects_oversized_input_and_conflicting_cli_options(self):
         with tempfile.TemporaryDirectory() as temporary:

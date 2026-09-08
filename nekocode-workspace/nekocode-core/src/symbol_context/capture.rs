@@ -8,8 +8,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub(super) const MAX_ITEMS: usize = 256;
-const MAX_INPUTS: usize = 4096;
-const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_CAPTURE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -19,40 +17,101 @@ pub(super) fn digest(bytes: &[u8]) -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct InputInventory {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scan: Option<ScanReport>,
     pub files: BTreeMap<PathBuf, String>,
     pub complete: bool,
 }
 
 /// Inventory Rust and Cargo inputs, including additions/deletions on replay.
 /// External build inputs and symlinked directories are explicitly not covered.
-pub(super) fn inventory(root: &Path) -> InputInventory {
+impl InputInventory {
+    pub(super) fn issue(&mut self, path: PathBuf, reason: &str) {
+        self.complete = false;
+        if let Some(scan) = &mut self.scan {
+            scan.complete = false;
+            if scan.issues.len() < 16 {
+                scan.issues.push(InputIssue {
+                    path,
+                    status: reason.into(),
+                });
+            } else {
+                scan.issues_omitted += 1;
+            }
+        }
+    }
+    pub(super) fn profile(&self) -> &str {
+        self.scan
+            .as_ref()
+            .map_or("default", |scan| scan.profile.as_str())
+    }
+}
+
+pub(super) fn inventory(root: &Path, profile: &str) -> InputInventory {
+    let large = profile == "large";
+    let report = ScanReport {
+        profile: profile.into(),
+        max_files: if large { 16384 } else { 4096 },
+        max_entries: if large { 262144 } else { 32768 },
+        max_bytes: if large { 256 } else { 64 } * 1024 * 1024,
+        max_file_bytes: 8 * 1024 * 1024,
+        examined_entries: 0,
+        hashed_files: 0,
+        hashed_bytes: 0,
+        complete: true,
+        issues: Vec::new(),
+        issues_omitted: 0,
+    };
+    inventory_with_limits(root, report)
+}
+
+fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory {
+    report.examined_entries = 0;
+    report.hashed_files = 0;
+    report.hashed_bytes = 0;
+    // Report counters are updated even when the bounded walk stops early.
     let mut result = InputInventory {
         files: BTreeMap::new(),
         complete: true,
+        scan: None,
     };
     let mut pending = vec![root.to_path_buf()];
-    let mut examined = 0usize;
-    let mut bytes_left = MAX_INPUT_BYTES;
-    while let Some(directory) = pending.pop() {
+    let mut issues = Vec::new();
+    let mut omitted = 0;
+    let mut issue = |path: &Path, reason: &str| {
+        if issues.len() < 16 {
+            issues.push(InputIssue {
+                path: path.strip_prefix(root).unwrap_or(path).into(),
+                status: reason.into(),
+            });
+        } else {
+            omitted += 1;
+        }
+    };
+    'walk: while let Some(directory) = pending.pop() {
         let entries = match fs::read_dir(&directory) {
             Ok(entries) => entries,
             Err(_) => {
+                issue(&directory, "directory_unreadable");
                 result.complete = false;
                 continue;
             }
         };
         for entry in entries {
-            examined += 1;
-            if examined > 32_768 || result.files.len() >= MAX_INPUTS {
+            if report.examined_entries >= report.max_entries {
+                issue(&directory, "entry_limit");
                 result.complete = false;
-                return result;
+                break 'walk;
             }
+            report.examined_entries += 1;
             let Ok(entry) = entry else {
+                issue(&directory, "entry_unreadable");
                 result.complete = false;
                 continue;
             };
             let path = entry.path();
             let Ok(kind) = entry.file_type() else {
+                issue(&path, "file_type_unreadable");
                 result.complete = false;
                 continue;
             };
@@ -74,31 +133,53 @@ pub(super) fn inventory(root: &Path) -> InputInventory {
                     .is_some_and(|name| name == ".cargo")
                     && matches!(name.to_str(), Some("config" | "config.toml")));
             if kind.is_symlink() {
+                issue(&path, "symlink_unverified");
                 result.complete = false;
                 continue;
             }
             if !tracked || !kind.is_file() {
                 continue;
             }
+            if result.files.len() >= report.max_files {
+                issue(&path, "file_limit");
+                result.complete = false;
+                break 'walk;
+            }
+            let remaining = report.max_bytes.saturating_sub(report.hashed_bytes);
             let Ok(metadata) = entry.metadata() else {
+                issue(&path, "metadata_unreadable");
                 result.complete = false;
                 continue;
             };
-            if metadata.len() > bytes_left || metadata.len() > 8 * 1024 * 1024 {
+            if metadata.len() > report.max_file_bytes {
+                issue(&path, "file_byte_limit");
                 result.complete = false;
                 continue;
             }
-            bytes_left = bytes_left.saturating_sub(metadata.len());
-            match read_limited(&path, 8 * 1024 * 1024) {
+            if metadata.len() > remaining {
+                issue(&path, "total_byte_limit");
+                result.complete = false;
+                continue;
+            }
+            match read_limited(&path, report.max_file_bytes.min(remaining)) {
                 Ok(bytes) => {
-                    if let Ok(relative) = path.strip_prefix(root) {
-                        result.files.insert(relative.to_path_buf(), digest(&bytes));
-                    }
+                    report.hashed_bytes += bytes.len() as u64;
+                    result
+                        .files
+                        .insert(path.strip_prefix(root).unwrap().into(), digest(&bytes));
                 }
-                Err(_) => result.complete = false,
+                Err(_) => {
+                    issue(&path, "read_failed_or_grew");
+                    result.complete = false;
+                }
             }
         }
     }
+    report.hashed_files = result.files.len();
+    report.complete = result.complete;
+    report.issues = issues;
+    report.issues_omitted = omitted;
+    result.scan = Some(report);
     result
 }
 
@@ -146,7 +227,7 @@ pub(super) fn refresh_captured_inputs(
             }
             None => {
                 inputs.files.remove(path);
-                inputs.complete = false;
+                inputs.issue(path.clone(), "captured_input_unreadable");
             }
         }
     }
@@ -421,4 +502,65 @@ pub(super) fn symbols_at_line(
     });
     selected.dedup_by(|(left, _), (right, _)| left.location == right.location);
     selected
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::*;
+    #[test]
+    fn reports_each_limit_and_exact_limit_is_complete() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.rs"), "1234").unwrap();
+        fs::write(dir.path().join("b.rs"), "5678").unwrap();
+        let mut limits = inventory(dir.path(), "default").scan.unwrap();
+        limits.max_files = 2;
+        limits.max_entries = 2;
+        limits.max_bytes = 8;
+        limits.max_file_bytes = 4;
+        let clean = inventory_with_limits(dir.path(), limits.clone());
+        assert!(clean.complete);
+        let report = clean.scan.unwrap();
+        assert_eq!(
+            (
+                report.hashed_files,
+                report.hashed_bytes,
+                report.examined_entries
+            ),
+            (2, 8, 2)
+        );
+        for reason in [
+            "file_limit",
+            "entry_limit",
+            "total_byte_limit",
+            "file_byte_limit",
+        ] {
+            let mut limited = limits.clone();
+            match reason {
+                "file_limit" => limited.max_files = 1,
+                "entry_limit" => limited.max_entries = 1,
+                "total_byte_limit" => limited.max_bytes = 7,
+                _ => limited.max_file_bytes = 3,
+            }
+            let scan = inventory_with_limits(dir.path(), limited);
+            assert!(!scan.complete, "{reason}");
+            assert!(
+                scan.scan.unwrap().issues.iter().any(|i| i.status == reason),
+                "{reason}"
+            );
+        }
+    }
+    #[test]
+    fn late_inputs_have_bounded_path_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut scan = inventory(dir.path(), "large");
+        for n in 0..20 {
+            scan.issue(format!("extra{n}.inc").into(), "late_input");
+        }
+        assert!(!scan.complete);
+        let report = scan.scan.unwrap();
+        assert!(!report.complete);
+        assert_eq!(report.issues.len(), 16);
+        assert_eq!(report.issues_omitted, 4);
+        assert_eq!(report.issues[0].status, "late_input");
+    }
 }

@@ -99,7 +99,7 @@ pub(super) fn read(path: &Path) -> Result<SymbolPacket> {
     if packet.packet_id != packet.response.packet_id
         || !packet.root.is_absolute()
         || packet.response.items.len() > MAX_ITEMS
-        || packet.inputs.files.len() > 8192
+        || packet.inputs.files.len() > 20480
         || packet.sources.len() > 4096
         || packet.response.queries.len() > 1024
         || packet.response.target.candidates.len() > MAX_ITEMS
@@ -138,7 +138,7 @@ fn safe_relative(path: &Path) -> bool {
 }
 
 fn replay_freshness(packet: &SymbolPacket, response: &mut SymbolContextV1) {
-    let mut now = inventory(&packet.root);
+    let mut now = inventory(&packet.root, packet.inputs.profile());
     refresh_captured_inputs(&packet.root, &packet.sources, &mut now);
     let (verification, changes) = super::explanation::verify_inputs(
         &packet.root,
@@ -148,6 +148,10 @@ fn replay_freshness(packet: &SymbolPacket, response: &mut SymbolContextV1) {
         "packet_inputs_vs_current",
     );
     let verdict = verification.verdict.clone();
+    response.freshness.scans = Some(ScanComparison {
+        baseline: packet.inputs.scan.clone(),
+        current: now.scan.clone(),
+    });
     response.freshness.verification = Some(verification);
     response.freshness.checked_inputs = now.files.len();
     response.freshness.input_scan_complete = packet.inputs.complete && now.complete;
@@ -309,6 +313,14 @@ fn fit_budget(
                 kind: "coverage".into(),
                 reason: "byte_budget".into(),
                 count: coverage.len(),
+            });
+            continue;
+        }
+        if response.freshness.scans.take().is_some() {
+            response.omissions.push(SymbolOmission {
+                kind: "input_scans".into(),
+                reason: "byte_budget".into(),
+                count: 1,
             });
             continue;
         }

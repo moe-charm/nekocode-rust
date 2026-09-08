@@ -210,3 +210,8 @@ without a new tool argument. Saved replay compares current input hashes while
 coverage still describes recorded backend observations. See
 [coverage/freshness](../docs/coverage-freshness-v1.md). Backend synchronization
 and effective feature/macro coverage remain unverified.
+
+Live symbol arguments also accept `scan_profile: "default" | "large"`; replay
+cannot override the recorded profile. Freshness includes bounded inventory
+counts/limits/reasons when budget permits. MCP calls remain one-shot; `reuse`
+reports belong to the explicit CLI JSONL session protocol.

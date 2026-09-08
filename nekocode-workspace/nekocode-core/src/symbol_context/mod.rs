@@ -4,7 +4,7 @@
 mod explanation;
 mod session;
 mod text_candidates;
-pub use session::SymbolSession;
+pub use session::{ReuseReport, SymbolSession};
 mod capture;
 mod delta;
 mod delta_model;
@@ -27,6 +27,15 @@ fn build_with_session(
     request: &SymbolContextRequest,
     session: &mut SymbolSession,
 ) -> Result<SymbolContextV1> {
+    if request
+        .scan_profile
+        .as_deref()
+        .is_some_and(|p| !matches!(p, "default" | "large"))
+    {
+        return Err(NekocodeError::Config(
+            "scan-profile must be default or large".into(),
+        ));
+    }
     if request.budget == 0 || request.budget > 1_000_000 {
         return Err(NekocodeError::Config(
             "symbol context budget must be between 1 and 1000000".to_string(),
@@ -55,6 +64,7 @@ fn build_with_session(
             || request.all_features
             || request.allow_build_scripts
             || request.text_candidates
+            || request.scan_profile.is_some()
         {
             return Err(NekocodeError::Config(
                 "saved packet replay cannot change backend options or save another packet"
@@ -122,6 +132,24 @@ pub fn format_symbol_context_summary(response: &SymbolContextV1) -> String {
         "Freshness: {}; backend synchronization: {}",
         response.freshness.state, response.freshness.backend_synchronization
     );
+    if let Some(scans) = &response.freshness.scans {
+        for (phase, scan) in [("baseline", &scans.baseline), ("current", &scans.current)] {
+            if let Some(s) = scan {
+                let _ = writeln!(output, "Input scan {phase} ({}): complete={}; entries {}/{}; files {}/{}; bytes {}/{}; per-file limit {}", s.profile, s.complete, s.examined_entries, s.max_entries, s.hashed_files, s.max_files, s.hashed_bytes, s.max_bytes, s.max_file_bytes);
+                for issue in &s.issues {
+                    let _ = writeln!(
+                        output,
+                        "Scan issue: {} {}",
+                        issue.status,
+                        issue.path.display()
+                    );
+                }
+                if s.issues_omitted > 0 {
+                    let _ = writeln!(output, "Scan issue examples omitted: {}", s.issues_omitted);
+                }
+            }
+        }
+    }
     if let Some(v) = &response.freshness.verification {
         let _ = writeln!(output, "Input verification ({}): {}; matched {}, modified {}, missing {}, unreadable {}, unobserved {}, newly observed {}, captured mismatches {}; scans complete: {}/{}",
             v.basis, v.verdict, v.matched, v.modified, v.missing, v.unreadable, v.unobserved, v.newly_observed, v.captured_mismatches, v.baseline_scan_complete, v.current_scan_complete);
