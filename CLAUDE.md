@@ -4,6 +4,11 @@ The supported product is a Rust-first evidence context layer, not an
 independent semantic analyzer. Its only CLI use cases are `snapshot` and
 `context`.
 
+The user-approved 2026-09-08 redesign adds external rust-analyzer investigation
+and saved continuation inside context. Follow docs/symbol-context-v1.md; it
+supersedes older backend-deferral statements. Preserve snapshot-v1/context-v1.
+This does not restore legacy analyzers, automatic edits, or hidden sessions.
+
 Canonical paths:
 
 - `nekocode-workspace/nekocode-core`: artifact and execution semantics;
@@ -21,3 +26,7 @@ The removed multi-language implementation is recoverable from the
 `legacy-multilang-final` tag and `archive/legacy-multilang-final` branch. Do
 not reintroduce its session, dead-code, refactor, impact, or multi-binary APIs
 into the canonical path.
+
+The 2026-09-08 follow-up adds explicit saved reference comparisons under
+[Symbol delta v1](docs/symbol-delta-v1.md). This supersedes the earlier
+deferral of reference comparisons only; other later features remain deferred.

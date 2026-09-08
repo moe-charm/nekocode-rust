@@ -62,6 +62,62 @@ fn indexes_the_complete_rust_feature_fixture() {
 }
 
 #[test]
+fn includes_cargo_configuration_in_input_digests() {
+    for file_name in ["config.toml", "config"] {
+        let directory = tempdir().expect("temporary configuration workspace");
+        let workspace = directory.path().join("workspace");
+        copy_fixture(&fixture_root(), &workspace);
+
+        let config_path = workspace.join(".cargo").join(file_name);
+        fs::create_dir_all(config_path.parent().expect("Cargo config parent"))
+            .expect("Cargo config directory");
+        fs::write(&config_path, "[term]\nverbose = false\n").expect("initial Cargo configuration");
+
+        let initial = index_rust_workspace(&workspace).expect("workspace with Cargo config");
+        let canonical_config = config_path.canonicalize().expect("canonical Cargo config");
+        let initial_digest = initial
+            .inputs
+            .iter()
+            .find(|input| input.path == canonical_config)
+            .map(|input| input.sha256.clone())
+            .expect("Cargo configuration must be an input digest");
+
+        fs::write(&config_path, "[term]\nverbose = true\n").expect("updated Cargo configuration");
+        let updated = index_rust_workspace(&workspace).expect("updated Cargo config workspace");
+        let updated_digest = updated
+            .inputs
+            .iter()
+            .find(|input| input.path == canonical_config)
+            .map(|input| input.sha256.as_str())
+            .expect("updated Cargo configuration must remain an input digest");
+
+        assert_ne!(
+            initial_digest, updated_digest,
+            "Cargo config changes must be observable"
+        );
+    }
+}
+
+#[test]
+fn includes_parent_cargo_configuration_in_input_digests() {
+    let directory = tempdir().expect("temporary parent configuration workspace");
+    let workspace = directory.path().join("workspace");
+    copy_fixture(&fixture_root(), &workspace);
+
+    let config_path = directory.path().join(".cargo/config.toml");
+    fs::create_dir_all(config_path.parent().expect("parent Cargo config directory"))
+        .expect("parent Cargo config directory");
+    fs::write(&config_path, "[term]\nverbose = false\n").expect("parent Cargo configuration");
+
+    let snapshot = index_rust_workspace(&workspace).expect("workspace with parent Cargo config");
+    let canonical_config = config_path.canonicalize().expect("canonical parent config");
+    assert!(snapshot
+        .inputs
+        .iter()
+        .any(|input| input.path == canonical_config));
+}
+
+#[test]
 fn validates_the_trait_impl_macro_cfg_feature_consumer() {
     let output = Command::new("cargo")
         .current_dir(fixture_root())
@@ -90,6 +146,11 @@ fn captures_the_deliberate_compile_error_as_evidence() {
                 .as_ref()
                 .is_some_and(|file| file.ends_with("compile_error/src/lib.rs"))
     }));
+    assert!(diagnostics
+        .messages
+        .iter()
+        .filter_map(|diagnostic| diagnostic.file.as_ref())
+        .all(|file| !file.is_absolute()));
 }
 
 #[test]
@@ -128,7 +189,7 @@ fn explains_a_fixed_golden_error_without_leaking_the_external_baseline_path() {
     let context = build_rust_context_with_config(&workspace, options)
         .expect("fixed fixture context should build");
     assert_eq!(context.status, ArtifactStatus::CompletedClean);
-    assert_eq!(context.comparison_status, ComparisonStatus::Comparable);
+    assert_eq!(context.comparison_status, ComparisonStatus::Partial);
     assert!(context.changed_files.iter().any(|file| {
         file.path == Path::new("compile_error/src/lib.rs") && file.hunks.len() == 1
     }));
@@ -136,15 +197,12 @@ fn explains_a_fixed_golden_error_without_leaking_the_external_baseline_path() {
         .diagnostic_delta
         .as_ref()
         .expect("fixed error should produce a diagnostic delta");
-    assert!(delta.compatible);
-    assert!(delta
-        .resolved
-        .iter()
-        .any(|diagnostic| diagnostic.code.as_deref() == Some("E0308")));
-    assert!(delta
-        .resolved
-        .iter()
-        .all(|diagnostic| matches!(diagnostic.level.as_str(), "error" | "warning")));
+    assert!(!delta.compatible);
+    assert_eq!(delta.status, ComparisonStatus::Partial);
+    assert!(delta.resolved.is_empty());
+    assert!(delta.reasons.iter().any(|reason| {
+        reason.code == nekocode_core::ComparisonReasonCode::BaselineObservationIncomplete
+    }));
 
     let public = sanitize_context_for_output(&context).expect("public context should sanitize");
     assert_eq!(public.baseline.as_deref(), Some(Path::new("$EXTERNAL")));
@@ -162,8 +220,9 @@ fn explains_a_fixed_golden_error_without_leaking_the_external_baseline_path() {
     let summary = format_context_summary(&public);
     assert!(summary.contains("Changes: 1 file (1 Rust), 1 hunk"));
     assert!(summary.contains(
-        "Diagnostic delta: comparable; 0 new, 1 resolved, 0 persisting (unique errors/warnings)"
+        "Diagnostic delta: partial; 0 new, 0 resolved, 0 persisting (unique errors/warnings)"
     ));
-    assert_eq!(summary.matches("- RESOLVED [E0308]").count(), 1);
+    assert!(summary.contains("- baseline_observation_incomplete (baseline_observation)"));
+    assert_eq!(summary.matches("- RESOLVED [E0308]").count(), 0);
     assert!(!summary.contains("For more information about this error"));
 }

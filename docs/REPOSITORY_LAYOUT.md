@@ -1,13 +1,19 @@
 # Repository layout
 
-Status: canonical after physical legacy retirement, 2026-08-23.
+The user-approved 2026-09-08 [Symbol context v1](symbol-context-v1.md) redesign
+adds LSP-backed investigation and saved continuation. It supersedes prior
+backend-deferral statements; existing snapshot-v1/context-v1 remain compatible.
+
+Status: core split and symbol investigation implemented, 2026-09-08.
 
 ```text
 nekocode-workspace/
 ├── nekocode-core/       # snapshot/context semantics and tests
+│   ├── src/rust_context/ # Cargo/Git providers, execution, budgets, summary
+│   └── src/symbol_context/ # external LSP, captured evidence, saved follow-up
 └── nekocode/            # canonical two-command CLI
 mcp-nekocode-server/     # thin two-tool stdio adapter
-schemas/                 # snapshot-v1/context-v1 contracts
+schemas/                 # versioned snapshot/Git/symbol/delta contracts
 skills/                  # workflow and stop conditions
 docs/                    # product and trust decisions
 Dockerfile               # canonical CLI + local MCP image
@@ -16,6 +22,11 @@ Dockerfile               # canonical CLI + local MCP image
 The dependency direction is one-way: CLI consumes core. MCP invokes the
 canonical CLI and must return the same core payload. Schema and Skill files do
 not implement analysis rules.
+
+The existing public facade holds orchestration, stable models and re-exports;
+the provider modules are described in [module-boundaries.md](module-boundaries.md).
+This is a mechanical responsibility split, not a new parser or language
+abstraction.
 
 Use:
 

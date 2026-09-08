@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moe-charm/nekocode/blob/main/schemas/context-v1.schema.json",
+  "$id": "https://github.com/moe-charm/nekocode-rust/blob/main/schemas/context-v1.schema.json",
   "title": "NekoCode Context v1",
   "type": "object",
   "required": [
@@ -93,7 +93,8 @@
       "properties": {
         "producer": { "enum": ["cargo_check", "clippy"] },
         "profile": { "enum": ["cargo_check_v1", "clippy_default_v1"] },
-        "producer_version": { "type": ["string", "null"] }
+        "producer_version": { "type": ["string", "null"] },
+        "comparison_basis": { "$ref": "#/$defs/comparison_basis" }
       },
       "additionalProperties": true
     },
@@ -105,12 +106,113 @@
       "type": ["string", "null"],
       "enum": ["cargo_check_v1", "clippy_default_v1", null]
     },
-    "diagnostic_delta": { "type": ["object", "null"] },
+    "diagnostic_delta": {
+      "type": ["object", "null"],
+      "properties": {
+        "baseline_path": { "type": "string" },
+        "status": {
+          "enum": ["comparable", "baseline_missing", "not_comparable", "partial"]
+        },
+        "compatible": { "type": "boolean" },
+        "added": { "type": "array", "items": { "type": "object" } },
+        "resolved": { "type": "array", "items": { "type": "object" } },
+        "persisting": { "type": "array", "items": { "type": "object" } },
+        "reasons": { "type": "array", "items": { "$ref": "#/$defs/comparison_reason" } },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
     "budget": { "type": "object" },
     "omissions": { "type": "array", "items": { "type": "object" } },
     "limitations": { "type": "array", "items": { "type": "string" } }
   },
   "$defs": {
+    "comparison_observation_status": {
+      "enum": ["observed", "absent", "unknown"]
+    },
+    "comparison_reason_code": {
+      "enum": [
+        "baseline_missing",
+        "baseline_integrity_unavailable",
+        "baseline_integrity_mismatch",
+        "comparison_basis_unavailable",
+        "toolchain_mismatch",
+        "producer_mismatch",
+        "producer_version_unknown",
+        "producer_version_mismatch",
+        "analysis_profile_mismatch",
+        "package_set_mismatch",
+        "target_coverage_mismatch",
+        "feature_coverage_mismatch",
+        "feature_definition_mismatch",
+        "workspace_inputs_mismatch",
+        "compiler_config_mismatch",
+        "compiler_config_unknown",
+        "tool_provenance_mismatch",
+        "baseline_observation_incomplete",
+        "current_observation_incomplete"
+      ]
+    },
+    "comparison_reason": {
+      "type": "object",
+      "required": ["code", "dimension"],
+      "properties": {
+        "code": { "$ref": "#/$defs/comparison_reason_code" },
+        "dimension": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "comparison_basis": {
+      "type": "object",
+      "required": [
+        "workspace_members_sha256",
+        "package_set_sha256",
+        "package_targets_sha256",
+        "feature_definitions_sha256",
+        "workspace_inputs_sha256",
+        "compiler_config",
+        "target_coverage",
+        "feature_coverage",
+        "toolchain",
+        "producer",
+        "profile",
+        "producer_version",
+        "complete"
+      ],
+      "properties": {
+        "workspace_members_sha256": { "type": "string", "minLength": 1 },
+        "package_set_sha256": { "type": "string", "minLength": 1 },
+        "package_targets_sha256": { "type": "string", "minLength": 1 },
+        "feature_definitions_sha256": { "type": "string", "minLength": 1 },
+        "workspace_inputs_sha256": { "type": "string", "minLength": 1 },
+        "compiler_config": {
+          "type": "object",
+          "required": ["status", "sha256"],
+          "properties": {
+            "status": { "$ref": "#/$defs/comparison_observation_status" },
+            "sha256": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "target_coverage": { "type": "string", "minLength": 1 },
+        "feature_coverage": { "type": "string", "minLength": 1 },
+        "toolchain": {
+          "type": "object",
+          "required": ["rustc_version", "cargo_version", "host"],
+          "properties": {
+            "rustc_version": { "type": ["string", "null"] },
+            "cargo_version": { "type": ["string", "null"] },
+            "host": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "producer": { "enum": ["cargo_check", "clippy"] },
+        "profile": { "enum": ["cargo_check_v1", "clippy_default_v1"] },
+        "producer_version": { "type": ["string", "null"] },
+        "complete": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "git_change_scope": {
       "enum": ["revision", "staged", "unstaged", "untracked"]
     },

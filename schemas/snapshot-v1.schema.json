@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moe-charm/nekocode/blob/main/schemas/snapshot-v1.schema.json",
+  "$id": "https://github.com/moe-charm/nekocode-rust/blob/main/schemas/snapshot-v1.schema.json",
   "title": "NekoCode Snapshot v1",
   "type": "object",
   "required": [
@@ -65,7 +65,8 @@
       "properties": {
         "producer": { "enum": ["cargo_check", "clippy"] },
         "profile": { "enum": ["cargo_check_v1", "clippy_default_v1"] },
-        "producer_version": { "type": ["string", "null"] }
+        "producer_version": { "type": ["string", "null"] },
+        "comparison_basis": { "$ref": "#/$defs/comparison_basis" }
       },
       "additionalProperties": true
     },
@@ -73,6 +74,62 @@
     "limitations": { "type": "array", "items": { "type": "string" } },
     "provenance": { "type": "array", "items": { "type": "object" } },
     "omissions": { "type": "array", "items": { "type": "object" } }
+  },
+  "$defs": {
+    "comparison_observation_status": {
+      "enum": ["observed", "absent", "unknown"]
+    },
+    "comparison_basis": {
+      "type": "object",
+      "required": [
+        "workspace_members_sha256",
+        "package_set_sha256",
+        "package_targets_sha256",
+        "feature_definitions_sha256",
+        "workspace_inputs_sha256",
+        "compiler_config",
+        "target_coverage",
+        "feature_coverage",
+        "toolchain",
+        "producer",
+        "profile",
+        "producer_version",
+        "complete"
+      ],
+      "properties": {
+        "workspace_members_sha256": { "type": "string", "minLength": 1 },
+        "package_set_sha256": { "type": "string", "minLength": 1 },
+        "package_targets_sha256": { "type": "string", "minLength": 1 },
+        "feature_definitions_sha256": { "type": "string", "minLength": 1 },
+        "workspace_inputs_sha256": { "type": "string", "minLength": 1 },
+        "compiler_config": {
+          "type": "object",
+          "required": ["status", "sha256"],
+          "properties": {
+            "status": { "$ref": "#/$defs/comparison_observation_status" },
+            "sha256": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "target_coverage": { "type": "string", "minLength": 1 },
+        "feature_coverage": { "type": "string", "minLength": 1 },
+        "toolchain": {
+          "type": "object",
+          "required": ["rustc_version", "cargo_version", "host"],
+          "properties": {
+            "rustc_version": { "type": ["string", "null"] },
+            "cargo_version": { "type": ["string", "null"] },
+            "host": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "producer": { "enum": ["cargo_check", "clippy"] },
+        "profile": { "enum": ["cargo_check_v1", "clippy_default_v1"] },
+        "producer_version": { "type": ["string", "null"] },
+        "complete": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": true
 }

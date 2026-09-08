@@ -5,6 +5,13 @@
 
 pub mod error;
 pub mod rust_context;
+pub mod symbol_context;
+
+pub use symbol_context::{
+    build_symbol_context, build_symbol_delta, format_symbol_context_summary,
+    format_symbol_delta_summary, SymbolContextRequest, SymbolContextV1, SymbolDeltaRequest,
+    SymbolDeltaV1,
+};
 
 pub use error::{NekocodeError, Result};
 pub use rust_context::{
@@ -13,13 +20,15 @@ pub use rust_context::{
     build_rust_snapshot_with_mode, build_snapshot, format_context_summary, index_rust_workspace,
     read_rust_snapshot, sanitize_context_for_output, sanitize_snapshot_for_output,
     write_rust_snapshot, AnalysisMode, ArtifactStatus, BudgetReport, ChangedRustFile,
-    ComparisonStatus, ContextRequest, ContextV1, DiagnosticProducer, DiagnosticProfile,
-    EvidenceLevel, ExecutionPolicy, GitChangeScope, LineCountStatus, Omission,
-    RustChangeScopeSummary, RustContextOptions, RustContextPack, RustContextSnapshot,
-    RustDiagnostic, RustDiagnosticDelta, RustDiagnosticRun, RustDiagnosticSpan, RustDiffHunk,
-    RustDiffSummary, RustFileScopeChange, RustInputDigest, RustPackage, RustSourceExcerpt,
-    RustTarget, RustToolchainInfo, RustWorkspaceSnapshot, SnapshotRequest, SnapshotV1,
-    ToolProvenance, CONTEXT_CONTRACT_VERSION, SCHEMA_VERSION, SNAPSHOT_CONTRACT_VERSION,
+    ComparisonObservationStatus, ComparisonReason, ComparisonReasonCode, ComparisonStatus,
+    ContextRequest, ContextV1, DiagnosticProducer, DiagnosticProfile, EvidenceLevel,
+    ExecutionPolicy, GitChangeScope, LineCountStatus, Omission, RustChangeScopeSummary,
+    RustCompilerConfigObservation, RustContextOptions, RustContextPack, RustContextSnapshot,
+    RustDiagnostic, RustDiagnosticComparisonBasis, RustDiagnosticDelta, RustDiagnosticRun,
+    RustDiagnosticSpan, RustDiffHunk, RustDiffSummary, RustFeatureDefinition, RustFileScopeChange,
+    RustInputDigest, RustPackage, RustSourceExcerpt, RustTarget, RustToolchainInfo,
+    RustWorkspaceSnapshot, SnapshotRequest, SnapshotV1, ToolProvenance, CONTEXT_CONTRACT_VERSION,
+    SCHEMA_VERSION, SNAPSHOT_CONTRACT_VERSION,
 };
 
 /// NekoCode Core version

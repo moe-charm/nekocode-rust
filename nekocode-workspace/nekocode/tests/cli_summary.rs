@@ -87,6 +87,15 @@ fn clippy_is_an_explicit_diagnostic_producer() {
     assert_eq!(snapshot_json["analysis_mode"], "clippy");
     assert_eq!(snapshot_json["diagnostics"]["producer"], "clippy");
     assert_eq!(snapshot_json["diagnostics"]["profile"], "clippy_default_v1");
+    assert!(
+        snapshot_json["diagnostics"]["comparison_basis"]["package_set_sha256"]
+            .as_str()
+            .is_some_and(|digest| digest.starts_with("sha256:"))
+    );
+    assert!(matches!(
+        snapshot_json["diagnostics"]["comparison_basis"]["compiler_config"]["status"].as_str(),
+        Some("observed") | Some("absent") | Some("unknown")
+    ));
 
     let context = Command::new(env!("CARGO_BIN_EXE_nekocode"))
         .args(["context"])
@@ -109,6 +118,11 @@ fn clippy_is_an_explicit_diagnostic_producer() {
     assert_eq!(context_json["diagnostic_producer"], "clippy");
     assert_eq!(context_json["diagnostic_profile"], "clippy_default_v1");
     assert_eq!(context_json["diagnostics"]["producer"], "clippy");
+    assert_eq!(context_json["comparison_status"], "baseline_missing");
+    assert_eq!(
+        context_json["diagnostic_delta"]["reasons"][0]["code"],
+        "baseline_missing"
+    );
 }
 
 #[test]
@@ -207,9 +221,10 @@ fn external_baseline_is_redacted_and_summary_counts_unique_errors() {
     );
     let summary = String::from_utf8(summary_output.stdout).expect("summary must be UTF-8");
     assert!(summary.contains(
-        "Diagnostic delta: comparable; 1 new, 0 resolved, 0 persisting (unique errors/warnings)"
+        "Diagnostic delta: partial; 0 new, 0 resolved, 0 persisting (unique errors/warnings)"
     ));
-    assert_eq!(summary.matches("- NEW [E0308]").count(), 1);
+    assert!(summary.contains("- current_observation_incomplete (current_observation)"));
+    assert_eq!(summary.matches("- NEW [E0308]").count(), 0);
     assert!(!summary.contains("For more information about this error"));
 
     let json_output = context(&root, &["--diagnostics", "--baseline", &baseline_argument]);
@@ -223,11 +238,15 @@ fn external_baseline_is_redacted_and_summary_counts_unique_errors() {
     let json: Value = serde_json::from_str(&json_text).expect("context JSON");
     assert_eq!(json["baseline"], "$EXTERNAL");
     assert_eq!(json["diagnostic_delta"]["baseline_path"], "$EXTERNAL");
+    assert_eq!(json["diagnostic_delta"]["status"], "partial");
+    assert_eq!(json["diagnostic_delta"]["compatible"], false);
     let added = json["diagnostic_delta"]["added"]
         .as_array()
         .expect("added diagnostic array");
-    assert!(!added.is_empty());
-    assert!(added
+    assert!(added.is_empty());
+    assert!(json["diagnostic_delta"]["reasons"]
+        .as_array()
+        .expect("comparison reasons")
         .iter()
-        .all(|diagnostic| matches!(diagnostic["level"].as_str(), Some("error" | "warning"))));
+        .any(|reason| reason["code"] == "current_observation_incomplete"));
 }

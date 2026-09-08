@@ -60,6 +60,47 @@ command -v git >/dev/null 2>&1 || {
   exit 1
 }
 
+is_tracked_file() {
+  git -C "$ROOT_DIR" ls-files --error-unmatch -- "$1" >/dev/null 2>&1
+}
+
+reject_untracked_cargo_config() {
+  local search_dir="$ROOT_DIR"
+  while :; do
+    for name in ".cargo/config.toml" ".cargo/config"; do
+      local candidate="$search_dir/$name"
+      if [ -f "$candidate" ] && ! is_tracked_file "${candidate#"$ROOT_DIR/"}"; then
+        echo "[!] untracked or ignored Cargo configuration affects release input: $candidate" >&2
+        echo "    track it deliberately or remove it from the release environment" >&2
+        return 1
+      fi
+    done
+    [ "$search_dir" = "/" ] && break
+    search_dir=$(dirname "$search_dir")
+  done
+
+  for name in ".cargo/config.toml" ".cargo/config"; do
+    local workspace_candidate="$ROOT_DIR/nekocode-workspace/$name"
+    if [ -f "$workspace_candidate" ] && ! is_tracked_file "nekocode-workspace/$name"; then
+      echo "[!] untracked or ignored Cargo configuration affects release input: $workspace_candidate" >&2
+      echo "    track it deliberately or remove it from the release environment" >&2
+      return 1
+    fi
+  done
+
+  local cargo_home=${CARGO_HOME:-${HOME:-}/.cargo}
+  for name in "config.toml" "config"; do
+    local global_candidate="$cargo_home/$name"
+    if [ -f "$global_candidate" ]; then
+      echo "[!] global Cargo configuration is not an explicit release input: $global_candidate" >&2
+      echo "    use a clean CARGO_HOME for release packaging" >&2
+      return 1
+    fi
+  done
+}
+
+reject_untracked_cargo_config
+
 if [ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=all)" ]; then
   echo "[!] release packaging requires a clean Git worktree" >&2
   exit 1
@@ -79,6 +120,13 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
     echo "[!] cargo is required; use --skip-build with an existing release binary" >&2
     exit 1
   }
+  EXPECTED_RUSTC_VERSION=${NEKOCODE_RELEASE_RUSTC_VERSION:-1.85.0}
+  ACTUAL_RUSTC_VERSION=$(rustc --version | awk '{print $2}')
+  if [ "$ACTUAL_RUSTC_VERSION" != "$EXPECTED_RUSTC_VERSION" ]; then
+    echo "[!] release requires rustc $EXPECTED_RUSTC_VERSION (found $ACTUAL_RUSTC_VERSION)" >&2
+    echo "    set up the pinned toolchain or use the matching release container" >&2
+    exit 1
+  fi
   if [ "$CLEAN" -eq 1 ]; then
     cargo clean --manifest-path "$MANIFEST"
   fi
@@ -90,7 +138,15 @@ if [ ! -x "$TARGET" ]; then
   exit 1
 fi
 
-mkdir -p "$OUTPUT_DIR"
+if [ -e "$OUTPUT_DIR" ]; then
+  if [ -n "$(find "$OUTPUT_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+    echo "[!] release staging directory must be empty: $OUTPUT_DIR" >&2
+    echo "    choose a new versioned output directory" >&2
+    exit 1
+  fi
+else
+  mkdir -p "$OUTPUT_DIR"
+fi
 install -m 0755 "$TARGET" "$OUTPUT_DIR/nekocode"
 VERSION=$("$OUTPUT_DIR/nekocode" --version | tr -d '\r\n')
 

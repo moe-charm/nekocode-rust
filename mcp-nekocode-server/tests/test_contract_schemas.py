@@ -184,11 +184,24 @@ class ContractSchemaTest(unittest.TestCase):
         context = json.loads(
             (REPO_ROOT / "schemas/fixtures/context-v1-change-scopes.json").read_text()
         )
+        snapshot_comparability = json.loads(
+            (REPO_ROOT / "schemas/fixtures/snapshot-v1-comparability.json").read_text()
+        )
+        context_comparability = json.loads(
+            (REPO_ROOT / "schemas/fixtures/context-v1-comparability.json").read_text()
+        )
 
         jsonschema.Draft202012Validator.check_schema(snapshot_schema)
         jsonschema.Draft202012Validator.check_schema(context_schema)
         assert_standard_json_schema(snapshot, snapshot_schema)
         assert_standard_json_schema(context, context_schema)
+        assert_standard_json_schema(snapshot_comparability, snapshot_schema)
+        assert_standard_json_schema(context_comparability, context_schema)
+
+        self.assertEqual(
+            context_comparability["diagnostic_delta"]["reasons"][0]["code"],
+            "compiler_config_mismatch",
+        )
 
     @unittest.skipUnless(jsonschema is not None, "install requirements-dev.txt")
     def test_standard_validator_rejects_contract_version_change(self) -> None:
@@ -197,6 +210,16 @@ class ContractSchemaTest(unittest.TestCase):
             (REPO_ROOT / "schemas/fixtures/snapshot-v1-metadata.json").read_text()
         )
         fixture["contract_version"] = "snapshot-v2"
+        with self.assertRaises(AssertionError):
+            assert_standard_json_schema(fixture, schema)
+
+    @unittest.skipUnless(jsonschema is not None, "install requirements-dev.txt")
+    def test_standard_validator_rejects_unknown_comparability_reason(self) -> None:
+        schema = json.loads((REPO_ROOT / "schemas/context-v1.schema.json").read_text())
+        fixture = json.loads(
+            (REPO_ROOT / "schemas/fixtures/context-v1-comparability.json").read_text()
+        )
+        fixture["diagnostic_delta"]["reasons"][0]["code"] = "invented_reason"
         with self.assertRaises(AssertionError):
             assert_standard_json_schema(fixture, schema)
 

@@ -116,7 +116,11 @@ fn clippy_tool_failure_is_not_reported_as_a_clean_run() {
 fn cargo_and_clippy_profiles_are_not_comparable() {
     let directory = tempdir().expect("profile fixture directory");
     let root = directory.path();
-    write_package(root, "pub fn value() -> u32 { 1 }\n", None);
+    write_package(
+        root,
+        "#![warn(clippy::needless_return)]\npub fn value() -> u32 { return 1; }\n",
+        None,
+    );
 
     let baseline = build_rust_snapshot_with_analysis(root, AnalysisMode::CargoCheck, false)
         .expect("cargo-check baseline should run");
@@ -156,5 +160,11 @@ fn cargo_and_clippy_profiles_are_not_comparable() {
         Some(DiagnosticProfile::ClippyDefaultV1)
     );
     assert_eq!(tiny.status, ArtifactStatus::OutputLimited);
-    assert!(tiny.diagnostics.is_none());
+    let tiny_diagnostics = tiny
+        .diagnostics
+        .as_ref()
+        .expect("the diagnostic envelope must survive a tiny budget");
+    assert!(tiny_diagnostics.messages.is_empty());
+    assert!(tiny_diagnostics.comparison_basis.is_some());
+    assert!(tiny.omitted_diagnostics > 0);
 }

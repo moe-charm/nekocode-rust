@@ -1,8 +1,8 @@
 use nekocode_core::{
     build_rust_context_with_config, build_rust_snapshot, format_context_summary,
     sanitize_context_for_output, sanitize_snapshot_for_output, AnalysisMode, ArtifactStatus,
-    ComparisonStatus, EvidenceLevel, GitChangeScope, LineCountStatus, RustContextOptions,
-    RustContextPack,
+    ComparisonReasonCode, ComparisonStatus, EvidenceLevel, GitChangeScope, LineCountStatus,
+    RustContextOptions, RustContextPack,
 };
 use std::fs;
 use std::path::Path;
@@ -544,21 +544,22 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
         .diagnostic_delta
         .as_ref()
         .expect("compatible baseline should produce a changed delta");
-    assert!(
-        changed_delta
-            .added
-            .iter()
-            .any(|diagnostic| diagnostic.code.as_deref() == Some("E0308")),
-        "unexpected diagnostic delta: {changed_delta:#?}"
-    );
+    assert_eq!(changed_delta.status, ComparisonStatus::Partial);
+    assert!(!changed_delta.compatible);
+    assert!(changed_delta.added.is_empty());
+    assert!(changed_delta.resolved.is_empty());
+    assert!(changed_delta
+        .reasons
+        .iter()
+        .any(|reason| { reason.code == ComparisonReasonCode::CurrentObservationIncomplete }));
     let changed_summary = format_context_summary(&changed);
     assert!(changed_summary
         .contains("Diagnostics: completed_with_diagnostics; producer_status=failed;"));
     assert!(changed_summary.contains(
-        "Diagnostic delta: comparable; 1 new, 0 resolved, 0 persisting (unique errors/warnings)"
+        "Diagnostic delta: partial; 0 new, 0 resolved, 0 persisting (unique errors/warnings)"
     ));
-    assert!(changed_summary.contains("- NEW [E0308]"));
-    assert_eq!(changed_summary.matches("- NEW [E0308]").count(), 1);
+    assert!(changed_summary.contains("- current_observation_incomplete (current_observation)"));
+    assert!(!changed_summary.contains("- NEW [E0308]"));
 
     let mut missing_options = RustContextOptions::new(None, 20_000);
     missing_options.include_diagnostics = true;
@@ -566,12 +567,56 @@ fn snapshot_round_trip_and_diagnostic_delta_are_explicit() {
         .expect("context without baseline should still build");
     assert_eq!(missing.comparison_status, ComparisonStatus::BaselineMissing);
     assert!(missing
-        .limitations
+        .diagnostic_delta
+        .as_ref()
+        .expect("baseline-missing delta")
+        .reasons
         .iter()
-        .any(|item| item.contains("baseline_missing")));
+        .any(|reason| reason.code == ComparisonReasonCode::BaselineMissing));
     let missing_summary = format_context_summary(&missing);
     assert!(missing_summary.contains("Diagnostic delta: baseline_missing"));
     assert!(missing_summary.contains("- CURRENT [E0308]"));
+}
+
+#[test]
+fn diagnostic_delta_rejects_workspace_input_changes() {
+    let directory = tempdir().expect("temporary workspace");
+    let baseline_directory = tempdir().expect("external baseline directory");
+    let root = directory.path();
+    fs::create_dir(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"input-fingerprint-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(root.join("src/lib.rs"), "pub fn stable() -> u32 { 1 }\n").expect("source");
+
+    let baseline = build_rust_snapshot(root, true, false).expect("baseline snapshot");
+    let baseline_path = baseline_directory.path().join("baseline.json");
+    nekocode_core::write_rust_snapshot(&baseline_path, &baseline).expect("write baseline");
+
+    fs::create_dir(root.join(".cargo")).expect("Cargo config directory");
+    fs::write(root.join(".cargo/config.toml"), "[term]\nverbose = false\n")
+        .expect("changed Cargo configuration");
+    let mut options = RustContextOptions::new(None, 20_000);
+    options.include_diagnostics = true;
+    options.baseline = Some(baseline_path);
+    let context = build_rust_context_with_config(root, options).expect("context snapshot");
+
+    assert_eq!(context.comparison_status, ComparisonStatus::NotComparable);
+    assert!(context
+        .diagnostic_delta
+        .as_ref()
+        .expect("diagnostic delta")
+        .reasons
+        .iter()
+        .any(|reason| {
+            matches!(
+                reason.code,
+                ComparisonReasonCode::CompilerConfigMismatch
+                    | ComparisonReasonCode::WorkspaceInputsMismatch
+            )
+        }));
 }
 
 #[test]
@@ -607,6 +652,96 @@ fn metadata_snapshot_has_stable_contract_and_safe_public_paths() {
     assert!(!serde_json::to_string(&public)
         .expect("public snapshot should serialize")
         .contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn snapshot_reader_rejects_wrong_envelope_identity() {
+    let directory = tempdir().expect("temporary workspace");
+    let root = directory.path();
+    fs::create_dir(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"snapshot-envelope-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(root.join("src/lib.rs"), "pub fn stable() {}\n").expect("source");
+
+    let snapshot = build_rust_snapshot(root, false, false).expect("snapshot");
+    let path = directory.path().join("invalid.json");
+    let mut value = serde_json::to_value(&snapshot).expect("snapshot JSON");
+    value["contract_version"] = serde_json::json!("snapshot-v2");
+    fs::write(
+        &path,
+        serde_json::to_vec(&value).expect("invalid snapshot JSON"),
+    )
+    .expect("write invalid snapshot");
+    assert!(nekocode_core::read_rust_snapshot(&path)
+        .expect_err("wrong contract must be rejected")
+        .to_string()
+        .contains("contract version"));
+
+    value["contract_version"] = serde_json::json!("snapshot-v1");
+    value["artifact_kind"] = serde_json::json!("context");
+    fs::write(
+        &path,
+        serde_json::to_vec(&value).expect("invalid artifact JSON"),
+    )
+    .expect("write invalid artifact");
+    assert!(nekocode_core::read_rust_snapshot(&path)
+        .expect_err("wrong artifact kind must be rejected")
+        .to_string()
+        .contains("artifact_kind"));
+
+    value["artifact_kind"] = serde_json::json!("snapshot");
+    value["canonical_hash"] = serde_json::json!("sha256:tampered");
+    fs::write(
+        &path,
+        serde_json::to_vec(&value).expect("tampered snapshot JSON"),
+    )
+    .expect("write tampered snapshot");
+    assert!(nekocode_core::read_rust_snapshot(&path)
+        .expect_err("tampered canonical hash must be rejected")
+        .to_string()
+        .contains("canonical hash mismatch"));
+}
+
+#[test]
+fn comparability_matrix_keeps_integrity_reason_under_a_tiny_budget() {
+    let directory = tempdir().expect("temporary workspace");
+    let root = directory.path();
+    fs::create_dir(root.join("src")).expect("src directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"matrix-integrity-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("manifest");
+    fs::write(root.join("src/lib.rs"), "pub fn stable() -> u32 { 1 }\n").expect("source");
+
+    let baseline = build_rust_snapshot(root, true, false).expect("baseline snapshot");
+    let baseline_path = directory.path().join("baseline.json");
+    let mut value = serde_json::to_value(&baseline).expect("baseline JSON");
+    value["canonical_hash"] = serde_json::json!("sha256:tampered");
+    fs::write(
+        &baseline_path,
+        serde_json::to_vec(&value).expect("tampered baseline JSON"),
+    )
+    .expect("write tampered baseline");
+
+    let mut options = RustContextOptions::new(None, 1);
+    options.include_diagnostics = true;
+    options.baseline = Some(baseline_path);
+    let context = build_rust_context_with_config(root, options)
+        .expect("tampered baseline should be represented as context evidence");
+    let delta = context
+        .diagnostic_delta
+        .as_ref()
+        .expect("integrity failure should have a delta envelope");
+    assert_eq!(context.comparison_status, ComparisonStatus::NotComparable);
+    assert!(delta
+        .reasons
+        .iter()
+        .any(|reason| reason.code == ComparisonReasonCode::BaselineIntegrityMismatch));
+    assert!(context.budget_exceeded || context.evidence == EvidenceLevel::Incomplete);
 }
 
 #[test]

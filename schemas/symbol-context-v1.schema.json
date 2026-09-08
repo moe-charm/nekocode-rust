@@ -1,0 +1,574 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moe-charm/nekocode-rust/blob/main/schemas/symbol-context-v1.schema.json",
+  "title": "NekoCode Symbol Context v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "artifact_kind",
+    "packet_id",
+    "status",
+    "target",
+    "scope",
+    "backend",
+    "queries",
+    "freshness",
+    "items",
+    "totals",
+    "omissions",
+    "continuation",
+    "budget",
+    "limitations"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "symbol-context-v1"
+    },
+    "artifact_kind": {
+      "const": "symbol_context"
+    },
+    "packet_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "ambiguous",
+        "not_found",
+        "backend_unavailable",
+        "timed_out",
+        "output_limited",
+        "stale"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "backend": {
+      "$ref": "#/$defs/backend"
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/query"
+      }
+    },
+    "freshness": {
+      "$ref": "#/$defs/freshness"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    },
+    "totals": {
+      "$ref": "#/$defs/totals"
+    },
+    "omissions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/omission"
+      }
+    },
+    "continuation": {
+      "$ref": "#/$defs/continuation"
+    },
+    "budget": {
+      "$ref": "#/$defs/budget"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "position": {
+      "type": "object",
+      "required": [
+        "line",
+        "column"
+      ],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "required": [
+        "path",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "start": {
+          "$ref": "#/$defs/position"
+        },
+        "end": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "additionalProperties": false
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "location"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "additionalProperties": false
+    },
+    "containing_symbol": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "location"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "requested_at",
+        "requested_symbol",
+        "resolution",
+        "location",
+        "candidates"
+      ],
+      "properties": {
+        "requested_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requested_symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution": {
+          "enum": [
+            "selected",
+            "ambiguous",
+            "not_found",
+            "unresolved"
+          ]
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/location"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "workspace_root",
+        "features",
+        "cfg_test",
+        "build_scripts",
+        "proc_macros",
+        "tests_executed",
+        "hop_limit",
+        "external_configuration"
+      ],
+      "properties": {
+        "workspace_root": {
+          "type": "string"
+        },
+        "features": {
+          "type": "string"
+        },
+        "cfg_test": {
+          "type": "string"
+        },
+        "build_scripts": {
+          "type": "boolean"
+        },
+        "proc_macros": {
+          "type": "boolean"
+        },
+        "tests_executed": {
+          "const": false
+        },
+        "hop_limit": {
+          "const": 1
+        },
+        "external_configuration": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "backend": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "health",
+        "quiescent",
+        "readiness_observed",
+        "startup_ms",
+        "observation_ms",
+        "message"
+      ],
+      "properties": {
+        "name": {
+          "const": "rust-analyzer"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "health": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quiescent": {
+          "type": "boolean"
+        },
+        "readiness_observed": {
+          "type": "boolean"
+        },
+        "startup_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observation_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "method",
+        "status",
+        "result_count",
+        "detail"
+      ],
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "unsupported",
+            "timed_out",
+            "failed",
+            "output_limited",
+            "not_acquired",
+            "backend_unavailable"
+          ]
+        },
+        "result_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "freshness": {
+      "type": "object",
+      "required": [
+        "state",
+        "source_state",
+        "backend_synchronization",
+        "checked_inputs",
+        "changed_inputs",
+        "input_scan_complete",
+        "limitations"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "source_stable",
+            "changed_during_observation",
+            "unknown",
+            "stale"
+          ]
+        },
+        "source_state": {
+          "enum": [
+            "stable",
+            "changed",
+            "unknown"
+          ]
+        },
+        "backend_synchronization": {
+          "const": "unverified"
+        },
+        "checked_inputs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changed_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "input_scan_complete": {
+          "type": "boolean"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "id",
+        "relation",
+        "backend",
+        "source",
+        "location",
+        "reason",
+        "code",
+        "excerpt_start_line",
+        "excerpt_end_line",
+        "containing_symbol",
+        "detail",
+        "truncated"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
+        },
+        "backend": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "excerpt_start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "excerpt_end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "containing_symbol": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/containing_symbol"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "totals": {
+      "type": "object",
+      "required": [
+        "observed",
+        "retained",
+        "displayed"
+      ],
+      "properties": {
+        "observed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retained": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "displayed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "omission": {
+      "type": "object",
+      "required": [
+        "kind",
+        "reason",
+        "count"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "continuation": {
+      "type": "object",
+      "required": [
+        "packet",
+        "next_cursor",
+        "expandable"
+      ],
+      "properties": {
+        "packet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expandable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "requested_tokens",
+        "max_bytes",
+        "serialized_bytes",
+        "exceeded"
+      ],
+      "properties": {
+        "requested_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "serialized_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exceeded": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

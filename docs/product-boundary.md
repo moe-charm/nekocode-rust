@@ -1,16 +1,19 @@
 # Product boundary
 
-Status: accepted design decision, 2026-08-23.
+Status: updated by user-approved redesign, 2026-09-08.
 
 ## Product definition
 
-> NekoCode converts Rust official-tool results and Git changes into
-> comparable, budgeted, evidence-backed code context.
+> NekoCode gives an AI the code and observed relationships needed to investigate
+> a change, with exact evidence, continuation, and explicit limits.
+
+The first redesign delivery is [Symbol context v1](symbol-context-v1.md).
+Existing snapshot and Git/diagnostic context remain supported as its foundation.
 
 NekoCode is a **Rust-first code context layer**, not a Rust semantic analyzer,
 IDE backend, or universal language index. Correctness of Rust meaning remains
-with Cargo, `rustc`, `cargo check`, Clippy, and rust-analyzer when a later
-backend is explicitly enabled.
+with Cargo, `rustc`, `cargo check`, Clippy, and an external rust-analyzer LSP
+backend. NekoCode integrates their evidence.
 
 ## Responsibility map
 
@@ -34,15 +37,18 @@ The public vocabulary is intentionally small:
 ```text
 nekocode snapshot PATH
 nekocode context PATH --baseline SNAPSHOT.json
+nekocode context PATH --symbol NAME --save-packet PACKET.json
+nekocode context --packet PACKET.json --item ITEM_ID
 ```
 
-`snapshot` describes an explicit workspace observation. `context` describes a
-Git change set plus optional compiler observations. No compatibility command
-or hidden session entry point is supported.
+`snapshot` describes an explicit workspace observation. `context` without a
+symbol selector retains its Git/diagnostic behavior. `context --at` or --symbol
+investigates code; `context --packet` reads a saved investigation. Symbol modes
+use symbol-context-v1. There is no hidden session entry point.
 
 ## Non-goals for the Rust-first MVP
 
-- independent Rust type checking, reference indexing, or symbol resolution;
+- independent Rust type checking or symbol resolution (LSP-backed queries are in scope);
 - heuristic dead-code or breaking-change conclusions;
 - refactoring, source rewriting, watch, security, or quality suites;
 - a hidden global session/snapshot database;
@@ -64,3 +70,7 @@ until a second language is an approved product requirement.
 
 Breaking artifact changes require a new contract version. Additive fields are
 allowed within a version when old readers can safely ignore them.
+
+The 2026-09-08 follow-up adds explicit saved reference comparisons under
+[Symbol delta v1](symbol-delta-v1.md). This supersedes the earlier
+deferral of reference comparisons only; other later features remain deferred.

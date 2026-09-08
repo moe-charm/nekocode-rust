@@ -1,4 +1,4 @@
-.PHONY: all build check test verify install package docker clean help
+.PHONY: all build check fmt clippy test verify install package docker clean help
 
 MANIFEST := nekocode-workspace/Cargo.toml
 
@@ -18,11 +18,11 @@ clippy:
 
 test:
 	cargo test --manifest-path $(MANIFEST) --locked
-	python3 -c 'import jsonschema' || (echo "install requirements-dev.txt first" >&2; exit 1)
+	python3 -c 'import jsonschema' || (echo "jsonschema is required; install with: python3 -m pip install -r requirements-dev.txt" >&2; exit 1)
 	python3 -m unittest discover -s mcp-nekocode-server/tests -p 'test_*.py'
 
 verify: fmt clippy check test
-	python3 -c 'import json; json.load(open("schemas/snapshot-v1.schema.json")); json.load(open("schemas/context-v1.schema.json"))'
+	python3 -c 'import json; from pathlib import Path; [json.loads(p.read_text()) for p in Path("schemas").glob("*.schema.json")]'
 
 install:
 	cargo install --path nekocode-workspace/nekocode --locked

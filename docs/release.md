@@ -1,6 +1,7 @@
 # Release procedure
 
-Status: accepted for the Rust-first binary release, 2026-08-24.
+Status: release procedure documented; current branch is **No-Go** pending the
+2026-08-24 Codex audit fixes, 2026-08-25.
 
 The current distribution target is a GitHub/tag binary release plus the
 matching Docker image. It is not a tested multi-platform matrix and it does
@@ -55,3 +56,23 @@ The provenance timestamp is informational and must not be used as an artifact
 identity. The binary checksum and tag/commit relationship are the release
 evidence. Do not publish an untested target matrix or describe compiler
 execution as sandboxed; compiler observations remain trusted-workspace only.
+
+## Review follow-up before tagging
+
+The 2026-08-24 Codex audit found no regression in the normal Rust gate, but the
+release verdict is **No-Go**. The implementation now closes the actual Cargo
+configuration hierarchy (including ignored or parent configuration), compares
+input digests in diagnostic deltas, validates CLI Git revisions, makes
+MCP/compiler fallback commands locked and offline, excludes ignored legacy
+residues from Docker and staging inputs, and validates schema identity and the
+snapshot envelope. A clean approved environment must still pass the release
+and Docker smoke gates before `v1.2.0` is created.
+
+The local M1/L1 follow-up remains useful: effective Cargo config is hashed and
+Git observations have a 60-second bounded runner. These changes are not, by
+themselves, release evidence until the clean-input gate passes.
+
+The local `NEKOCODE-COMPARABILITY-MATRIX-V1` implementation is additive within
+`snapshot-v1`/`context-v1` and is covered by the Rust, schema, CLI, and MCP
+gates. It is not a release approval; the current working tree still needs its
+separate commit, exact remote SHA verification, and clean release/Docker smoke.

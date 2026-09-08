@@ -1,9 +1,15 @@
 # Artifact contract
 
+The user-approved 2026-09-08 [Symbol context v1](symbol-context-v1.md) redesign
+adds LSP-backed investigation and saved continuation. It supersedes prior
+backend-deferral statements; existing snapshot-v1/context-v1 remain compatible.
+
 Status: accepted design decision, 2026-08-23.
 
 The public artifacts are versioned independently from internal module names.
-The first external contracts are `snapshot-v1` and `context-v1`.
+The snapshot/Git contracts below are `snapshot-v1` and `context-v1`.
+Function investigation uses [symbol-context-v1](symbol-context-v1.md) and its
+[JSON Schema](../schemas/symbol-context-v1.schema.json).
 
 ## Snapshot
 
@@ -21,7 +27,9 @@ The artifact records, as applicable:
 
 - workspace root, packages, targets, features, and editions;
 - Cargo/rustc versions, host/target profile, and execution policy;
-- relevant manifest, lockfile, toolchain, and configuration digests;
+- relevant manifest, lockfile, toolchain, and Cargo configuration digests;
+  the root `.cargo/config.toml` and legacy `.cargo/config` are part of this
+  set whenever present, because they can change compiler-affecting behavior;
 - Git HEAD/dirty state and normalized workspace-relative paths;
 - analysis mode and tool provenance;
 - an execution policy describing trust, offline mode, environment filtering,
@@ -33,6 +41,9 @@ The artifact records, as applicable:
 
 Cargo metadata parsing must pin a machine-readable format version, tolerate
 unknown fields, and avoid assuming a fixed future enum set.
+Git observations use a bounded process runner (60-second timeout, capped
+stdout/stderr, and process-group cleanup) so a stalled or oversized Git
+command cannot run without a safety limit.
 `PATH` may identify a manifest root, nested directory, or existing file. The
 nearest ancestor manifest is used to invoke Cargo, and Cargo's canonical
 workspace root becomes the artifact and Git boundary.
@@ -80,6 +91,13 @@ Filename collection uses NUL-delimited Git output so UTF-8 names are not
 stored as quoted octal text. Patch collection disables non-ASCII pathname
 quoting so a changed file and its hunks remain associated.
 
+Hunks and source excerpts now carry an optional additive `scope` field.
+Revision excerpts read the resolved HEAD blob, staged excerpts read the index,
+and unstaged/untracked excerpts read the requested working tree. The same
+path can therefore have different captured source in different scopes.
+Public diagnostic package IDs are normalized before fingerprinting, so a
+saved public snapshot compares identically with an unchanged current run.
+
 JSON is the canonical `context-v1` representation. A human-readable summary
 may project fields from the completed core artifact, but it must not infer new
 facts, define adapter-specific statuses, or change the underlying artifact.
@@ -109,6 +127,21 @@ feature/default-feature, compiler-affecting configuration, or analysis-profile
 changes. A baseline without a diagnostic observation is always
 `baseline_missing`.
 
+A compiler run with `status=failed` may still contain valid rustc diagnostics
+and is retained as snapshot evidence. It is nevertheless incomplete for
+baseline comparison because Cargo may stop before observing every package or
+target. Such a run must produce `partial` with an observation-incomplete
+reason, never `comparable`.
+
+The implementation must derive the comparability fingerprint from the
+workspace observation, including the package/target set and the relevant
+`workspace.inputs` digests (manifests, lockfile, toolchain files, and the
+effective Cargo configuration). Merely recording those digests in the JSON is
+not sufficient: if any required input differs, the result is
+`not_comparable` with a reasoned limitation. Configuration outside the
+canonical workspace root must either be included when Cargo can discover it or
+be rejected by the execution/release boundary.
+
 MVP matching is exact and multiset-based. It does not fuzzy-match diagnostics
 that moved to another line. A fingerprint includes the producer, code/level,
 normalized message, workspace-relative primary path/label, and a stable span
@@ -121,6 +154,16 @@ raw observation count visible.
 Public artifacts replace workspace-local paths with `$WORKSPACE` and other
 absolute path fields with `$EXTERNAL`. This includes both `baseline` and
 `diagnostic_delta.baseline_path`; artifact storage locations must not leak.
+
+### Comparability Matrix v1 follow-up
+
+The implementation now compares workspace/package/target/input digests and
+effective Cargo configuration, exposes additive machine-readable comparison
+basis and reason evidence, includes package/target/primary-span identity in
+exact fingerprints, and rejects canonical baseline-hash tampering. The
+one-axis golden and adapter parity gate is documented in
+[Comparability Matrix v1](comparability-matrix-v1.md); it does not change the
+two-command public surface.
 
 ## Budget and omissions
 
@@ -157,6 +200,8 @@ property-test gate for any truncation change must assert that:
   `not_read` files retain null line counts;
 - every omitted group has a nonzero reasoned ledger entry and retained
   `changed_files` never claims to be complete after omission;
+- diagnostic message omission never removes the diagnostic run envelope,
+  comparison basis, producer, status, or provenance;
 - UTF-8 patch and excerpt truncation stops only at character boundaries;
 - when the envelope can fit, `serialized_bytes <= max_bytes`; when it cannot,
   the artifact explicitly reports `output_limited`, `budget.exceeded`, and
@@ -212,3 +257,8 @@ volatile timestamps. A breaking field or status change requires `v2`; additive
 optional fields remain within `v1`. Change Scope v1 fields are additive: older
 `context-v1` readers may ignore them, while golden artifacts verify that the
 current producer emits and validates them.
+
+Saved reference comparisons return the separate [symbol-delta-v1](symbol-delta-v1.md)
+contract. Its counts are null when captures are not comparable and independent
+of display budgets when comparable; they describe observations, not proven
+runtime edges or safe deletion.

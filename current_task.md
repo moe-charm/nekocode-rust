@@ -1,6 +1,43 @@
+# Active follow-up — saved reference comparisons
+
+Implemented and verified after the documentation update.
+Contract: [symbol-delta-v1](docs/symbol-delta-v1.md).
+
+- `context --packet AFTER --compare-packet BEFORE` returns observed reference
+  additions/removals, matched anchors and unresolved cases.
+- Full saved captures, capture-time conditions, integrity, paging and budgets
+  are shared through core/CLI/MCP; comparison starts no backend.
+- Live RA before/after fixture passed: added 1, removed 1, matched 1.
+- `make verify` passed: 65 Rust tests, 40 Python/MCP tests, formatting,
+  Clippy, Cargo check and schemas. Workflow Skill validation passed.
+- Project role rules, forbidden dependencies and automatic historical
+  worktrees remain later work. Existing local changes are preserved.
+
+---
+
+# Active task — Symbol context v1
+
+Updated: 2026-09-08. The user approved documentation first, then implementation
+of per-function investigation and saved follow-up reads.
+
+Contract: [docs/symbol-context-v1.md](docs/symbol-context-v1.md).
+Implementation status: first delivery implemented and verified. Existing local changes and contracts are preserved. Later
+relationship-diff and forbidden dependency features are outside this delivery.
+
+Implemented: external LSP collection, name/position selection, exact source and
+query statuses, explicit saved packets, paging/item expansion, input staleness,
+bounded transport/output, CLI/MCP forwarding, schema and workflow updates.
+Live rust-analyzer observations and backend-free CLI/MCP saved replay passed.
+`make verify` passed: formatting, workspace Clippy with warnings denied, Cargo
+check, 65 Rust tests, 29 Python/MCP tests, and schema parsing. The Skill
+validation passed. See [the validation record](docs/symbol-context-validation.md).
+Known backend coverage gaps remain explicit in each response.
+
+---
+
 # Current task — Rust-first context layer
 
-Updated: 2026-08-24
+Updated: 2026-08-25
 
 ## Product
 
@@ -83,6 +120,33 @@ workflow and stop conditions.
 - final legacy recovery tag and archive branch;
 - physical removal of the old root crate, multi-binary workspace, analyzers,
   hidden sessions, prebuilt binaries, old workflows, and old MCP gateway.
+- independent `agy` release-readiness review of `3f4711b`: conditional pass
+  for its narrower scope; a later full Codex audit found a release No-Go for
+  effective Cargo configuration/toolchain closure, input-aware diagnostic
+  comparability, CLI Git revision validation, locked/offline fallback,
+  Docker/staging exclusion, and contract identity validation;
+- the independent Codex audit was read-only: no tracked file was edited and no
+  commit, push, deletion, or tag was made;
+- the former 3,754-line core monolith is now split into a roughly 1,028-line
+  public facade plus seven provider modules (largest about 993 lines), under
+  [docs/module-boundaries.md](docs/module-boundaries.md);
+- Codex P0 fixes are implemented: effective Cargo hierarchy digests and
+  release rejection, input-aware diagnostic comparability, option-safe Git
+  revisions, locked/offline compiler/MCP fallback, workspace refresh after
+  diagnostics, Docker/staging exclusion, schema identity, and snapshot
+  envelope validation;
+- `NEKOCODE-COMPARABILITY-MATRIX-V1` is implemented locally: diagnostic
+  comparison basis and stable reason codes, package/target/span-aware exact
+  fingerprints, canonical baseline-hash validation, additive schemas, and
+  core/CLI/MCP/golden coverage;
+- external AI review findings are documented in
+  [docs/comparability-matrix-v1.md](docs/comparability-matrix-v1.md): custom
+  `CARGO_HOME` detection, tiny-budget diagnostic-envelope retention, and
+  failed-run comparison safety were fixed locally; baseline hash validation
+  was verified as an existing safeguard and diagnostic path normalization was
+  regression-tested;
+- the existing M1/L1/L2 changes remain local review follow-ups, not release
+  approval.
 
 Recovery points:
 
@@ -91,9 +155,10 @@ Recovery points:
 
 ## Verified repository state
 
-- canonical branch: `master` at `9acbdf1`, matching `origin/master`;
-- working tree: intentionally modified with the documentation and P0 fixes
-  listed below; no unrelated files are changed;
+- canonical branch: `master` at `3f4711b`, matching `origin/master`;
+- working tree: contains the documented Codex P0 fixes, the core module split,
+  their regression tests, and the related documentation; no review tool or
+  unrelated task changed files;
 - legacy recovery tag and remote archive branch: present;
 - canonical hashing now excludes raw diagnostic stderr and re-reads metadata
   after compiler observations that may create `Cargo.lock`;
@@ -108,16 +173,42 @@ Recovery points:
   Draft 2020-12 validator, including a negative contract-version case;
 - the standard-schema CI gate is green for `6540b05` in remote run
   `32718683043`;
-- the latest GitHub Actions run is **not green**: its `stable` toolchain
-  resolved to Rust/Clippy 1.98, where `-D warnings` rejects five manual
-  `Default` implementations as derivable;
-- the five derivable defaults are fixed locally, but a public release/tag is
-  now cleared by the updated remote workflow run `32717722425` for
-  `cad890f` (all jobs green).
+- the release-hygiene workflow is green for `bd9faf5` in remote run
+  `32718178584`, and the schema-gate workflow is green for `6540b05` in
+  remote run `32718683043`;
+- the latest documentation-only commit is `3f4711b`; no public `v1.2.0` tag
+  has been created yet, because that remains an explicit release decision;
+- the independent `agy` review found no blocker, but identified one
+  reproducibility follow-up and three lower-priority hardening/cleanup items:
+  `.cargo/config*` input digests (M1), ignored local legacy residues (M2),
+  Git timeout/output bounds (L1), and the `jsonschema` developer message (L2).
+- M1/L1/L2 are implemented locally; the core suite, formatting, Clippy,
+  locked workspace tests, CLI tests, 21 MCP/Python tests, and schema parsing
+  pass with the pinned schema dependency path used by CI.
+- the post-implementation AI review found one accepted P0 comparison gap
+  (`failed` producer runs with parsed messages), one already-closed false
+  positive (baseline hash presence), and one path-normalization hardening case;
+  the accepted fixes and remaining test-hardening follow-up are recorded in
+  the comparability matrix document.
 
 ## Next implementation focus
 
-### P0 — restore a reproducible green release gate
+### P0 — close the Codex No-Go before release
+
+- [x] Include or explicitly reject effective parent/ignored Cargo configuration
+      and toolchain inputs at the workspace/release boundary.
+- [x] Include workspace/package/target/input digests in diagnostic
+      comparability and add manifest/config mutation regressions.
+- [x] Validate CLI `compare_ref` and pass Git revisions with an option-safe
+      boundary; keep the MCP validation and CLI behavior aligned.
+- [x] Make MCP Cargo fallback and compiler observations locked/offline, and
+      refresh workspace provenance after observations.
+- [x] Exclude ignored legacy residues from Docker context and release staging;
+      do not delete them without an explicit cleanup decision.
+- [x] Align schema `$id` and validate the full snapshot envelope.
+- [ ] Execute the release/Docker smoke gates in a clean, approved environment.
+
+### P1 — restore a reproducible green release gate
 
 - [x] Make snapshot hashing deterministic and add a repeated-execution
       regression test.
@@ -129,8 +220,8 @@ Recovery points:
 - [x] Select and document one Rust toolchain policy (MSRV/CI/Docker 1.85).
 - [x] Correct stale trust/test-gate wording and limit compiler observations to
       explicitly trusted workspaces.
-- [x] Commit/push the verified changes and require the exact remote workflow
-      to pass before creating a release tag.
+- [ ] Commit/push the current verified changes and require the exact remote
+      workflow to pass before creating a release tag.
 
 ### P1 — release hygiene after P0
 
@@ -143,6 +234,16 @@ Recovery points:
 - [x] Harden contract validation with a snapshot metadata golden artifact,
       negative compatibility cases, and a standard JSON Schema validator
       installed from pinned `requirements-dev.txt` in CI.
+- [x] Add workspace-local, parent, and Cargo-home `.cargo/config*` plus
+      toolchain files to the artifact input digest set, with regression
+      fixtures proving configuration changes alter the observed input set.
+- [x] Apply a 60-second timeout and bounded stdout/stderr capture to Git
+      observations, using the same process-group cleanup as Cargo (review L1).
+- [x] Keep ignored migration tools, sessions, and legacy directories outside
+      Docker/release staging; the release script rejects contaminated inputs and
+      does not delete local residues (review M2).
+- [x] Keep the `jsonschema` dependency failure actionable for local developers
+      while retaining the CI-installed pinned dependency (review L2).
 
 ### Frozen for this release
 
@@ -150,5 +251,37 @@ Recovery points:
 - a second language or a generic analyzer abstraction;
 - rust-analyzer integration;
 - additional MCP tools, prompts, resources, Plugin UI, or remote service.
+
+### P1 — Comparability Matrix v1 local gate
+
+- [x] Add comparison-basis evidence for workspace/package/target/features,
+      compiler configuration, toolchain, producer/profile, and completeness.
+- [x] Add stable machine-readable reason codes while retaining human
+      `limitations`.
+- [x] Include package/target/primary-span identity in exact fingerprints.
+- [x] Reject canonical-hash tampering and preserve integrity reasons under a
+      tiny budget.
+- [x] Treat failed producer runs with parsed messages as incomplete for exact
+      comparison while retaining their snapshot evidence.
+- [x] Retain the diagnostic run envelope and comparison basis when a tiny
+      budget omits all diagnostic messages.
+- [x] Recognize explicit `CARGO_HOME/config*` files in compiler-config basis
+      observation and assert Cargo diagnostic paths are workspace-relative.
+- [x] Add one-axis core matrix coverage, additive schema fixtures, and
+      CLI/MCP parity assertions.
+- [ ] Commit the mechanical split plus matrix behavior separately and verify
+      the exact remote SHA before release/tag decisions.
+
+## Implemented feature record
+
+**NEKOCODE-COMPARABILITY-MATRIX-V1** is now implemented locally as an additive
+contract hardening feature, not a new language or analyzer. The remaining
+operational work is the separate commit, exact remote CI verification, and the
+already tracked clean release/Docker smoke gate.
+
+The design and 16-case acceptance matrix are recorded in
+[docs/comparability-matrix-v1.md](docs/comparability-matrix-v1.md). No public
+CLI option, MCP tool, fuzzy matcher, rust-analyzer integration, or second
+language is part of this slice.
 
 The authoritative decisions are under `docs/`.

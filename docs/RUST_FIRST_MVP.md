@@ -1,5 +1,9 @@
 # Rust-first MVP contract
 
+The user-approved 2026-09-08 [Symbol context v1](symbol-context-v1.md) redesign
+adds LSP-backed investigation and saved continuation. It supersedes prior
+backend-deferral statements; existing snapshot-v1/context-v1 remain compatible.
+
 Status: canonical design, 2026-08-23.
 
 NekoCode is a Rust-first code context layer. It does not reimplement Rust
@@ -149,13 +153,20 @@ partial
 
 Toolchain, target, package, feature/default-feature, compiler-affecting
 configuration, or analysis-profile changes produce `not_comparable` with
-reasons. A baseline without diagnostics produces `baseline_missing`, never an
-empty successful delta. MVP matching is exact and multiset-based; fuzzy line
+reasons. `diagnostics.comparison_basis` records the observed package, target,
+feature, toolchain, producer, profile, and compiler-configuration dimensions;
+`diagnostic_delta.reasons` carries stable machine-readable reason codes while
+`limitations` remains the human explanation. A baseline without diagnostics
+produces `baseline_missing`, never an empty successful delta. MVP matching is
+exact and multiset-based; fuzzy line
 movement matching is not implemented. Error and warning observations enter the
 delta; auxiliary note/help/failure-note messages stay available in the full
 diagnostic run. JSON preserves multiplicity, while the human summary explicitly
 reports unique fingerprints and raw observation counts. Public output redacts
 both workspace-local and external baseline storage paths.
+
+The executable one-axis contract and acceptance cases are maintained in
+[Comparability Matrix v1](comparability-matrix-v1.md).
 
 Compiler result states are also explicit:
 
@@ -169,16 +180,19 @@ output_limited
 partial
 ```
 
-Compiler errors are observations. Operational failures are separate from a
-valid diagnostic stream. A failed, timed-out, output-limited, or partial
-diagnostic run sets the enclosing artifact evidence to `incomplete`.
+Compiler errors are observations and remain in the snapshot evidence.
+Operational failures are separate from a valid diagnostic stream, but a
+non-zero `failed` run is still incomplete for exact baseline comparison:
+`diagnostic_delta` must be `partial` with an observation reason. Timed-out,
+output-limited, or otherwise partial runs follow the same conservative rule.
 
 ## Budget and evidence
 
 Hard limits are bytes, item counts, and lines. Token estimates are advisory.
-The envelope always keeps status, provenance, and omission information. Every
-omitted group records a reason, count, and priority; silent truncation is not
-allowed.
+The envelope always keeps status, provenance, comparison basis, and omission
+information. Diagnostic messages may be omitted without removing the run
+envelope. Every omitted group records a reason, count, and priority; silent
+truncation is not allowed.
 
 The budget invariant gate is implemented as a multi-budget fixture suite. It
 proves that pre-budget `diff.change_scopes` aggregates and their order survive

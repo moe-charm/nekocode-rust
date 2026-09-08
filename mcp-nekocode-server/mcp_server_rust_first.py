@@ -23,6 +23,8 @@ PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "nekocode-rust-first"
 SERVER_VERSION = "0.2.0"
 MAX_BUDGET = 100_000
+MAX_SYMBOL_ITEMS = 100
+MAX_BACKEND_TIMEOUT_SECONDS = 120
 COMMAND_TIMEOUT_SECONDS = 180
 MAX_STDOUT_BYTES = 8 * 1024 * 1024
 MAX_STDERR_BYTES = 2 * 1024 * 1024
@@ -42,6 +44,7 @@ SAFE_ENVIRONMENT_KEYS = (
     "CARGO_HOME",
     "RUSTUP_HOME",
     "RUSTUP_TOOLCHAIN",
+    "NEKOCODE_RUST_ANALYZER_PATH",
 )
 
 
@@ -113,28 +116,17 @@ def _safe_cli_environment() -> Dict[str, str]:
     return environment
 
 
-def _redact_absolute_paths(value: Any) -> Any:
-    """Recursively remove absolute paths from CLI data returned to MCP clients."""
-    if isinstance(value, dict):
-        return {key: _redact_absolute_paths(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_redact_absolute_paths(item) for item in value]
-    if isinstance(value, str):
-        # Cargo metadata emits the workspace root as an absolute path.  Preserve
-        # relative source paths while replacing POSIX and Windows absolute paths.
-        return re.sub(r"(?<!\w)(?:[A-Za-z]:[\\/]|/)[^\s\"']+", "<path>", value)
-    return value
-
-
 def _tool_result(data: Any, is_error: bool = False) -> Dict[str, Any]:
-    sanitized = _redact_absolute_paths(data)
-    text = json.dumps(sanitized, ensure_ascii=False, indent=2, sort_keys=True)
+    # The core owns each contract's path policy: snapshot/Git context sanitize
+    # machine paths; symbol context retains navigation paths. Rewriting strings
+    # here corrupts source evidence, including URLs, division and comments.
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     result: Dict[str, Any] = {
         "content": [{"type": "text", "text": text}],
         "isError": is_error,
     }
-    if not is_error and isinstance(sanitized, (dict, list)):
-        result["structuredContent"] = sanitized
+    if not is_error and isinstance(data, (dict, list)):
+        result["structuredContent"] = data
     return result
 
 
@@ -160,6 +152,10 @@ class RustFirstMCPServer:
             raw_binary = os.environ.get("NEKOCODE_BINARY_PATH")
             if raw_binary:
                 configured_binary = Path(raw_binary).expanduser()
+        if configured_binary is None:
+            installed_binary = shutil.which("nekocode")
+            if installed_binary:
+                configured_binary = Path(installed_binary)
         if configured_binary is not None and not configured_binary.is_absolute():
             configured_binary = project_root / configured_binary
         self.binary_path = configured_binary
@@ -198,13 +194,14 @@ class RustFirstMCPServer:
             },
             {
                 "name": CONTEXT_TOOL,
-                "description": "Build a bounded Rust context pack from a Git diff.",
+                "description": "Build Git context, investigate a symbol, or page saved symbol evidence.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Rust workspace or Cargo.toml path.",
+                            "description": "Rust workspace or source path; defaults to the caller working directory.",
+                            "default": ".",
                         },
                         "compare_ref": {
                             "type": "string",
@@ -238,7 +235,7 @@ class RustFirstMCPServer:
                         },
                         "all_features": {
                             "type": "boolean",
-                            "description": "Run the selected compiler diagnostic producer with all workspace features; requires diagnostics.",
+                            "description": "Enable all features for compiler diagnostics or live symbol analysis.",
                             "default": False,
                         },
                         "excerpt_lines": {
@@ -251,8 +248,51 @@ class RustFirstMCPServer:
                             "type": "string",
                             "description": "Explicit JSON snapshot used for diagnostic delta.",
                         },
+                        "at": {
+                            "type": "string",
+                            "description": "Workspace-relative FILE:LINE[:COLUMN], 1-based Unicode character positions. Exclusive with symbol/packet.",
+                        },
+                        "symbol": {
+                            "type": "string",
+                            "description": "Exact symbol name; ambiguous names return concrete candidates.",
+                        },
+                        "packet": {
+                            "type": "string",
+                            "description": "Saved packet to read without starting Cargo or rust-analyzer.",
+                        },
+                        "save_packet": {
+                            "type": "string",
+                            "description": "Explicit local cache to save for subsequent paging/expansion; requires at or symbol.",
+                        },
+                        "compare_packet": {
+                            "type": "string",
+                            "description": "Earlier saved packet to compare with packet; no analysis starts. Exclusive with item.",
+                        },
+                        "item": {
+                            "type": "string",
+                            "description": "Captured item ID to expand; requires packet, exclusive with cursor.",
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "description": "Continuation cursor from this saved packet.",
+                        },
+                        "max_items": {
+                            "type": "integer", "minimum": 1,
+                            "maximum": MAX_SYMBOL_ITEMS, "default": 8,
+                        },
+                        "timeout_seconds": {
+                            "type": "integer", "minimum": 1,
+                            "maximum": MAX_BACKEND_TIMEOUT_SECONDS, "default": 60,
+                        },
+                        "allow_build_scripts": {
+                            "type": "boolean", "default": False,
+                            "description": "Opt in to build-script/proc-macro preparation for a trusted live symbol investigation.",
+                        },
+                        "output": {
+                            "type": "string",
+                            "description": "Explicit JSON response path, separate from save_packet.",
+                        },
                     },
-                    "required": ["path"],
                     "additionalProperties": False,
                 },
             },
@@ -268,6 +308,13 @@ class RustFirstMCPServer:
     @staticmethod
     def _context_arguments(args: Dict[str, Any]) -> list[str]:
         command: list[str] = []
+        selectors = [key for key in ("at", "symbol", "packet") if key in args]
+        if len(selectors) > 1:
+            raise ToolInputError("'at', 'symbol', and 'packet' are mutually exclusive")
+        if selectors:
+            return RustFirstMCPServer._symbol_arguments(args)
+        if set(args) & {"save_packet", "compare_packet", "item", "cursor", "max_items", "timeout_seconds", "allow_build_scripts"}:
+            raise ToolInputError("symbol options require 'at', 'symbol', or 'packet'")
         compare_ref = args.get("compare_ref")
         if compare_ref is not None:
             if not isinstance(compare_ref, str) or not re.fullmatch(
@@ -330,6 +377,48 @@ class RustFirstMCPServer:
             if not isinstance(baseline, str) or not baseline.strip() or "\x00" in baseline:
                 raise ToolInputError("'baseline' must be a non-empty string")
             command.extend(["--baseline", baseline])
+        if "output" in args:
+            command.extend(["--output", args["output"]])
+        return command
+
+    @staticmethod
+    def _symbol_arguments(args: Dict[str, Any]) -> list[str]:
+        if set(args) & {
+            "compare_ref", "working_tree", "include_untracked_content", "baseline",
+            "diagnostics", "diagnostic_producer", "excerpt_lines",
+        }:
+            raise ToolInputError("symbol context cannot be combined with Git or compiler-diagnostic options")
+        replay = "packet" in args
+        if "compare_packet" in args and (not replay or "item" in args):
+            raise ToolInputError("compare_packet requires packet and cannot be combined with item")
+        if replay and set(args) & {"save_packet", "all_features", "allow_build_scripts", "timeout_seconds"}:
+            raise ToolInputError("saved packet reads cannot change the analysis configuration")
+        if not replay and set(args) & {"cursor", "item"}:
+            raise ToolInputError("'cursor' and 'item' require 'packet'")
+        if "cursor" in args and "item" in args:
+            raise ToolInputError("'cursor' and 'item' are mutually exclusive")
+
+        command: list[str] = []
+        for key in ("at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor", "output"):
+            if key in args:
+                value = args[key]
+                if not isinstance(value, str) or not value.strip() or "\x00" in value:
+                    raise ToolInputError(f"'{key}' must be a non-empty string")
+                command.extend(["--" + key.replace("_", "-"), value])
+        integers = [("budget", 8000, MAX_BUDGET), ("max_items", 8, MAX_SYMBOL_ITEMS)]
+        if not replay:
+            integers.append(("timeout_seconds", 60, MAX_BACKEND_TIMEOUT_SECONDS))
+        for key, default, maximum in integers:
+            value = args.get(key, default)
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise ToolInputError(f"'{key}' must be an integer between 1 and {maximum}")
+            command.extend(["--" + key.replace("_", "-"), str(value)])
+        for key in ("all_features", "allow_build_scripts"):
+            value = args.get(key, False)
+            if not isinstance(value, bool):
+                raise ToolInputError(f"'{key}' must be a boolean")
+            if value:
+                command.append("--" + key.replace("_", "-"))
         return command
 
     @staticmethod
@@ -357,32 +446,59 @@ class RustFirstMCPServer:
         return command
 
     def _run_cli(self, tool: str, args: Dict[str, Any]) -> Any:
-        path = self._path_argument(args)
+        configured_cwd = os.environ.get("NEKOCODE_CLI_CWD")
+        caller_cwd = Path(configured_cwd).expanduser().absolute() if configured_cwd else Path.cwd()
+        normalized = dict(args)
+        if tool == CONTEXT_TOOL and "path" not in normalized:
+            # Packet replay uses its captured workspace unless explicitly overridden.
+            if "packet" not in normalized:
+                normalized["path"] = "."
+        elif tool == SNAPSHOT_TOOL:
+            self._path_argument(normalized)
+        for key in ("path", "baseline", "output", "save_packet", "packet", "compare_packet"):
+            if key in normalized:
+                value = normalized[key]
+                if not isinstance(value, str) or not value.strip() or "\x00" in value:
+                    raise ToolInputError(f"'{key}' must be a non-empty string")
+                target = Path(value).expanduser()
+                normalized[key] = str(target if target.is_absolute() else caller_cwd / target)
+        extra_args = self._snapshot_arguments(normalized) if tool == SNAPSHOT_TOOL else self._context_arguments(normalized)
+        path_args = [normalized["path"]] if "path" in normalized else []
         cli_tool = "snapshot" if tool == SNAPSHOT_TOOL else "context"
         if self.binary_path is not None:
             if not self.binary_path.is_file():
                 raise CommandError("Configured Rust CLI is unavailable")
-            command = [str(self.binary_path), cli_tool, path]
-            configured_cwd = os.environ.get("NEKOCODE_CLI_CWD")
-            command_cwd = Path(configured_cwd).expanduser() if configured_cwd else Path.cwd()
+            command = [str(self.binary_path), cli_tool, *path_args]
+            command_cwd = caller_cwd
         else:
             if not self.workspace_dir.is_dir():
                 raise CommandError("Rust workspace is unavailable")
             cargo = shutil.which("cargo")
             if cargo is None:
                 raise CommandError("Cargo is unavailable")
-            command = [cargo, "run", "-q", "-p", "nekocode", "--", cli_tool, path]
+            command = [
+                cargo,
+                "run",
+                "-q",
+                "--locked",
+                "--offline",
+                "-p",
+                "nekocode",
+                "--",
+                cli_tool,
+                *path_args,
+            ]
             command_cwd = self.workspace_dir
-        if tool == SNAPSHOT_TOOL:
-            command.extend(self._snapshot_arguments(args))
-        elif tool == CONTEXT_TOOL:
-            command.extend(self._context_arguments(args))
+        command.extend(extra_args)
 
         # Cargo output belongs on stderr. stdout must remain a parseable JSON CLI
         # response, so do not allow terminal colouring to leak into it. The
         # adapter also avoids forwarding compiler wrappers and arbitrary build
         # configuration from the MCP host process.
         env = _safe_cli_environment()
+        if "NEKOCODE_RUST_ANALYZER_PATH" in env:
+            analyzer = Path(env["NEKOCODE_RUST_ANALYZER_PATH"]).expanduser()
+            env["NEKOCODE_RUST_ANALYZER_PATH"] = str(analyzer if analyzer.is_absolute() else caller_cwd / analyzer)
         process_options: Dict[str, Any] = {}
         if os.name == "posix":
             process_options["start_new_session"] = True
@@ -447,7 +563,7 @@ class RustFirstMCPServer:
             raise CommandError("Rust command output exceeded the safety limit")
         try:
             return json.loads(stdout_bytes.decode("utf-8"))
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise CommandError("Rust command returned invalid JSON") from exc
 
     def handle_tool_call(self, params: Any) -> Dict[str, Any]:
@@ -455,7 +571,7 @@ class RustFirstMCPServer:
             return _tool_result({"error": "tools/call params must be an object"}, True)
         name = params.get("name")
         args = params.get("arguments", {})
-        if name not in {SNAPSHOT_TOOL, CONTEXT_TOOL}:
+        if not isinstance(name, str) or name not in {SNAPSHOT_TOOL, CONTEXT_TOOL}:
             return _tool_result(
                 {"error": "unknown tool; only nekocode_snapshot and nekocode_context are available"},
                 True,
@@ -475,6 +591,8 @@ class RustFirstMCPServer:
             "output",
             "excerpt_lines",
             "baseline",
+            "at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor",
+            "max_items", "timeout_seconds", "allow_build_scripts",
         }:
             return _tool_result({"error": "unsupported tool argument"}, True)
         if name == SNAPSHOT_TOOL and set(args) - {
@@ -495,6 +613,8 @@ class RustFirstMCPServer:
             "all_features",
             "excerpt_lines",
             "baseline",
+            "at", "symbol", "packet", "compare_packet", "save_packet", "item", "cursor",
+            "max_items", "timeout_seconds", "allow_build_scripts", "output",
         }:
             return _tool_result({"error": "unsupported context argument"}, True)
         try:

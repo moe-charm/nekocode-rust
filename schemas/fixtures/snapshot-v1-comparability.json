@@ -1,0 +1,49 @@
+{
+  "contract_version": "snapshot-v1",
+  "artifact_kind": "snapshot",
+  "status": "completed_with_diagnostics",
+  "analysis_mode": "cargo_check",
+  "schema_version": 3,
+  "evidence": "tool-confirmed",
+  "execution_policy": {
+    "mode": "cargo_check",
+    "workspace_trust": "required",
+    "cargo_registry_network": "offline",
+    "process_network_isolation": "not_enforced",
+    "environment": "allowlist",
+    "compiler_wrappers": "disabled",
+    "target_directory": "dedicated_temp"
+  },
+  "generated_at": "2026-08-25T00:00:00Z",
+  "workspace": {},
+  "diagnostics": {
+    "producer": "cargo_check",
+    "profile": "cargo_check_v1",
+    "producer_version": "rustc 1.85.0",
+    "comparison_basis": {
+      "workspace_members_sha256": "sha256:members",
+      "package_set_sha256": "sha256:packages",
+      "package_targets_sha256": "sha256:targets",
+      "feature_definitions_sha256": "sha256:features",
+      "workspace_inputs_sha256": "sha256:inputs",
+      "compiler_config": {
+        "status": "absent",
+        "sha256": null
+      },
+      "target_coverage": "workspace_all_targets",
+      "feature_coverage": "default_features",
+      "toolchain": {
+        "rustc_version": "rustc 1.85.0",
+        "cargo_version": "cargo 1.85.0",
+        "host": "x86_64-unknown-linux-gnu"
+      },
+      "producer": "cargo_check",
+      "profile": "cargo_check_v1",
+      "producer_version": "rustc 1.85.0",
+      "complete": true
+    }
+  },
+  "canonical_hash": null,
+  "limitations": [],
+  "omissions": []
+}

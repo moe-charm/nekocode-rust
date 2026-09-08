@@ -63,7 +63,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "nekocode_snapshot", "arguments": {"path": "."}},
+                "params": {"name": "nekocode_snapshot", "arguments": {"path": str(REPO_ROOT / "nekocode-workspace")}},
             },
         ]
         for request in requests:
@@ -91,7 +91,18 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
 
         workspace = REPO_ROOT / "nekocode-workspace"
         completed = subprocess.run(
-            ["cargo", "run", "-q", "-p", "nekocode", "--", "snapshot", "."],
+            [
+                "cargo",
+                "run",
+                "-q",
+                "--locked",
+                "--offline",
+                "-p",
+                "nekocode",
+                "--",
+                "snapshot",
+                ".",
+            ],
             cwd=workspace,
             capture_output=True,
             text=True,
@@ -100,7 +111,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         )
         cli_payload = json.loads(completed.stdout)
         server = RustFirstMCPServer(workspace_dir=workspace)
-        mcp_payload = server._run_cli(SNAPSHOT_TOOL, {"path": "."})
+        mcp_payload = server._run_cli(SNAPSHOT_TOOL, {"path": str(workspace)})
 
         for key in (
             "contract_version",
@@ -144,7 +155,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         mcp_context = server._run_cli(
             "nekocode_context",
             {
-                "path": ".",
+                "path": str(workspace),
                 "compare_ref": "HEAD",
                 "budget": 8000,
                 "working_tree": True,
@@ -197,7 +208,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         bounded_mcp = server._run_cli(
             "nekocode_context",
             {
-                "path": ".",
+                "path": str(workspace),
                 "compare_ref": "HEAD",
                 "budget": 1200,
                 "working_tree": True,
@@ -231,6 +242,8 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                 "cargo",
                 "run",
                 "-q",
+                "--locked",
+                "--offline",
                 "-p",
                 "nekocode",
                 "--",
@@ -246,7 +259,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
             timeout=60,
         )
         mcp_snapshot = server._run_cli(
-            "nekocode_snapshot", {"path": ".", "analysis": "clippy"}
+            "nekocode_snapshot", {"path": str(workspace), "analysis": "clippy"}
         )
         cli_snapshot_payload = self._normalize_volatile_diagnostics(
             json.loads(cli_snapshot.stdout)
@@ -272,6 +285,8 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
                 "cargo",
                 "run",
                 "-q",
+                "--locked",
+                "--offline",
                 "-p",
                 "nekocode",
                 "--",
@@ -292,7 +307,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         mcp_context = server._run_cli(
             "nekocode_context",
             {
-                "path": ".",
+                "path": str(workspace),
                 "diagnostics": True,
                 "diagnostic_producer": "clippy",
                 "budget": 8000,
@@ -322,6 +337,16 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         ):
             with self.subTest(context_key=key):
                 self.assertEqual(cli_context_payload[key], mcp_context[key])
+
+        self.assertIn(
+            "comparison_basis",
+            cli_snapshot_payload["diagnostics"],
+        )
+        self.assertEqual(cli_context_payload["comparison_status"], "baseline_missing")
+        self.assertEqual(
+            cli_context_payload["diagnostic_delta"]["reasons"][0]["code"],
+            "baseline_missing",
+        )
 
     def test_prebuilt_cli_mode_does_not_require_cargo_workspace(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
@@ -412,7 +437,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
 
         self.assertFalse(result["isError"])
         argv = result["structuredContent"]["argv"]
-        self.assertEqual(argv[:2], ["context", "."])
+        self.assertEqual(argv[:2], ["context", str(Path.cwd())])
         self.assertIn("--compare-ref", argv)
         self.assertIn("HEAD~1", argv)
         self.assertIn("--budget", argv)
@@ -424,7 +449,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertIn("--excerpt-lines", argv)
         self.assertIn("12", argv)
         self.assertIn("--baseline", argv)
-        self.assertIn("<path>", argv)
+        self.assertIn("/tmp/baseline.json", argv)
 
     def test_clippy_producer_is_explicitly_forwarded(self) -> None:
         from mcp_server_rust_first import RustFirstMCPServer
@@ -460,7 +485,7 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
         self.assertFalse(result["isError"])
         self.assertEqual(
             result["structuredContent"]["argv"][:4],
-            ["snapshot", ".", "--analysis", "clippy"],
+            ["snapshot", str(Path.cwd()), "--analysis", "clippy"],
         )
         self.assertFalse(context_result["isError"])
         context_argv = context_result["structuredContent"]["argv"]
@@ -618,11 +643,11 @@ class RustFirstMCPProtocolTest(unittest.TestCase):
 
         self.assertFalse(result["isError"])
         argv = result["structuredContent"]["argv"]
-        self.assertEqual(argv[:2], ["snapshot", "."])
+        self.assertEqual(argv[:2], ["snapshot", str(Path.cwd())])
         self.assertIn("--analysis", argv)
         self.assertIn("cargo-check", argv)
         self.assertIn("--output", argv)
-        self.assertIn("<path>", argv)
+        self.assertIn("/tmp/baseline.json", argv)
         self.assertIn("--all-features", argv)
 
 

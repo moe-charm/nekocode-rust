@@ -4,6 +4,17 @@
 dist
 __pycache__
 *.pyc
+.cargo
+**/.cargo
+archived
+src
+pr-demo
+nekocode-pr-demo
+releases
+bfg-1.14.0.jar
+build.rs
+build-and-update.sh
+build-smart.sh
 .nekocode_sessions
 .nekocode_history
 .nekocode_cache

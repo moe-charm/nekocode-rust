@@ -1,15 +1,45 @@
 ---
 name: nekocode-rust-context
-description: Create evidence-backed Rust workspace context from NekoCode snapshots and Git changes; use for Rust review, PR, and diagnostic-delta workflows.
+description: Investigate Rust functions and related code, compare or expand saved evidence, or collect Git and diagnostic context with NekoCode.
 ---
 
 # NekoCode Rust Context
 
-Use this skill when a task needs repository-grounded Rust context, a saved
-diagnostic baseline, or a Git-aware review summary. NekoCode is a context
+Use this skill when a task needs Rust function investigation, follow-up source
+evidence, a saved diagnostic baseline, or a Git-aware review summary. NekoCode is a context
 layer, not an independent Rust semantic analyzer.
 
-## Workflow
+## Function investigation (symbol-context-v1)
+
+For a function-change task, use `context PATH --at FILE:LINE` or `--symbol NAME`.
+Use `--save-packet FILE` when follow-up reads will be useful. Resolve ambiguous
+names from the returned candidates. Read returned code, query statuses and
+freshness before drawing conclusions. Then use `--packet FILE --cursor CURSOR`
+for remaining items or `--packet FILE --item ITEM_ID` to expand captured code.
+Use the compiled CLI (or an MCP configured with it) for follow-up reads without
+Cargo or rust-analyzer. A development `cargo run` wrapper still needs Cargo. A stale packet requires a new
+investigation before it can support conclusions about current source.
+
+The external backend may run Cargo metadata. Build-script/proc-macro preparation
+requires `--allow-build-scripts` and existing user authorization for trusted
+workspace execution. An unavailable backend is not an empty reference set.
+A reference is not a definite runtime call; test candidates are not test results.
+Only advertise continuation returned by the tool. Do not invent handles.
+See [the symbol mode contract](../../docs/symbol-context-v1.md) for details.
+
+## Compare saved reference observations (symbol-delta-v1)
+
+For before/after investigation, save both observations explicitly, then call
+`context --packet AFTER --compare-packet BEFORE`. No continuous collection is
+needed. Check `comparison_status` and `reasons` before the counts; null counts
+mean not comparable. Capture-time freshness matters here, not whether old
+source still matches the current disk. Read added/removed observations and
+unresolved anchors before matched items. Use returned delta cursors with both
+packets. Expand a before/after item through its original packet and item ID.
+Do not infer safe deletion, runtime edges, rename identity or unobserved target
+coverage from these counts. See [the comparison contract](../../docs/symbol-delta-v1.md).
+
+## Git and diagnostic workflow
 
 1. Confirm that the target is a Cargo workspace and that the canonical
    `nekocode` CLI is available. If it is unavailable, stop and report that
@@ -64,13 +94,26 @@ layer, not an independent Rust semantic analyzer.
    nekocode context PATH --baseline BASELINE.json --diagnostics
    ```
 
-## Stop conditions and interpretation
+## Git/diagnostic stop conditions and interpretation
 
 - Read `status`, `comparison_status`, `execution_policy`, `evidence`,
   `limitations`, and `omissions` before interpreting source or diagnostics.
+- When diagnostics are present, read `diagnostics.comparison_basis` and the
+  diagnostic delta's machine-readable `reasons` before reading `added`,
+  `resolved`, or `persisting`. The basis describes what was actually observed;
+  it is not permission to infer unobserved package, target, feature, or config
+  coverage.
+- A budget may leave `diagnostics.messages` empty while retaining the run
+  envelope and comparison basis. Treat that as omitted detail, not as a clean
+  run or as proof that no diagnostic existed.
+- A producer run with `status=failed` can still contain useful compiler
+  messages, but it is incomplete for exact comparison and must remain `partial`.
 - `baseline_missing`, `not_comparable`, `partial`, `tool_failed`, `timed_out`,
   and `output_limited` are meaningful states. Do not turn them into an empty
   or successful conclusion, and do not invent missing diagnostics.
+- For `not_comparable` or `partial`, report every `diagnostic_delta.reasons[*]`
+  code and dimension, then stop the comparison conclusion. Empty delta arrays
+  in those states do not mean that no diagnostics changed.
 - If Git was requested but `diff.change_scopes` is absent, treat the artifact
   as older or incomplete and say so; do not infer zero changes from missing
   fields. If `omissions` removes `changed_files`, report the retained
@@ -88,7 +131,7 @@ layer, not an independent Rust semantic analyzer.
   network access, or broaden the Cargo feature/target scope without explicit
   user authorization.
 
-## Response shape
+## Git/diagnostic response shape
 
 Lead with the artifact status and comparison status. Then summarize the
 workspace/revision used, the four Git scope totals when present, changed files

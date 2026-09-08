@@ -3,9 +3,10 @@
 mod cli;
 
 use clap::Parser;
-use cli::{AnalysisArg, Cli, Commands, DiagnosticProducerArg, OutputFormatArg};
+use cli::{AnalysisArg, Cli, Commands, ContextArgs, DiagnosticProducerArg, OutputFormatArg};
 use nekocode_core::{
     AnalysisMode, ContextRequest, DiagnosticProducer, NekocodeError, Result, SnapshotRequest,
+    SymbolContextRequest,
 };
 use std::fs;
 
@@ -28,22 +29,78 @@ fn main() -> Result<()> {
             },
             output,
         ),
-        Commands::Context {
+        Commands::Context(args) => run_context(*args),
+    }
+}
+
+fn run_context(args: ContextArgs) -> Result<()> {
+    let ContextArgs {
+        path,
+        compare_ref,
+        budget,
+        diagnostics,
+        diagnostic_producer,
+        working_tree,
+        include_untracked_content,
+        all_features,
+        excerpt_lines,
+        baseline,
+        at,
+        symbol,
+        packet,
+        compare_packet,
+        save_packet,
+        item,
+        cursor,
+        max_items,
+        timeout_seconds,
+        allow_build_scripts,
+        format,
+        output,
+    } = args;
+    if let Some(before) = compare_packet {
+        let after = packet
+            .ok_or_else(|| NekocodeError::Config("--compare-packet requires --packet".into()))?;
+        let artifact = nekocode_core::build_symbol_delta(&nekocode_core::SymbolDeltaRequest {
+            before,
+            after,
             path,
-            compare_ref,
+            cursor,
             budget,
-            diagnostics,
-            diagnostic_producer,
-            working_tree,
-            include_untracked_content,
-            all_features,
-            excerpt_lines,
-            baseline,
+            max_items,
+        })?;
+        let rendered = match format {
+            OutputFormatArg::Json => serde_json::to_string(&artifact)?,
+            OutputFormatArg::Summary => nekocode_core::format_symbol_delta_summary(&artifact),
+        };
+        if let Some(path) = output {
+            fs::write(path, &rendered)?;
+        }
+        println!("{}", rendered.trim_end_matches('\n'));
+        Ok(())
+    } else if at.is_some() || symbol.is_some() || packet.is_some() {
+        symbol_context(
+            SymbolContextRequest {
+                path,
+                at,
+                symbol,
+                packet,
+                save_packet,
+                item,
+                cursor,
+                budget,
+                max_items,
+                timeout_seconds,
+                all_features,
+                allow_build_scripts,
+            },
             format,
             output,
-        } => context(
+        )
+    } else {
+        context(
             ContextRequest {
-                path,
+                path: path.unwrap_or_else(|| ".".into()),
                 compare_ref,
                 budget,
                 diagnostics,
@@ -59,8 +116,27 @@ fn main() -> Result<()> {
             },
             format,
             output,
-        ),
+        )
     }
+}
+
+fn symbol_context(
+    request: SymbolContextRequest,
+    format: OutputFormatArg,
+    output: Option<std::path::PathBuf>,
+) -> Result<()> {
+    let artifact = nekocode_core::build_symbol_context(&request)?;
+    let rendered = match format {
+        // The symbol contract budgets the compact JSON delivered to clients.
+        OutputFormatArg::Json => serde_json::to_string(&artifact)?,
+        OutputFormatArg::Summary => nekocode_core::format_symbol_context_summary(&artifact),
+    };
+    if let Some(path) = output {
+        fs::write(&path, &rendered)?;
+        eprintln!("Symbol context written to {}", path.display());
+    }
+    println!("{}", rendered.trim_end_matches('\n'));
+    Ok(())
 }
 
 fn snapshot(request: SnapshotRequest, output: Option<std::path::PathBuf>) -> Result<()> {
