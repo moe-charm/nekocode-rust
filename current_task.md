@@ -1,3 +1,25 @@
+# Next priorities — Hakorune investigation workflow
+
+Requested order: reuse a backend for new investigations, explain coverage gaps,
+then clarify source freshness versus backend synchronization. Design and
+acceptance criteria: [Hakorune follow-up](docs/hakorune-follow-up.md).
+These features are not implemented by the timeout fix.
+
+---
+
+# Completed follow-up — large-workspace observation timeout
+
+- CLI/core and MCP accept 1..600 seconds, default 60; MCP child deadline is 660 seconds.
+- Added timeout boundary and MCP argument-forwarding regression coverage.
+- Hakorune developer reports completion in ~117 seconds with a 300-second limit:
+  definition, type information, five references, one test candidate, saved replay.
+- Reported `assert!` call omission remains a known limit; caller-zero/deletion
+  checks require ordinary search and project validation as well.
+- Field results and their provenance are recorded in docs/symbol-context-validation.md;
+  docs/hakorune-nekocode-handoff.md includes the operating instructions.
+
+---
+
 # Active follow-up — saved reference comparisons
 
 Implemented and verified after the documentation update.

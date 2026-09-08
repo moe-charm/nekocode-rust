@@ -143,7 +143,7 @@ It verifies packet integrity and checks captured inputs for staleness. Omit
 `path` to use the captured workspace; an explicit path must belong to that
 workspace. `item` and `cursor` cannot be combined;
 analysis configuration cannot be changed during replay. `max_items` accepts
-1–100 and live `timeout_seconds` accepts 1–120. The byte budget is four times
+1–100 and live `timeout_seconds` accepts 1–600. The byte budget is four times
 the advisory token budget; omissions and an oversized minimum envelope remain
 explicit. See [the symbol contract](../docs/symbol-context-v1.md).
 
@@ -195,3 +195,7 @@ source checks. Capture-time stability, matching conditions and query completion
 are required; incompatible or partial observations have null delta counts.
 A changed current source does not invalidate historical comparison. Counts
 remain independent of display budgets. See [the contract](../docs/symbol-delta-v1.md).
+
+The gateway process timeout is 660 seconds, allowing the maximum 600-second
+backend observation plus 60 seconds of CLI overhead. MCP clients may impose
+their own shorter deadlines.

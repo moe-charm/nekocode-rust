@@ -126,3 +126,16 @@ Recorded implementation checks and live backend observations are in
 The 2026-09-08 follow-up adds explicit saved reference comparisons under
 [Symbol delta v1](symbol-delta-v1.md). This supersedes the earlier
 deferral of reference comparisons only; other later features remain deferred.
+
+## Large-workspace timeout
+
+Live `--timeout-seconds` accepts 1 through 600 seconds (default 60).
+For a large workspace, retry the same source position with
+`--timeout-seconds 300`; 600 is also supported. This bounds backend observation,
+not total CLI wall time including input capture and output serialization.
+A timeout does not mean there are no references. The MCP gateway allows 660
+seconds for its CLI process; client-side timeouts may be shorter.
+
+The original eff8d17 distribution accepted only 1 through 120 seconds. Use the
+updated timeout600 runtime for longer observations; that original binary cannot
+accept 300 seconds.

@@ -112,7 +112,7 @@ pub struct ContextArgs {
     /// Maximum symbol evidence items per response.
     #[arg(long, default_value = "8", requires = "symbol_mode")]
     pub max_items: usize,
-    /// Maximum time for live backend observation.
+    /// Maximum time for live backend observation (1..600 seconds; default 60).
     #[arg(long, default_value = "60", requires = "symbol_query")]
     pub timeout_seconds: u64,
     /// Enable build scripts and proc-macro preparation in a trusted workspace.

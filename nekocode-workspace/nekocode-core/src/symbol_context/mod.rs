@@ -21,9 +21,9 @@ pub fn build_symbol_context(request: &SymbolContextRequest) -> Result<SymbolCont
             "symbol context budget must be between 1 and 1000000".to_string(),
         ));
     }
-    if !(1..=100).contains(&request.max_items) || !(1..=120).contains(&request.timeout_seconds) {
+    if !(1..=100).contains(&request.max_items) || !(1..=600).contains(&request.timeout_seconds) {
         return Err(NekocodeError::Config(
-            "max-items must be 1..100 and timeout-seconds must be 1..120".to_string(),
+            "max-items must be 1..100 and timeout-seconds must be 1..600".to_string(),
         ));
     }
     let selectors = usize::from(request.at.is_some())
@@ -199,4 +199,32 @@ pub fn format_symbol_context_summary(response: &SymbolContextV1) -> String {
         let _ = writeln!(output, "Limit: {limitation}");
     }
     terminal(&output)
+}
+
+#[cfg(test)]
+mod timeout_validation_tests {
+    use super::*;
+
+    #[test]
+    fn timeout_bounds_are_checked_before_backend_start() {
+        for seconds in [1, 120, 300, 600] {
+            let request = SymbolContextRequest {
+                timeout_seconds: seconds,
+                ..Default::default()
+            };
+            let error = build_symbol_context(&request).unwrap_err().to_string();
+            assert!(error.contains("choose exactly one"), "{seconds}: {error}");
+        }
+        for seconds in [0, 601, u64::MAX] {
+            let request = SymbolContextRequest {
+                timeout_seconds: seconds,
+                ..Default::default()
+            };
+            let error = build_symbol_context(&request).unwrap_err().to_string();
+            assert!(
+                error.contains("timeout-seconds must be 1..600"),
+                "{seconds}: {error}"
+            );
+        }
+    }
 }

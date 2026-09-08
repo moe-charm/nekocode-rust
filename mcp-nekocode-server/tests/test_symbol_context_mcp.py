@@ -65,7 +65,7 @@ class SymbolContextMCPTest(unittest.TestCase):
             {"packet": "saved.json", "timeout_seconds": 60},
             {"at": []},
             {"symbol": "value", "max_items": True},
-            {"symbol": "value", "timeout_seconds": 121},
+            {"symbol": "value", "timeout_seconds": 601},
             {"symbol": "value", "save_packet": None},
         ]
         with mock.patch.object(gateway.subprocess, "Popen") as launch:
@@ -101,6 +101,11 @@ class SymbolContextMCPTest(unittest.TestCase):
                 ({"packet": "capture.json", "item": "item-1"},
                  {"--packet": "capture.json"}),
             ]
+            cases.extend(
+                ({"path": "project", "symbol": "value", "timeout_seconds": seconds}, {})
+                for seconds in (300, 600)
+            )
+            self.assertGreaterEqual(gateway.COMMAND_TIMEOUT_SECONDS, 660)
             with mock.patch.dict(os.environ, {"NEKOCODE_CLI_CWD": str(caller), "NEKOCODE_RUST_ANALYZER_PATH": "bin/analyzer"}), mock.patch.object(gateway.shutil, "which", return_value=str(fake_cli)):
                 for arguments, paths in cases:
                     results = []
@@ -116,6 +121,8 @@ class SymbolContextMCPTest(unittest.TestCase):
                             argv = payload["argv"]
                             for flag, relative in paths.items():
                                 self.assertEqual(argv[argv.index(flag) + 1], str(caller / relative))
+                            if "timeout_seconds" in arguments:
+                                self.assertEqual(argv[argv.index("--timeout-seconds") + 1], str(arguments["timeout_seconds"]))
                             if "path" in arguments:
                                 self.assertEqual(argv[:2], ["context", str(caller / "project")])
                             else:

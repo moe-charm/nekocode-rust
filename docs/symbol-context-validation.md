@@ -71,3 +71,29 @@ limits. A completed request is not proof that all references or tests were
 found, and stable source files do not prove a common backend analysis generation.
 No tests execute during investigation. Comparative AI usefulness and timing
 evaluation across untuned tasks remains separate product validation.
+
+## Hakorune field report — 2026-09-08
+
+The Hakorune developer reported successful investigation on a workspace described
+as approximately one million lines, using the `eff8d17-timeout600` runtime and a
+300-second observation limit. The run completed in approximately 117 seconds
+and returned definition and type information, five references, and one related
+test candidate. Saved packet continuation worked without restarting the backend.
+These are user-relayed field observations; the raw successful-run packet and
+logs were not independently inspected here. They are not a throughput benchmark
+or evidence of measured search/time savings.
+
+Earlier attempts hit the default 60-second timeout. The original eff8d17 binary
+then rejected a requested 300 seconds before analysis because its maximum was
+120. The fix accepts 1..600 seconds (default remains 60) and extends the MCP
+child-process deadline to 660 seconds. Boundary tests cover accepted 300/600
+values and rejected out-of-range values. A local prepared test Nyash also
+completed with the updated executable using a 300-second limit.
+
+The developer found one additional call inside `assert!` with ordinary search
+that was absent from the returned reference list. This gap is not fixed by the
+timeout change. Before deletion or a caller-zero conclusion, combine semantic
+observations with `rg`, inspect macro-wrapped calls and indirect/FFI boundaries,
+and run the relevant project checks. Neither a zero reference count nor an
+empty text search alone establishes safe deletion. Test candidates are not
+executed tests.
