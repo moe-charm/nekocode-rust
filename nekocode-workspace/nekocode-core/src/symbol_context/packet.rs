@@ -99,6 +99,11 @@ pub(super) fn read(path: &Path) -> Result<SymbolPacket> {
     if packet.packet_id != packet.response.packet_id
         || !packet.root.is_absolute()
         || packet.response.items.len() > MAX_ITEMS
+        || packet
+            .inputs
+            .links
+            .as_ref()
+            .is_some_and(|links| links.len() > 4096 || links.keys().any(|p| !safe_relative(p)))
         || packet.inputs.files.len() > 20480
         || packet.sources.len() > 4096
         || packet.response.queries.len() > 1024

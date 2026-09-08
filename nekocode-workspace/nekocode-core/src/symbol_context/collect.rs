@@ -626,7 +626,14 @@ pub(super) fn collect(
         rejection.push("input_scan_incomplete".into());
     }
     if captured.response.freshness.source_state != "stable" {
-        rejection.push("source_not_stable".into());
+        rejection.push(
+            if captured.response.freshness.source_state == "changed" {
+                "source_changed"
+            } else {
+                "source_unverified"
+            }
+            .into(),
+        );
     }
     if rejection.is_empty() {
         session.retain(root, before, options, client);

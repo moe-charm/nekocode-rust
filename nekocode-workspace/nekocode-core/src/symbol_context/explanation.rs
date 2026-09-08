@@ -52,6 +52,7 @@ pub(super) fn verify_inputs(
     basis: &str,
 ) -> (InputVerification, Vec<PathBuf>) {
     let mut result = InputVerification {
+        link_changes: Some(0),
         basis: basis.into(),
         verdict: "unknown".into(),
         matched: 0,
@@ -129,6 +130,45 @@ pub(super) fn verify_inputs(
             issues.insert(path.clone(), "captured_mismatch");
         }
     }
+    match (&before.links, &after.links) {
+        (Some(old), Some(now)) => {
+            let mut link_changes = BTreeSet::new();
+            for (path, previous) in old {
+                let differs = match now.get(path) {
+                    Some(current) => {
+                        (previous.target.is_some()
+                            && current.target.is_some()
+                            && previous.target != current.target)
+                            || (!previous.status.starts_with("unverified")
+                                && !current.status.starts_with("unverified")
+                                && previous != current)
+                    }
+                    None => match std::fs::symlink_metadata(root.join(path)) {
+                        Ok(m) => !m.is_symlink(),
+                        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+                    },
+                };
+                if differs {
+                    link_changes.insert(path.clone());
+                }
+            }
+            if before.complete {
+                link_changes.extend(now.keys().filter(|p| !old.contains_key(*p)).cloned());
+            }
+            result.link_changes = Some(link_changes.len());
+            for path in link_changes {
+                issues.insert(path.clone(), "symlink_changed");
+                changed.insert(path);
+            }
+        }
+        (None, Some(now)) if !now.is_empty() => {
+            result.unobserved += now.len();
+            for path in now.keys() {
+                issues.insert(path.clone(), "unobserved");
+            }
+        }
+        _ => {}
+    }
     result.verdict = if !changed.is_empty() {
         "changed"
     } else if before.complete && after.complete && result.unreadable == 0 && result.unobserved == 0
@@ -158,6 +198,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("unobserved.rs"), "exists").unwrap();
         let before = InputInventory {
+            links: None,
             scan: None,
             complete: true,
             files: [
@@ -169,6 +210,7 @@ mod tests {
             .into(),
         };
         let after = InputInventory {
+            links: None,
             scan: None,
             complete: false,
             files: [
@@ -197,11 +239,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.rs"), "exists").unwrap();
         let before = InputInventory {
+            links: None,
             scan: None,
             complete: true,
             files: [("a.rs".into(), "hash".into())].into(),
         };
         let after = InputInventory {
+            links: None,
             scan: None,
             complete: false,
             files: BTreeMap::new(),
@@ -211,6 +255,7 @@ mod tests {
         assert_eq!(v.unobserved, 1);
         assert!(changes.is_empty());
         let many = InputInventory {
+            links: None,
             scan: None,
             complete: true,
             files: (0..18)
@@ -227,6 +272,7 @@ mod tests {
     fn incomplete_scan_is_not_a_match_and_captured_content_is_checked_separately() {
         let dir = tempfile::tempdir().unwrap();
         let before = InputInventory {
+            links: None,
             scan: None,
             complete: false,
             files: [("a.rs".into(), "same".into())].into(),

@@ -1,3 +1,12 @@
+# Implemented — symlink input scope
+
+See docs/symlink-input-scope-v1.md. Verify relevant links, explain excluded
+non-input links, and keep unknown links from enabling reuse.
+Full gate: 77 Rust / 45 Python-MCP tests. Reconstructed Hakorune five-link
+layout: second request reused, 2.704s; original developer worktree not retested.
+
+---
+
 # Implemented — large-workspace scan diagnostics
 
 See docs/large-workspace-scan-v1.md. Preserve strict freshness gates while

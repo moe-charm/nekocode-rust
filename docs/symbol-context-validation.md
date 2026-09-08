@@ -182,3 +182,11 @@ OBJ/EXE investigations in 226.401s / 2.663s; second backend_reused=true, both
 completed/source_stable and backend health ok. See
 [large-workspace-scan-v1.md](large-workspace-scan-v1.md) for exact scope and limits.
 Full gate now passes 73 Rust tests and 44 Python/MCP tests.
+
+## Symlink scope regression
+
+77 Rust / 45 Python-MCP tests pass. A reconstructed five-link environment on the
+local Hakorune cf458a28 checkout reused its backend (215.774s first, 2.704s second),
+with complete matching input inventories. Full scope and environment differences
+are recorded in [symlink-input-scope-v1.md](symlink-input-scope-v1.md); this does
+not replace revalidation in the original d28498d591 developer worktree.

@@ -114,3 +114,10 @@ a rejected request. Parse errors report not_observed; save errors preserve the
 actual observation report. `no_cached_backend` can include the preceding
 observation's rejection reasons. Incomplete scans and backend warnings remain
 reasons to reject retention. See [scan diagnostics](large-workspace-scan-v1.md).
+
+Symlink mappings now participate in reuse identity (`symlink_mappings_changed`).
+Workspace-local input links are inspected rather than blanket-rejected; excluded
+non-input links have explicit scope explanations. Unknown links still prevent
+retention. Retention reasons distinguish `source_changed` (observed change) from
+`source_unverified` (incomplete verification), replacing `source_not_stable`.
+See [symlink input scope](symlink-input-scope-v1.md).

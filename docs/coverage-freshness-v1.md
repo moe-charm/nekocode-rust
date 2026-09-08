@@ -47,8 +47,8 @@ Replay `changed_inputs` retains the union of capture-time and current confirmed
 change paths (bounded to 4096); `verification` counts/issues describe only the
 current comparison. Thus matching current files do not erase capture-time
 inconsistency. A former input now replaced by a directory or another non-file,
-non-symlink object counts as modified. Symlinks remain unverified because the
-inventory does not record their prior type. Unreadable files remain unknown.
+non-symlink object counts as modified. Symlink changes are now checked using a separate mapping inventory; legacy
+packets without mapping evidence remain unverified when links are present. Unreadable files remain unknown.
 
 Under byte pressure, derived coverage prose and verification issue examples are
 omitted before code items. Coverage omissions and `issues_omitted` explicitly
@@ -71,3 +71,13 @@ replay diagnostics use default limits for such packets. New packets replay their
 recorded profile. Under byte pressure the scan reports may be omitted before code,
 with an `input_scans` omission; retry with a larger budget to read the diagnostics.
 Full details: [large-workspace-scan-v1.md](large-workspace-scan-v1.md).
+
+## Symlink scope
+
+`scans.*.link_scope` separates verified mappings, explicitly excluded non-input
+links and unverified links, with at most 16 path/target/resolved/reason examples
+and an omitted count. Mapping verification is distinct from successful bounded
+content hashing; scan issues/completeness still gate reuse. `verification.link_changes`
+counts confirmed mapping changes separately from modified content hashes, and
+issues use `symlink_changed`. Old optional-field serialization remains compatible.
+See [symlink-input-scope-v1.md](symlink-input-scope-v1.md) for the exact boundary.

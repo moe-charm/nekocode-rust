@@ -329,6 +329,79 @@ class SavedSymbolContextMCPTest(unittest.TestCase):
             self.assertEqual(response["freshness"]["verification"]["verdict"], "match")
             self.assertGreater(response["freshness"]["scans"]["current"]["hashed_files"], 4096)
 
+    def test_symlink_scope_reuses_environment_links_but_invalidates_real_inputs(self):
+        import select
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "project"
+            (root / "src").mkdir(parents=True)
+            (root / "Cargo.toml").write_text('[package]\nname="link-scope"\nversion="0.1.0"\nedition="2021"\n')
+            (root / "src/lib.rs").write_text('pub fn target() {}\npub fn caller() { target(); }\n')
+            (root / ".venv/lib").mkdir(parents=True)
+            (root / ".venv/bin").mkdir()
+            (root / ".venv/lib/keep.rs").write_text("// Rust input inside environment\n")
+            (root / ".venv/lib64").symlink_to("lib")
+            (root / ".venv/bin/python3").symlink_to(sys.executable)
+            (root / ".venv/bin/python").symlink_to("python3")
+            (root / ".venv/bin/python3.12").symlink_to("python3")
+            (root / "plugins/p").mkdir(parents=True)
+            (root / "plugins/p/libp.so").symlink_to("../../target/release/libp.so")
+            (root / "inputs").mkdir()
+            for name in ("a.rs", "b.rs"):
+                (root / "inputs" / name).write_text('// input content\n')
+            link = root / "src/input.rs"
+            link.symlink_to("../inputs/a.rs")
+            directory_link = root / "input_alias"
+            directory_link.symlink_to("inputs")
+            packet = base / "packet.json"
+            fixture = REPO_ROOT / "nekocode-workspace/nekocode-core/src/symbol_context/fixtures/fake-ra.py"
+            proc = subprocess.Popen([str(self.binary), "context", str(root), "--session"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dict(os.environ, NEKOCODE_RUST_ANALYZER_PATH=str(fixture)))
+            def ask(**extra):
+                proc.stdin.write(json.dumps({"at": "src/lib.rs:1", "budget": 100000, **extra}) + "\n")
+                proc.stdin.flush()
+                self.assertTrue(select.select([proc.stdout], [], [], 20)[0])
+                return json.loads(proc.stdout.readline())
+            try:
+                first = ask(save_packet=str(packet))
+                self.assertTrue(first["reuse"]["retained"], first)
+                self.assertIn(".venv/lib/keep.rs", json.loads(packet.read_text())["inputs"]["files"])
+                scope = first["context"]["freshness"]["scans"]["baseline"]["link_scope"]
+                self.assertEqual((scope["verified"], scope["excluded"], scope["unverified"]), (3, 4, 0))
+                self.assertTrue(ask()["backend_reused"])
+                link.unlink()
+                link.symlink_to("../inputs/b.rs")  # Same bytes, different mapping.
+                retargeted = ask()
+                self.assertFalse(retargeted["backend_reused"])
+                self.assertIn("symlink_mappings_changed", retargeted["reuse"]["reasons"])
+                replay = subprocess.run([str(self.binary), "context", "--packet", str(packet), "--budget", "100000"], capture_output=True, text=True, check=True, timeout=10)
+                stale = json.loads(replay.stdout)
+                self.assertEqual(stale["status"], "stale")
+                self.assertEqual(stale["freshness"]["verification"]["link_changes"], 1)
+                self.assertTrue(ask()["backend_reused"])
+                (root / "inputs/b.rs").write_text('// changed content\n')
+                self.assertFalse(ask()["backend_reused"])
+                directory_link.unlink()
+                directory_link.symlink_to("src")
+                self.assertFalse(ask()["backend_reused"])
+                (root / "inputs/b.rs").unlink()
+                broken = ask()
+                self.assertFalse(broken["reuse"]["retained"])
+                self.assertIn("source_unverified", broken["reuse"]["retention_reasons"])
+                self.assertNotIn("source_changed", broken["reuse"]["retention_reasons"])
+                outside = base / "outside.rs"
+                outside.write_text('// external input\n')
+                link.unlink()
+                link.symlink_to(outside)
+                external = ask()
+                self.assertFalse(external["reuse"]["retained"])
+                issues = external["context"]["freshness"]["scans"]["baseline"]["issues"]
+                self.assertTrue(any(i["status"] == "unverified_input_target" for i in issues))
+            finally:
+                proc.stdin.close()
+                proc.wait(timeout=10)
+                proc.stdout.close()
+                proc.stderr.close()
+
     def test_session_rejects_oversized_input_and_conflicting_cli_options(self):
         with tempfile.TemporaryDirectory() as temporary:
             oversized = subprocess.run([str(self.binary), "context", temporary, "--session"], input="x" * 65537, capture_output=True, text=True, timeout=10)
@@ -386,7 +459,7 @@ class SavedSymbolContextMCPTest(unittest.TestCase):
                 self.assertEqual(len(starts.read_text().splitlines()), 3)
                 self.assertIsNotNone(ask({"path": str(root), "at": "src/lib.rs:1"})["error"])
                 self.assertIsNotNone(ask({"at": "src/lib.rs:1", "unexpected": True})["error"])
-                (root / "unobserved-link").symlink_to(source)
+                (root / "unobserved-link").symlink_to(root / "missing-unknown-target")
                 for expected_starts in (4, 5):
                     incomplete = ask({"at": "src/lib.rs:1", "all_features": True})
                     self.assertFalse(incomplete["backend_reused"], incomplete)

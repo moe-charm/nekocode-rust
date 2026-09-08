@@ -106,6 +106,9 @@ impl SymbolSession {
             if cached.inputs.files != inputs.files {
                 reasons.push("inputs_changed".into());
             }
+            if cached.inputs.links != inputs.links {
+                reasons.push("symlink_mappings_changed".into());
+            }
             if cached.inputs.profile() != inputs.profile() {
                 reasons.push("scan_profile_changed".into());
             }

@@ -18,13 +18,15 @@ pub(super) fn digest(bytes: &[u8]) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct InputInventory {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub links: Option<BTreeMap<PathBuf, LinkStamp>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scan: Option<ScanReport>,
     pub files: BTreeMap<PathBuf, String>,
     pub complete: bool,
 }
 
 /// Inventory Rust and Cargo inputs, including additions/deletions on replay.
-/// External build inputs and symlinked directories are explicitly not covered.
+/// External build inputs remain outside scope; local link mappings are inspected.
 impl InputInventory {
     pub(super) fn issue(&mut self, path: PathBuf, reason: &str) {
         self.complete = false;
@@ -50,6 +52,7 @@ impl InputInventory {
 pub(super) fn inventory(root: &Path, profile: &str) -> InputInventory {
     let large = profile == "large";
     let report = ScanReport {
+        link_scope: Some(LinkScope::default()),
         profile: profile.into(),
         max_files: if large { 16384 } else { 4096 },
         max_entries: if large { 262144 } else { 32768 },
@@ -71,11 +74,14 @@ fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory 
     report.hashed_bytes = 0;
     // Report counters are updated even when the bounded walk stops early.
     let mut result = InputInventory {
+        links: Some(BTreeMap::new()),
         files: BTreeMap::new(),
         complete: true,
         scan: None,
     };
     let mut pending = vec![root.to_path_buf()];
+    let mut visited = std::collections::BTreeSet::new();
+    let mut cargo_directories = std::collections::BTreeSet::new();
     let mut issues = Vec::new();
     let mut omitted = 0;
     let mut issue = |path: &Path, reason: &str| {
@@ -89,6 +95,9 @@ fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory 
         }
     };
     'walk: while let Some(directory) = pending.pop() {
+        if !visited.insert(directory.clone()) {
+            continue;
+        }
         let entries = match fs::read_dir(&directory) {
             Ok(entries) => entries,
             Err(_) => {
@@ -122,22 +131,44 @@ fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory 
                 }
                 continue;
             }
-            let tracked = path.extension().is_some_and(|extension| extension == "rs")
-                || matches!(
-                    name.to_str(),
-                    Some("Cargo.toml" | "Cargo.lock" | "rust-toolchain" | "rust-toolchain.toml")
-                )
-                || (path
-                    .parent()
-                    .and_then(Path::file_name)
-                    .is_some_and(|name| name == ".cargo")
+            let mut tracked = super::links::is_input(&path)
+                || (cargo_directories.contains(&directory)
                     && matches!(name.to_str(), Some("config" | "config.toml")));
+            let mut regular_file = kind.is_file();
             if kind.is_symlink() {
-                issue(&path, "symlink_unverified");
-                result.complete = false;
-                continue;
+                let mappings = result.links.as_mut().unwrap();
+                if mappings.len() >= 4096
+                    && !mappings.contains_key(path.strip_prefix(root).unwrap())
+                {
+                    issue(&path, "symlink_record_limit");
+                    result.complete = false;
+                    break 'walk;
+                }
+                let stamp = super::links::inspect_input(root, &path, tracked);
+                mappings.insert(path.strip_prefix(root).unwrap().into(), stamp.clone());
+                match stamp.status.as_str() {
+                    "verified_directory" => {
+                        let resolved = stamp.resolved.unwrap();
+                        // A .cargo alias gives otherwise ordinary config files input meaning.
+                        if name == ".cargo" && cargo_directories.insert(resolved.clone()) {
+                            visited.remove(&resolved);
+                        }
+                        pending.push(resolved);
+                        continue;
+                    }
+                    "verified_input_file" => {
+                        tracked = true;
+                        regular_file = true;
+                    }
+                    "outside_input_file_scope" | "outside_generated_output_scope" => continue,
+                    reason => {
+                        issue(&path, reason);
+                        result.complete = false;
+                        continue;
+                    }
+                }
             }
-            if !tracked || !kind.is_file() {
+            if !tracked || !regular_file {
                 continue;
             }
             if result.files.len() >= report.max_files {
@@ -146,7 +177,7 @@ fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory 
                 break 'walk;
             }
             let remaining = report.max_bytes.saturating_sub(report.hashed_bytes);
-            let Ok(metadata) = entry.metadata() else {
+            let Ok(metadata) = fs::metadata(&path) else {
                 issue(&path, "metadata_unreadable");
                 result.complete = false;
                 continue;
@@ -163,6 +194,17 @@ fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory 
             }
             match read_limited(&path, report.max_file_bytes.min(remaining)) {
                 Ok(bytes) => {
+                    if kind.is_symlink()
+                        && result
+                            .links
+                            .as_ref()
+                            .unwrap()
+                            .get(path.strip_prefix(root).unwrap())
+                            != Some(&super::links::inspect_input(root, &path, tracked))
+                    {
+                        issue(&path, "symlink_changed_during_read");
+                        result.complete = false;
+                    }
                     report.hashed_bytes += bytes.len() as u64;
                     result
                         .files
@@ -175,6 +217,23 @@ fn inventory_with_limits(root: &Path, mut report: ScanReport) -> InputInventory 
             }
         }
     }
+    let mut scope = LinkScope::default();
+    for (path, stamp) in result.links.as_ref().unwrap() {
+        match stamp.status.as_str() {
+            "verified_directory" | "verified_input_file" => scope.verified += 1,
+            "outside_input_file_scope" | "outside_generated_output_scope" => scope.excluded += 1,
+            _ => scope.unverified += 1,
+        }
+        if scope.examples.len() < 16 {
+            scope.examples.push(LinkExample {
+                path: path.clone(),
+                mapping: stamp.clone(),
+            });
+        } else {
+            scope.examples_omitted += 1;
+        }
+    }
+    report.link_scope = Some(scope);
     report.hashed_files = result.files.len();
     report.complete = result.complete;
     report.issues = issues;

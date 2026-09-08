@@ -209,6 +209,8 @@ pub struct InputIssue {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputVerification {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_changes: Option<usize>,
     pub basis: String,
     pub verdict: String,
     pub matched: usize,
@@ -231,6 +233,8 @@ pub struct ScanComparison {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanReport {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_scope: Option<LinkScope>,
     pub profile: String,
     pub max_files: usize,
     pub max_entries: usize,
@@ -242,4 +246,24 @@ pub struct ScanReport {
     pub complete: bool,
     pub issues: Vec<InputIssue>,
     pub issues_omitted: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LinkStamp {
+    pub target: Option<PathBuf>,
+    pub resolved: Option<PathBuf>,
+    pub status: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinkScope {
+    pub verified: usize,
+    pub excluded: usize,
+    pub unverified: usize,
+    pub examples: Vec<LinkExample>,
+    pub examples_omitted: usize,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkExample {
+    pub path: PathBuf,
+    pub mapping: LinkStamp,
 }

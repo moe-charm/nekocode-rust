@@ -465,3 +465,7 @@ Large Rust workspaces can opt into `context PATH --at FILE:LINE --scan-profile l
 (or JSON `scan_profile: "large"`). Input scan limits/reasons and session reuse
 reports are documented in [large-workspace scan diagnostics](docs/large-workspace-scan-v1.md).
 Incomplete freshness never enables forced backend reuse.
+
+[Symlink input scope](docs/symlink-input-scope-v1.md) explains which links are
+verified, outside the Rust/Cargo input boundary, or unresolved. Git tracking
+status and `.venv` directory names do not decide exclusion.

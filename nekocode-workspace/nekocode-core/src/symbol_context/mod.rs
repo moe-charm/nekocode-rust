@@ -2,6 +2,7 @@
 //! Semantic relationships come only from the backend; source text stays exact.
 
 mod explanation;
+mod links;
 mod session;
 mod text_candidates;
 pub use session::{ReuseReport, SymbolSession};
@@ -136,6 +137,19 @@ pub fn format_symbol_context_summary(response: &SymbolContextV1) -> String {
         for (phase, scan) in [("baseline", &scans.baseline), ("current", &scans.current)] {
             if let Some(s) = scan {
                 let _ = writeln!(output, "Input scan {phase} ({}): complete={}; entries {}/{}; files {}/{}; bytes {}/{}; per-file limit {}", s.profile, s.complete, s.examined_entries, s.max_entries, s.hashed_files, s.max_files, s.hashed_bytes, s.max_bytes, s.max_file_bytes);
+                if let Some(links) = &s.link_scope {
+                    let _ = writeln!(output, "Symlink scope: {} verified, {} excluded, {} unverified; {} examples omitted", links.verified, links.excluded, links.unverified, links.examples_omitted);
+                    for example in &links.examples {
+                        let _ = writeln!(
+                            output,
+                            "  {}: {} -> {:?}; resolved {:?}",
+                            example.mapping.status,
+                            example.path.display(),
+                            example.mapping.target,
+                            example.mapping.resolved
+                        );
+                    }
+                }
                 for issue in &s.issues {
                     let _ = writeln!(
                         output,
@@ -153,6 +167,9 @@ pub fn format_symbol_context_summary(response: &SymbolContextV1) -> String {
     if let Some(v) = &response.freshness.verification {
         let _ = writeln!(output, "Input verification ({}): {}; matched {}, modified {}, missing {}, unreadable {}, unobserved {}, newly observed {}, captured mismatches {}; scans complete: {}/{}",
             v.basis, v.verdict, v.matched, v.modified, v.missing, v.unreadable, v.unobserved, v.newly_observed, v.captured_mismatches, v.baseline_scan_complete, v.current_scan_complete);
+        if let Some(count) = v.link_changes {
+            let _ = writeln!(output, "Confirmed symlink mapping changes: {count}");
+        }
         for issue in &v.issues {
             let _ = writeln!(output, "  {}: {}", issue.status, issue.path.display());
         }

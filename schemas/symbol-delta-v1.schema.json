@@ -644,11 +644,16 @@
                   "unreadable",
                   "unobserved",
                   "newly_observed",
-                  "captured_mismatch"
+                  "captured_mismatch",
+                  "symlink_changed"
                 ]
               }
             }
           }
+        },
+        "link_changes": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -729,6 +734,9 @@
         "issues_omitted": {
           "type": "integer",
           "minimum": 0
+        },
+        "link_scope": {
+          "$ref": "#/$defs/linkScope"
         }
       }
     },
@@ -759,6 +767,81 @@
               "type": "null"
             }
           ]
+        }
+      }
+    },
+    "linkStamp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "resolved",
+        "status"
+      ],
+      "properties": {
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolved": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    "linkScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "excluded",
+        "unverified",
+        "examples",
+        "examples_omitted"
+      ],
+      "properties": {
+        "verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "excluded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unverified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "examples_omitted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "mapping"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "mapping": {
+                "$ref": "#/$defs/linkStamp"
+              }
+            }
+          }
         }
       }
     }
